@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.0.155 — 2026-10-11
+
+### Changes
+- [9f36007](https://github.com/achandrapaul/digest/commit/9f360078a105a538a42bafe327fe494bd950c24a) chore: release:trigger branches off main, bumps and opens the release PR
+
 ## v0.0.154 — 2026-10-11
 
 ### Changes
