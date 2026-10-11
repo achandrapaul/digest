@@ -49,9 +49,19 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           mise run release:notes > dist/release-notes.md
+          if gh release view "${{ steps.tag.outputs.name }}" > /dev/null 2>&1; then
+            echo "release ${{ steps.tag.outputs.name }} already exists"
+            exit 0
+          fi
           gh release create "${{ steps.tag.outputs.name }}" dist/*.tar.gz dist/checksums.txt --title "digest ${{ steps.tag.outputs.name }}" --notes-file dist/release-notes.md
       - run: |
-          curl -fsSL "https://proxy.golang.org/github.com/achandrapaul/digest/@v/${{ steps.tag.outputs.name }}.info"
+          for attempt in 1 2 3; do
+            if curl -fsSL "https://proxy.golang.org/github.com/achandrapaul/digest/@v/${{ steps.tag.outputs.name }}.info"; then
+              exit 0
+            fi
+            sleep 20
+          done
+          echo "go proxy has not picked up ${{ steps.tag.outputs.name }} yet"
       - uses: actions/checkout@v7
         with:
           repository: achandrapaul/homebrew-tap
