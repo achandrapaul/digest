@@ -84,9 +84,8 @@ const (
 )
 
 const (
-	DefaultGitAutoSyncInterval = 600
-	DefaultMorning             = "09:30"
-	DefaultEvening             = "18:00"
+	DefaultMorning = "09:30"
+	DefaultEvening = "18:00"
 )
 
 func builtInJob(name string, options map[string]any) JobSpec {

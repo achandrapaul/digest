@@ -16,7 +16,7 @@ import (
 
 func TestChooseActionPastTheMenuDoesNothing(t *testing.T) {
 	m := syncTestModel(t)
-	m.actionMenuItems, m.actionMenuSelected, m.mode = nil, 3, ViewActionMenu
+	m.notesUI.actionMenuItems, m.notesUI.actionMenuSelected, m.mode = nil, 3, ViewActionMenu
 	if next, cmd := m.chooseAction(tea.KeyMsg{}); cmd != nil || next.(Model).mode != ViewActionMenu {
 		t.Fatal("an out of range choice should do nothing")
 	}
@@ -55,7 +55,7 @@ func TestRemovingAReminderReportsAFailedRemove(t *testing.T) {
 	}
 	m := syncTestModel(t)
 	m.cfg.DigestRoot = root
-	m.actionMenuNoteID = "stuck"
+	m.notesUI.actionMenuNoteID = "stuck"
 	m.cfg.DigestRoot = root
 	if m.cfg.Root() != root {
 		t.Skipf("config root %q is not the digest root", m.cfg.Root())
@@ -134,7 +134,7 @@ func TestSavedFieldsMergeTheCreatedTime(t *testing.T) {
 
 func TestMissingNotePromptWithoutAMissingNote(t *testing.T) {
 	m := syncTestModel(t)
-	m.missingSave = nil
+	m.notesUI.missingSave = nil
 	if _, cmd := m.confirmRecreateNote(tea.KeyMsg{}); cmd != nil {
 		t.Fatal("nothing to recreate")
 	}
@@ -173,13 +173,13 @@ func TestItemBindingsForIncompleteRows(t *testing.T) {
 
 func TestStopConfirmNamesTheAutomationAndEndsWithNothingToStop(t *testing.T) {
 	m := runningJobsModel(t)
-	run := m.automationRuns["note-1"]
+	run := m.automation.automationRuns["note-1"]
 	m.automationRunToStop = &run
 	if m.stopTargetName() != "jira" {
 		t.Fatalf("target = %q", m.stopTargetName())
 	}
 	m.automationRunToStop = nil
-	if next, cmd := m.confirmStopRun(); cmd != nil || next.(Model).mode != m.deleteReturnMode {
+	if next, cmd := m.confirmStopRun(); cmd != nil || next.(Model).mode != m.returnMode() {
 		t.Fatal("nothing to stop")
 	}
 }

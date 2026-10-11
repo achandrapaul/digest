@@ -20,6 +20,7 @@ type State struct {
 	Streak           int       `json:"streak"`
 	LastDoneDay      string    `json:"last_done_day,omitempty"`
 	ActionMenuOrder  []string  `json:"action_menu_order,omitempty"`
+	CalendarOffered  bool      `json:"calendar_offered,omitempty"`
 }
 
 func Path(root string) string {

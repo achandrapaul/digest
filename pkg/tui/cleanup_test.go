@@ -60,8 +60,8 @@ func TestReviewFindingsLoadOncePerReviewChange(t *testing.T) {
 	if loads != 1 {
 		t.Errorf("findings loaded %d times, want 1", loads)
 	}
-	if m.selectedCount() != 2 || m.previewFindingsCount != 2 {
-		t.Errorf("selected=%d findings=%d", m.selectedCount(), m.previewFindingsCount)
+	if m.selectedCount() != 2 || m.review.previewFindingsCount != 2 {
+		t.Errorf("selected=%d findings=%d", m.selectedCount(), m.review.previewFindingsCount)
 	}
 }
 
@@ -146,8 +146,8 @@ func TestDryRunResultsReloadOnlyWhenTheirLogChanges(t *testing.T) {
 	}
 	_ = os.Chtimes(dryRunFilePath("janitor", "log"), future, future)
 	m.refreshDryRunResults()
-	if reads != 2 || m.jobDryRunOutputs["janitor"] != "found 3 files" {
-		t.Errorf("a changed log should reload: reads=%d output=%q", reads, m.jobDryRunOutputs["janitor"])
+	if reads != 2 || m.jobs.jobDryRunOutputs["janitor"] != "found 3 files" {
+		t.Errorf("a changed log should reload: reads=%d output=%q", reads, m.jobs.jobDryRunOutputs["janitor"])
 	}
 }
 

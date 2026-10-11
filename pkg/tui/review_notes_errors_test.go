@@ -154,8 +154,8 @@ func TestOpenCloneCommandReportsACloneInProgress(t *testing.T) {
 
 func TestReviewConfirmCountsSelectedComments(t *testing.T) {
 	m := reviewTestModel(t)
-	m.reviewEvent = review.EventRequestChanges
-	m.reviewSelected = map[int]bool{0: true, 1: true}
+	m.review.reviewEvent = review.EventRequestChanges
+	m.review.reviewSelected = map[int]bool{0: true, 1: true}
 	text := stripANSI(m.renderReviewConfirm(80))
 	if !strings.Contains(text, "CONFIRM REQUEST CHANGES") || !strings.Contains(text, "Includes 2 selected comment(s).") {
 		t.Fatalf("confirm:\n%s", text)
@@ -176,19 +176,19 @@ func selectNavKind(t *testing.T, m *Model, kind NavItemKind) {
 func TestPreviewStampTracksRunLogs(t *testing.T) {
 	m := reviewTestModel(t)
 	ref := review.PRRef{Host: "github.com", Owner: "o", Repo: "api", Number: 9, URL: "https://github.com/o/api/pull/9"}
-	m.reviewRuns = []review.ReviewRun{{Meta: review.Meta{Ref: ref}, Status: review.RunFailed}}
+	m.review.reviewRuns = []review.ReviewRun{{Meta: review.Meta{Ref: ref}, Status: review.RunFailed}}
 	writeReviewStateFile(t, review.StateDir(m.reviewRoot(), ref), review.LogFile, "boom")
-	m.bragRuns = []brag.Run{{Meta: brag.RunMeta{ID: "week"}, Status: brag.RunFailed}}
-	m.automationRuns = map[string]automation.Run{"note": {Meta: automation.RunMeta{NoteID: "note"}, Status: automation.RunFailed}}
+	m.brag.bragRuns = []brag.Run{{Meta: brag.RunMeta{ID: "week"}, Status: brag.RunFailed}}
+	m.automation.automationRuns = map[string]automation.Run{"note": {Meta: automation.RunMeta{NoteID: "note"}, Status: automation.RunFailed}}
 	m.mode = ViewPreview
 	for _, kind := range []NavItemKind{KindReviewRun, KindBragRun, KindAutomationRun} {
 		selectNavKind(t, &m, kind)
-		if stamp := m.previewStamp(); stamp.runStatus == 0 {
+		if stamp := m.previewStamp(statPreviewLog(m.previewLogPath())); stamp.runStatus == 0 {
 			t.Fatalf("kind %v stamp = %+v", kind, stamp)
 		}
 	}
 	selectNavKind(t, &m, KindReviewRun)
-	if stamp := m.previewStamp(); stamp.logSize != 4 {
+	if stamp := m.previewStamp(statPreviewLog(m.previewLogPath())); stamp.logSize != 4 {
 		t.Fatalf("review run stamp should track the log size, got %+v", stamp)
 	}
 }
@@ -197,7 +197,7 @@ func TestPreviewStampIsEmptyForNoteRows(t *testing.T) {
 	m := noteSaveModel(t, dashboardNotes(time.Now())...)
 	m.mode = ViewPreview
 	selectNavKind(t, &m, KindCarriedNote)
-	if m.previewStamp() != (previewStamp{}) {
+	if m.previewStamp(statPreviewLog(m.previewLogPath())) != (previewStamp{}) {
 		t.Fatal("a note row has no preview stamp")
 	}
 }

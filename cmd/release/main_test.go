@@ -1,6 +1,7 @@
 package main
 
 import (
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -8,11 +9,6 @@ import (
 	"strings"
 	"testing"
 )
-
-func TestMain(m *testing.M) {
-	latestReleaseTag = func(string) string { return "" }
-	os.Exit(m.Run())
-}
 
 func gitIn(t *testing.T, repoDir string, args ...string) {
 	t.Helper()
@@ -33,9 +29,9 @@ func commitFile(t *testing.T, repoDir, name, content, subject string) {
 	gitIn(t, repoDir, "commit", "-q", "-m", subject)
 }
 
-func subjectsSinceLastRelease(t *testing.T, repoDir string) []string {
+func subjectsForRelease(t *testing.T, repoDir, version string) []string {
 	t.Helper()
-	commits, err := commitsSinceLastRelease(repoDir)
+	commits, err := commitsForRelease(repoDir, version)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -46,60 +42,69 @@ func subjectsSinceLastRelease(t *testing.T, repoDir string) []string {
 	return subjects
 }
 
-func TestCommitsSinceLastReleaseStartAfterTheLastVersionChange(t *testing.T) {
+func TestCommitsForReleaseFollowTheVersionTags(t *testing.T) {
 	repoDir := t.TempDir()
 	gitIn(t, repoDir, "init", "-q")
 	commitFile(t, repoDir, "a.go", "a", "feat: first")
-	if got := subjectsSinceLastRelease(t, repoDir); !slices.Equal(got, []string{"feat: first"}) {
-		t.Errorf("without a version commit every commit is listed, got %v", got)
+	if got := subjectsForRelease(t, repoDir, "0.0.1"); !slices.Equal(got, []string{"feat: first"}) {
+		t.Errorf("without a tag every commit is listed, got %v", got)
 	}
-
-	commitFile(t, repoDir, ".version", "1.0.0\n", "chore: release v1.0.0")
+	commitFile(t, repoDir, ".version", "0.0.1\n", "release:patch")
+	gitIn(t, repoDir, "tag", "-m", "t", "v0.0.1")
+	commitFile(t, repoDir, "CHANGELOG.md", "x", "release:patch")
 	commitFile(t, repoDir, "a.go", "b", "fix: second")
+	commitFile(t, repoDir, ".version", "0.0.2\n", "release:patch")
+	gitIn(t, repoDir, "tag", "-m", "t", "v0.0.2")
 	commitFile(t, repoDir, "b.go", "c", "feat: third")
-	want := []string{"feat: third", "fix: second"}
-	if got := subjectsSinceLastRelease(t, repoDir); !slices.Equal(got, want) {
-		t.Errorf("got %v, want %v", got, want)
-	}
 
-	if err := os.WriteFile(filepath.Join(repoDir, ".version"), []byte("1.1.0\n"), 0o644); err != nil {
-		t.Fatal(err)
+	cases := map[string][]string{
+		"0.0.1": {"release:patch", "feat: first"},
+		"0.0.2": {"release:patch", "fix: second", "release:patch"},
+		"0.0.3": {"feat: third"},
+		"":      {"feat: third"},
 	}
-	if got := subjectsSinceLastRelease(t, repoDir); !slices.Equal(got, want) {
-		t.Errorf("an uncommitted bump should not move the range, got %v", got)
-	}
-
-	gitIn(t, repoDir, "commit", "-q", "-am", "chore: release v1.1.0")
-	if got := subjectsSinceLastRelease(t, repoDir); len(got) != 0 {
-		t.Errorf("right after a release commit nothing is pending, got %v", got)
-	}
-
-	commitFile(t, repoDir, "c.go", "d", "fix: fourth")
-	if got := subjectsSinceLastRelease(t, repoDir); !slices.Equal(got, []string{"fix: fourth"}) {
-		t.Errorf("after the release commit only newer commits are listed, got %v", got)
+	for version, want := range cases {
+		if got := subjectsForRelease(t, repoDir, version); !slices.Equal(got, want) {
+			t.Errorf("version %q: got %v, want %v", version, got, want)
+		}
 	}
 }
 
-func TestCommitsSinceLastReleaseSpanEveryUnreleasedVersion(t *testing.T) {
+func TestVersionTagsSortNewestVersionFirst(t *testing.T) {
 	repoDir := t.TempDir()
 	gitIn(t, repoDir, "init", "-q")
-	commitFile(t, repoDir, ".version", "1.0.0\n", "release:patch")
-	gitIn(t, repoDir, "tag", "-m", "t", "v1.0.0")
-	commitFile(t, repoDir, "a.go", "a", "fix: second")
-	commitFile(t, repoDir, ".version", "1.0.1\n", "release:patch")
-	gitIn(t, repoDir, "tag", "-m", "t", "v1.0.1")
-	commitFile(t, repoDir, "b.go", "b", "feat: third")
-
-	latestReleaseTag = func(string) string { return "v1.0.0" }
-	t.Cleanup(func() { latestReleaseTag = func(string) string { return "" } })
-	want := []string{"feat: third", "release:patch", "fix: second"}
-	if got := subjectsSinceLastRelease(t, repoDir); !slices.Equal(got, want) {
-		t.Errorf("got %v, want %v", got, want)
+	commitFile(t, repoDir, "a.go", "a", "feat: first")
+	for _, tag := range []string{"v0.0.9", "v0.0.10", "v0.0.2", "other"} {
+		gitIn(t, repoDir, "tag", "-m", "t", tag)
 	}
+	if got, want := versionTags(repoDir), []string{"v0.0.10", "v0.0.9", "v0.0.2"}; !slices.Equal(got, want) {
+		t.Errorf("versionTags = %v, want %v", got, want)
+	}
+}
 
-	latestReleaseTag = func(string) string { return "v9.9.9" }
-	if got := subjectsSinceLastRelease(t, repoDir); !slices.Equal(got, []string{"feat: third"}) {
-		t.Errorf("an unknown release tag falls back to the last version change, got %v", got)
+func TestNotesForATaggedVersionUseTheTaggedCommitDateInUTC(t *testing.T) {
+	repoDir := t.TempDir()
+	gitIn(t, repoDir, "init", "-q")
+	if err := os.WriteFile(filepath.Join(repoDir, "a.go"), []byte("a"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitIn(t, repoDir, "add", "a.go")
+	command := exec.Command("git", "commit", "-q", "-m", "feat: first")
+	command.Dir = repoDir
+	command.Env = append(os.Environ(), "GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@t", "GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@t", "GIT_COMMITTER_DATE=2026-10-11T03:55:13+05:30")
+	if output, err := command.CombinedOutput(); err != nil {
+		t.Fatalf("commit: %v\n%s", err, output)
+	}
+	gitIn(t, repoDir, "tag", "-m", "t", "v0.0.1")
+	if err := writeNotes(repoDir, "0.0.1", io.Discard); err != nil {
+		t.Fatal(err)
+	}
+	changelog, err := os.ReadFile(filepath.Join(repoDir, changelogPath))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(string(changelog), "# Changelog\n\n## v0.0.1 — 2026-10-10\n") || !strings.Contains(string(changelog), ") feat: first\n") {
+		t.Errorf("changelog =\n%s", changelog)
 	}
 }
 

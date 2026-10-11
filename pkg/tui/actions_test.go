@@ -91,7 +91,7 @@ func followCmds(t *testing.T, m Model, cmd tea.Cmd) Model {
 
 func actionNames(m Model) []string {
 	var names []string
-	for _, action := range m.actionMenuItems {
+	for _, action := range m.notesUI.actionMenuItems {
 		names = append(names, action.name)
 	}
 	return names
@@ -109,8 +109,8 @@ func setNotify(t *testing.T, m Model, interval string) Model {
 func TestAtOpensActionsWithNotifyFirst(t *testing.T) {
 	m, _ := actionsTestModel(t)
 	m, _ = pressKey(t, m, "@")
-	if m.mode != ViewActionMenu || strings.Join(actionNames(m), ",") != "notify,jira" || m.actionMenuSelected != 0 {
-		t.Fatalf("mode %v actions %v selected %d", m.mode, actionNames(m), m.actionMenuSelected)
+	if m.mode != ViewActionMenu || strings.Join(actionNames(m), ",") != "notify,jira" || m.notesUI.actionMenuSelected != 0 {
+		t.Fatalf("mode %v actions %v selected %d", m.mode, actionNames(m), m.notesUI.actionMenuSelected)
 	}
 	if view := m.View(); !strings.Contains(view, "@notify") || !strings.Contains(view, "@jira") {
 		t.Errorf("menu should list @notify and @jira:\n%s", view)
@@ -177,12 +177,12 @@ func TestNotifyRefusesKeysThatMakeTheIntervalZeroOrOverThreeDays(t *testing.T) {
 	m, _ = pressKey(t, m, "@")
 	m, _ = pressKey(t, m, "enter")
 	for typed, kept := range map[string]string{"4d": "4", "73h": "73", "4321m": "432m", "0": "", "3d": "3d", "72h": "72h", "4320m": "4320m"} {
-		m.notifyInput.SetValue("")
-		if m = typeText(t, m, typed); m.notifyInput.Value() != kept {
-			t.Errorf("typing %q kept %q, want %q", typed, m.notifyInput.Value(), kept)
+		m.notesUI.notifyInput.SetValue("")
+		if m = typeText(t, m, typed); m.notesUI.notifyInput.Value() != kept {
+			t.Errorf("typing %q kept %q, want %q", typed, m.notesUI.notifyInput.Value(), kept)
 		}
 	}
-	m.notifyInput.SetValue("")
+	m.notesUI.notifyInput.SetValue("")
 	m = typeText(t, m, "73")
 	m, cmd := pressKey(t, m, "enter")
 	m = applyMsgs(t, m, cmd)
@@ -199,8 +199,8 @@ func TestAtAgainPrefillsTheCurrentInterval(t *testing.T) {
 	m = setNotify(t, m, "90m")
 	m, _ = pressKey(t, m, "@")
 	m, _ = pressKey(t, m, "enter")
-	if m.notifyInput.Value() != "90m" {
-		t.Errorf("input = %q, want the current interval", m.notifyInput.Value())
+	if m.notesUI.notifyInput.Value() != "90m" {
+		t.Errorf("input = %q, want the current interval", m.notesUI.notifyInput.Value())
 	}
 }
 
@@ -240,7 +240,8 @@ func TestAutomateFromTheMenuConfirmsThenStarts(t *testing.T) {
 	if m.mode != ViewAutomationConfirm {
 		t.Fatalf("mode %v, want automation confirm", m.mode)
 	}
-	m, _ = pressKey(t, m, "enter")
+	m, cmd := pressKey(t, m, "enter")
+	m = settleBackground(t, m, cmd)
 	if len(*started) != 1 || (*started)[0].noteID != "note-1" {
 		t.Errorf("started = %+v", *started)
 	}
@@ -294,7 +295,7 @@ func TestChoosingAnActionKeepsTheOrderAndWritesNoUsageFile(t *testing.T) {
 
 func TestRunningAutomationsDoNotHideTheMenuItems(t *testing.T) {
 	m, _ := actionsTestModel(t)
-	m.automationRuns = map[string]automation.Run{"note-1": {Status: automation.RunRunning}}
+	m.automation.automationRuns = map[string]automation.Run{"note-1": {Status: automation.RunRunning}}
 	if m, _ = pressKey(t, m, "@"); strings.Join(actionNames(m), ",") != "notify,jira" {
 		t.Errorf("actions = %v while an automation runs", actionNames(m))
 	}
@@ -344,8 +345,8 @@ func TestEveryMatchingAutomationIsListed(t *testing.T) {
 	m, _ = pressKey(t, m, "down")
 	m, _ = pressKey(t, m, "down")
 	m, _ = pressKey(t, m, "enter")
-	if m.mode != ViewAutomationConfirm || m.automationName != "confluence" {
-		t.Errorf("mode %v automation %q", m.mode, m.automationName)
+	if m.mode != ViewAutomationConfirm || m.automation.automationName != "confluence" {
+		t.Errorf("mode %v automation %q", m.mode, m.automation.automationName)
 	}
 }
 
@@ -440,7 +441,7 @@ func TestActionMenuLooksLikeTheKeyHintPill(t *testing.T) {
 	if !strings.HasPrefix(lines[0], "╭") || !strings.HasPrefix(lines[1], "│ › @") || !strings.HasSuffix(lines[1], " │") {
 		t.Errorf("action menu should use the pill border with one space padding:\n%s", strings.Join(lines, "\n"))
 	}
-	if !strings.Contains(menu, hintKeyStyle.Render("› @"+m.actionMenuItems[0].name)) {
+	if !strings.Contains(menu, hintKeyStyle.Render("› @"+m.notesUI.actionMenuItems[0].name)) {
 		t.Errorf("selected action should use the hint key style")
 	}
 }
@@ -450,12 +451,12 @@ func TestNotifyInputOnlyTakesWholeNumbersAndOneUnit(t *testing.T) {
 	m, _ = pressKey(t, m, "@")
 	m, _ = pressKey(t, m, "enter")
 	m = typeText(t, m, "2.5xhm")
-	if got := m.notifyInput.Value(); got != "25h" {
+	if got := m.notesUI.notifyInput.Value(); got != "25h" {
 		t.Errorf("input = %q, want 25h with the dot, x and second unit refused", got)
 	}
-	m.notifyInput.SetValue("")
+	m.notesUI.notifyInput.SetValue("")
 	m = typeText(t, m, "h3d")
-	if got := m.notifyInput.Value(); got != "3d" {
+	if got := m.notesUI.notifyInput.Value(); got != "3d" {
 		t.Errorf("a unit needs a number first: %q", got)
 	}
 	if view := stripANSI(m.View()); !strings.Contains(view, "ⓘ 1m–3d · whole numbers · m h d") {
@@ -492,10 +493,10 @@ func TestNotifyOnARemindingNoteRewritesItsInterval(t *testing.T) {
 	m, _ = pressKey(t, m, "@")
 	m, _ = pressKey(t, m, "j")
 	m, _ = pressKey(t, m, "enter")
-	if m.mode != ViewNotifyInput || m.notifyInput.Value() != "2h" {
-		t.Fatalf("@notify should open the input with the current interval: mode %v value %q", m.mode, m.notifyInput.Value())
+	if m.mode != ViewNotifyInput || m.notesUI.notifyInput.Value() != "2h" {
+		t.Fatalf("@notify should open the input with the current interval: mode %v value %q", m.mode, m.notesUI.notifyInput.Value())
 	}
-	m.notifyInput.SetValue("")
+	m.notesUI.notifyInput.SetValue("")
 	m = typeText(t, m, "45m")
 	m, cmd := pressKey(t, m, "enter")
 	m = applyMsgs(t, m, cmd)

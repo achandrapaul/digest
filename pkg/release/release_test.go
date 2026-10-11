@@ -122,3 +122,24 @@ func TestLatestSectionReturnsTheTopEntry(t *testing.T) {
 		t.Errorf("LatestSection = %q", got)
 	}
 }
+
+func TestPreviousTag(t *testing.T) {
+	tags := []string{"v0.0.3", "v0.0.2", "v0.0.1"}
+	cases := []struct {
+		tags    []string
+		version string
+		from    string
+		tagged  bool
+	}{
+		{tags, "0.0.4", "v0.0.3", false},
+		{tags, "0.0.2", "v0.0.1", true},
+		{tags, "0.0.1", "", true},
+		{tags, "", "v0.0.3", false},
+		{nil, "0.0.1", "", false},
+	}
+	for _, testCase := range cases {
+		if from, tagged := PreviousTag(testCase.tags, testCase.version); from != testCase.from || tagged != testCase.tagged {
+			t.Errorf("PreviousTag(%v, %q) = %q, %v; want %q, %v", testCase.tags, testCase.version, from, tagged, testCase.from, testCase.tagged)
+		}
+	}
+}

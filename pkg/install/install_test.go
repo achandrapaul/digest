@@ -64,18 +64,21 @@ func readHomeFile(t *testing.T, installer *Installer, name string) string {
 	return string(content)
 }
 
-func TestDecliningEveryStepChangesNothing(t *testing.T) {
-	installer, runner, _, notificationInstalls := testInstaller(t, []bool{false, false, false}, nil)
+func TestDecliningTheShortcutStillInstallsToolsAndNotifications(t *testing.T) {
+	installer, runner, _, notificationInstalls := testInstaller(t, []bool{false}, nil)
 	if err := installer.Run(); err != nil {
 		t.Fatal(err)
 	}
-	if len(runner.commands) != 0 || *notificationInstalls != 0 || readHomeFile(t, installer, ".tmux.conf") != "" || readHomeFile(t, installer, ".zshrc") != "" {
-		t.Errorf("declined steps should change nothing: commands %v installs %d", runner.commands, *notificationInstalls)
+	if strings.Join(runner.commands, "\n") != "brew install gh neovim terminal-notifier" || *notificationInstalls != 1 {
+		t.Errorf("tools and notifications install without asking: commands %v installs %d", runner.commands, *notificationInstalls)
+	}
+	if readHomeFile(t, installer, ".tmux.conf") != "" || readHomeFile(t, installer, ".zshrc") != "" {
+		t.Error("a declined shortcut should not be written")
 	}
 }
 
 func TestConfirmingEveryStepInstallsThemAll(t *testing.T) {
-	installer, runner, output, notificationInstalls := testInstaller(t, []bool{true, true, true}, [][]byte{{0x07}, {'\r'}})
+	installer, runner, output, notificationInstalls := testInstaller(t, []bool{true}, [][]byte{{0x07}, {'\r'}})
 	if err := installer.Run(); err != nil {
 		t.Fatal(err)
 	}
@@ -95,7 +98,7 @@ func TestConfirmingEveryStepInstallsThemAll(t *testing.T) {
 }
 
 func TestMissingBrewSkipsDependenciesWithAHint(t *testing.T) {
-	installer, runner, output, _ := testInstaller(t, []bool{false, false}, nil)
+	installer, runner, output, _ := testInstaller(t, []bool{false}, nil)
 	installer.LookPath = func(string) (string, error) { return "", errors.New("missing") }
 	if err := installer.Run(); err != nil {
 		t.Fatal(err)
@@ -106,7 +109,7 @@ func TestMissingBrewSkipsDependenciesWithAHint(t *testing.T) {
 }
 
 func TestNoMissingToolsSkipsTheDependencyQuestion(t *testing.T) {
-	installer, runner, _, _ := testInstaller(t, []bool{false, false}, nil)
+	installer, runner, _, _ := testInstaller(t, []bool{false}, nil)
 	installer.MissingTools = nil
 	if err := installer.Run(); err != nil {
 		t.Fatal(err)

@@ -15,7 +15,7 @@ import (
 
 func browsedSummaries(m Model) []string {
 	var names []string
-	for _, note := range m.browsedNotes {
+	for _, note := range m.notesUI.browsedNotes {
 		names = append(names, note.Summary)
 	}
 	slices.Sort(names)
@@ -43,7 +43,7 @@ func TestStartupNeverLoadsEveryNote(t *testing.T) {
 	if got := loadedSummaries(m); !slices.Equal(got, []string{"active", "done yesterday"}) {
 		t.Errorf("notes after startup = %q", got)
 	}
-	if m.browsedNotes != nil {
+	if m.notesUI.browsedNotes != nil {
 		t.Errorf("startup should not keep every note: %q", browsedSummaries(m))
 	}
 }
@@ -83,7 +83,7 @@ func TestSearchArchiveAndBragReadEveryNoteAndDropThemOnClose(t *testing.T) {
 			t.Errorf("%s should leave the dashboard notes alone, got %q", name, got)
 		}
 		m = update(m, tea.KeyMsg{Type: tea.KeyEsc})
-		if m.mode != ViewDashboard || m.browsedNotes != nil {
+		if m.mode != ViewDashboard || m.notesUI.browsedNotes != nil {
 			t.Errorf("closing %s should drop its notes, mode %v kept %q", name, m.mode, browsedSummaries(m))
 		}
 	}
@@ -94,7 +94,7 @@ func TestNotesReadAfterTheViewClosedAreDropped(t *testing.T) {
 	next, cmd := m.openSearch(tea.KeyMsg{})
 	m = update(next.(Model), tea.KeyMsg{Type: tea.KeyEsc})
 	m, _ = applyNoteMessages(t, m, cmd)
-	if m.browsedNotes != nil {
+	if m.notesUI.browsedNotes != nil {
 		t.Errorf("a load finishing after search closed should be dropped: %q", browsedSummaries(m))
 	}
 }
@@ -104,7 +104,7 @@ func TestSearchSharesTheDashboardNotes(t *testing.T) {
 	next, cmd := m.openSearch(tea.KeyMsg{})
 	m, _ = applyNoteMessages(t, next.(Model), cmd)
 	active := noteBySummary(t, m, "active")
-	if !slices.Contains(m.browsedNotes, active) {
+	if !slices.Contains(m.notesUI.browsedNotes, active) {
 		t.Error("search should show the dashboard's own note so edits reach both")
 	}
 }
@@ -130,7 +130,7 @@ func TestEditingAnOldNoteInSearchKeepsItOffTheDashboard(t *testing.T) {
 	next, cmd := m.openSearch(tea.KeyMsg{})
 	m, _ = applyNoteMessages(t, next.(Model), cmd)
 	var old *model.Note
-	for _, note := range m.browsedNotes {
+	for _, note := range m.notesUI.browsedNotes {
 		if note.Summary == "done long ago" {
 			old = note
 		}
@@ -221,7 +221,7 @@ func TestCorruptNotesShowInTheHeaderAndTheGoodNotesStay(t *testing.T) {
 	}
 	next, cmd = m.openSearch(tea.KeyMsg{})
 	m, _ = applyNoteMessages(t, next.(Model), cmd)
-	if len(m.browsedNotes) != 4 {
+	if len(m.notesUI.browsedNotes) != 4 {
 		t.Errorf("search should keep the good notes: %q", browsedSummaries(m))
 	}
 }

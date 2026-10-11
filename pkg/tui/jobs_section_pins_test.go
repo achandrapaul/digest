@@ -12,10 +12,10 @@ import (
 )
 
 func TestJobTicksProduceTheirMessages(t *testing.T) {
-	if _, ok := tickRunStatePollCmd()().(runStatePollTickMsg); !ok {
+	if _, ok := (Model{}).tickRunStatePollCmd()().(runStatePollTickMsg); !ok {
 		t.Fatal("expected a run state poll tick")
 	}
-	if _, ok := tickJobLogCmd()().(jobLogTickMsg); !ok {
+	if _, ok := (Model{}).tickJobLogCmd()().(jobLogTickMsg); !ok {
 		t.Fatal("expected a job log tick")
 	}
 }
@@ -23,16 +23,16 @@ func TestJobTicksProduceTheirMessages(t *testing.T) {
 func TestRefreshDryRunResultsWithoutConfigOrMaps(t *testing.T) {
 	tempDigestRoot(t)
 	m, _, _ := jobTestModel(t)
-	m.jobDryRunOutputs, m.jobDryRunExitCodes, m.jobDryRunHasRun = nil, nil, nil
+	m.jobs.jobDryRunOutputs, m.jobs.jobDryRunExitCodes, m.jobs.jobDryRunHasRun = nil, nil, nil
 	writeLogsFile(t, "nightly.dryrun.exit", "0")
 	m.refreshDryRunResults()
-	if !m.jobDryRunHasRun["nightly"] {
+	if !m.jobs.jobDryRunHasRun["nightly"] {
 		t.Fatal("the finished dry run should be recorded")
 	}
 	writeLogsFile(t, "nightly.dryrun.pid", strconv.Itoa(os.Getpid()))
-	delete(m.dryRunLogStamps, "nightly")
+	delete(m.jobs.dryRunLogStamps, "nightly")
 	m.refreshDryRunResults()
-	if !m.dryRunsInFlight["nightly"] {
+	if !m.jobs.dryRunsInFlight["nightly"] {
 		t.Fatal("a live dry run pid should be in flight")
 	}
 	if view := stripANSI(m.renderDashboardBody()); !strings.Contains(view, "nightly") {
@@ -45,7 +45,7 @@ func TestRefreshDryRunResultsWithoutConfigOrMaps(t *testing.T) {
 func TestRunningJobRowShowsTheRunningIndicator(t *testing.T) {
 	tempDigestRoot(t)
 	m, _, _ := jobTestModel(t)
-	m.runningJobPIDs = map[string]int{"nightly": os.Getpid()}
+	m.jobs.runningJobPIDs = map[string]int{"nightly": os.Getpid()}
 	m.contentVersion++
 	if row := stripANSI(m.renderDraftRow(m.allNavItems()[m.selected].Draft, false, 100)); !strings.Contains(row, "#job") {
 		t.Fatalf("row = %q", row)
@@ -54,9 +54,9 @@ func TestRunningJobRowShowsTheRunningIndicator(t *testing.T) {
 
 func TestJobLogTickStopsWithoutAJobPreview(t *testing.T) {
 	m := syncTestModel(t)
-	m.jobLogRunning = true
-	next, cmd := m.handleJobLogTick()
-	if cmd != nil || next.(Model).jobLogRunning {
+	m.jobs.jobLogRunning = true
+	next, cmd := m.handleJobLogTick(m.loadJobLogTick())
+	if cmd != nil || next.(Model).jobs.jobLogRunning {
 		t.Fatal("no previewed job should stop the log ticks")
 	}
 }
@@ -69,8 +69,8 @@ func TestJobLogTickFollowsTheTailWhenAtTheBottom(t *testing.T) {
 	m.mode = ViewPreview
 	m.updatePreviewViewport()
 	m.previewViewport.GotoBottom()
-	m.jobLogStamp = "stale"
-	next, cmd := m.handleJobLogTick()
+	m.jobs.jobLogStamp = "stale"
+	next, cmd := m.handleJobLogTick(m.loadJobLogTick())
 	if cmd == nil || !next.(Model).previewViewport.AtBottom() {
 		t.Fatal("a running job at the bottom should keep following the log")
 	}
@@ -95,7 +95,7 @@ func TestRunStatePollRefreshesAChangedJobPreview(t *testing.T) {
 	m, _, _ := jobTestModel(t)
 	m.mode = ViewPreview
 	writeLogsFile(t, "nightly.dryrun.pid", strconv.Itoa(os.Getpid()))
-	_, cmd := m.Update(runStatePollTickMsg{})
+	_, cmd := m.Update(m.loadRunStatePoll())
 	if cmd == nil {
 		t.Fatal("a dry run in flight should keep polling")
 	}
@@ -113,8 +113,8 @@ func TestDismissingAReviewRunReportsErrorsAndLeavesThePreview(t *testing.T) {
 	m.mode = ViewPreview
 	selectNavKind(t, &m, KindReviewRun)
 	next, _ := m.dismissReviewRun(ref)
-	if got := next.(Model); got.mode != ViewPreview || len(got.reviewRuns) != 0 {
-		t.Fatalf("mode %v runs %d", got.mode, len(got.reviewRuns))
+	if got := next.(Model); got.mode != ViewPreview || len(got.review.reviewRuns) != 0 {
+		t.Fatalf("mode %v runs %d", got.mode, len(got.review.reviewRuns))
 	}
 	m.git.ghPendingPRs = nil
 	m.rebuildGitRepoStats()

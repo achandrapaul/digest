@@ -110,3 +110,19 @@ func LatestSection(changelog string) string {
 	latest, _, _ := strings.Cut(afterHeading, "\n## ")
 	return strings.TrimLeft(strings.TrimRight(latest, "\n"), "\n") + "\n"
 }
+
+func PreviousTag(tags []string, version string) (string, bool) {
+	for index, tag := range tags {
+		if tag != "v"+version {
+			continue
+		}
+		if index+1 < len(tags) {
+			return tags[index+1], true
+		}
+		return "", true
+	}
+	if len(tags) == 0 {
+		return "", false
+	}
+	return tags[0], false
+}

@@ -20,7 +20,7 @@ func disableTextareaDeleteShortcuts(area *textarea.Model) {
 
 func (m Model) activeTextarea() *textarea.Model {
 	if m.mode == ViewRejectComment {
-		return m.rejectInput
+		return m.review.rejectInput
 	}
 	return m.editor
 }

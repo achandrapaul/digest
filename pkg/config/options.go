@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -128,4 +129,25 @@ func (c *Config) Retention() int {
 		return DefaultJanitorGraceDays
 	}
 	return days
+}
+
+func ValidatePatterns(patterns []string) error {
+	for _, pattern := range patterns {
+		if _, err := filepath.Match(pattern, ""); err != nil {
+			return fmt.Errorf("%s option %s: %q is not a valid pattern: %w", JobJanitor, OptionPatterns, pattern, err)
+		}
+	}
+	return nil
+}
+
+func (c *Config) validateJobOptions() error {
+	if err := ValidatePatterns(c.JobOptionList(JobJanitor, OptionPatterns, nil)); err != nil {
+		return err
+	}
+	for _, jobName := range []string{JobJanitor, JobBranchReaper} {
+		if _, err := c.JobOptionInt(jobName, OptionGraceDays, 0); err != nil {
+			return err
+		}
+	}
+	return nil
 }

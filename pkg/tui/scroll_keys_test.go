@@ -81,8 +81,8 @@ func TestIdleJobPreviewIgnoresD(t *testing.T) {
 	m.mode = ViewPreview
 	m.updatePreviewViewport()
 	m = press(t, m, runes("d"))
-	if m.mode != ViewPreview || m.jobToAbort != "" {
-		t.Errorf("d on idle job: mode=%v abort=%q", m.mode, m.jobToAbort)
+	if m.mode != ViewPreview || m.jobs.jobToAbort != "" {
+		t.Errorf("d on idle job: mode=%v abort=%q", m.mode, m.jobs.jobToAbort)
 	}
 }
 
@@ -90,8 +90,8 @@ func TestReviewTabEnterWithoutSelectionDoesNothing(t *testing.T) {
 	m := reviewTestModel(t)
 	m = press(t, m, tea.KeyMsg{Type: tea.KeyTab})
 	m = press(t, m, tea.KeyMsg{Type: tea.KeyEnter})
-	if m.mode != ViewPreview || m.reviewNotice != "" {
-		t.Errorf("mode=%v notice=%q", m.mode, m.reviewNotice)
+	if m.mode != ViewPreview || m.review.reviewNotice != "" {
+		t.Errorf("mode=%v notice=%q", m.mode, m.review.reviewNotice)
 	}
 }
 
@@ -102,24 +102,24 @@ func archiveModel(t *testing.T) Model {
 		m.notes = append(m.notes, &model.Note{ID: "a" + string(rune('A'+index%26)) + string(rune('a'+index/26)), Summary: "archived", Status: model.StatusArchived, Created: m.currentDate, Updated: m.currentDate})
 	}
 	m = press(t, m, tea.KeyMsg{Type: tea.KeyCtrlE})
-	m.archivedViewport.SetYOffset(5)
+	m.notesUI.archivedViewport.SetYOffset(5)
 	return m
 }
 
 func TestArchiveScrollKeys(t *testing.T) {
 	for _, name := range []string{"f", "b", "h", "l"} {
 		m := archiveModel(t)
-		before := m.archivedViewport.YOffset
+		before := m.notesUI.archivedViewport.YOffset
 		m = press(t, m, keyFor(name))
-		if m.archivedViewport.YOffset != before {
+		if m.notesUI.archivedViewport.YOffset != before {
 			t.Errorf("%s scrolled the archive", name)
 		}
 	}
 	for _, name := range []string{"pgdown", "ctrl+d"} {
 		m := archiveModel(t)
-		before := m.archivedSelected
+		before := m.notesUI.archivedSelected
 		m = press(t, m, keyFor(name))
-		if m.archivedSelected <= before {
+		if m.notesUI.archivedSelected <= before {
 			t.Errorf("%s did not move the archive selection", name)
 		}
 	}

@@ -48,8 +48,8 @@ func TestNCancelsTheRunConfirm(t *testing.T) {
 	m, executed, _ := jobTestModel(t)
 	m = press(t, m, runes("r"))
 	m = press(t, m, runes("n"))
-	if m.mode != ViewDashboard || m.jobToExecute != "" || len(*executed) != 0 {
-		t.Errorf("mode = %v jobToExecute = %q executed = %v", m.mode, m.jobToExecute, *executed)
+	if m.mode != ViewDashboard || m.jobs.jobToExecute != "" || len(*executed) != 0 {
+		t.Errorf("mode = %v jobToExecute = %q executed = %v", m.mode, m.jobs.jobToExecute, *executed)
 	}
 }
 
@@ -58,8 +58,8 @@ func TestNCancelsTheAbortConfirm(t *testing.T) {
 	markJobRunning(t, &m, "nightly")
 	m = press(t, m, runes("d"))
 	m = press(t, m, runes("n"))
-	if m.mode != ViewDashboard || m.jobToAbort != "" {
-		t.Errorf("mode = %v jobToAbort = %q", m.mode, m.jobToAbort)
+	if m.mode != ViewDashboard || m.jobs.jobToAbort != "" {
+		t.Errorf("mode = %v jobToAbort = %q", m.mode, m.jobs.jobToAbort)
 	}
 }
 
@@ -76,18 +76,18 @@ func TestNCancelsTheNoteDeleteConfirm(t *testing.T) {
 		t.Errorf("delete confirm footer should offer n|esc:\n%s", view)
 	}
 	m = press(t, m, runes("n"))
-	if m.mode != ViewPreview || len(m.deleteTargetNotes) != 0 || m.noteByID("n1") == nil {
-		t.Errorf("mode = %v targets = %v", m.mode, m.deleteTargetNotes)
+	if m.mode != ViewPreview || len(m.notesUI.deleteTargetNotes) != 0 || m.noteByID("n1") == nil {
+		t.Errorf("mode = %v targets = %v", m.mode, m.notesUI.deleteTargetNotes)
 	}
 }
 
 func TestNCancelsTheArchiveDeleteConfirm(t *testing.T) {
 	m := syncTestModel(t)
 	archived := &model.Note{ID: "a1", Summary: "old", FilePath: "a1.md", Status: model.StatusArchived}
-	m.deleteTargetNotes, m.deleteReturnMode, m.mode = []*model.Note{archived}, ViewArchived, ViewDeleteConfirm
+	m.notesUI.deleteTargetNotes, m.modeStack, m.mode = []*model.Note{archived}, []ViewMode{ViewArchived}, ViewDeleteConfirm
 	m = press(t, m, runes("n"))
-	if m.mode != ViewArchived || len(m.deleteTargetNotes) != 0 {
-		t.Errorf("mode = %v targets = %v", m.mode, m.deleteTargetNotes)
+	if m.mode != ViewArchived || len(m.notesUI.deleteTargetNotes) != 0 {
+		t.Errorf("mode = %v targets = %v", m.mode, m.notesUI.deleteTargetNotes)
 	}
 }
 

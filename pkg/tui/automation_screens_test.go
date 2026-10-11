@@ -36,7 +36,7 @@ func TestAutomationDraftEditorScreenShowsTheDraftAndNotice(t *testing.T) {
 	if m.mode != ViewAutomationEdit {
 		t.Fatalf("mode = %v", m.mode)
 	}
-	m.automationNotice = "could not save"
+	m.automation.automationNotice = "could not save"
 	view := stripANSI(m.View())
 	for _, want := range []string{"EDIT JIRA DRAFT", "summary: Flaky deploys", "could not save"} {
 		if !strings.Contains(view, want) {
@@ -48,8 +48,8 @@ func TestAutomationDraftEditorScreenShowsTheDraftAndNotice(t *testing.T) {
 func TestCreateStepConfirmAsksToRunTheDraft(t *testing.T) {
 	m := draftTabModel(t, automation.RunFailed)
 	m = press(t, m, runes("r"))
-	if m.mode != ViewAutomationConfirm || m.automationPhase != automation.PhaseCreate {
-		t.Fatalf("mode %v phase %v", m.mode, m.automationPhase)
+	if m.mode != ViewAutomationConfirm || m.automation.automationPhase != automation.PhaseCreate {
+		t.Fatalf("mode %v phase %v", m.mode, m.automation.automationPhase)
 	}
 	if view := stripANSI(m.View()); !strings.Contains(view, "Run jira with this draft?") || !strings.Contains(view, "Claude creates it in the background.") {
 		t.Fatalf("confirm:\n%s", view)
@@ -106,20 +106,22 @@ func TestAutomationFailureFallbacks(t *testing.T) {
 func TestConfirmAutomationReportsAStartFailure(t *testing.T) {
 	m, _ := automationTestModel(t)
 	startAutomation = func(string, string, string, automation.Phase) error { return errors.New("no claude") }
-	m.automationReturnMode = ViewPreview
+	m.modeStack = []ViewMode{ViewPreview}
 	next, cmd := m.confirmAutomation(tea.KeyMsg{})
-	if cmd != nil || len(next.(Model).automationRuns) != 0 {
+	next, cmd = next.(Model).applyAutomationStarted(cmd().(automationStartedMsg))
+	if cmd != nil || len(next.(Model).automation.automationRuns) != 0 {
 		t.Fatal("a failed start should not track a run")
 	}
 }
 
 func TestConfirmAutomationWithoutTrackedRunsStartsAMap(t *testing.T) {
 	m, started := automationTestModel(t)
-	m.automationRuns = nil
-	m.automationNoteID, m.automationName, m.automationPhase = "note-1", "jira", automation.PhaseDraft
-	m.automationReturnMode = ViewDashboard
-	next, _ := m.confirmAutomation(tea.KeyMsg{})
-	if run := next.(Model).automationRuns["note-1"]; run.Status != automation.RunRunning || len(*started) != 1 {
+	m.automation.automationRuns = nil
+	m.automation.automationNoteID, m.automation.automationName, m.automation.automationPhase = "note-1", "jira", automation.PhaseDraft
+	m.modeStack = []ViewMode{ViewDashboard}
+	next, cmd := m.confirmAutomation(tea.KeyMsg{})
+	next = settleBackground(t, next.(Model), cmd)
+	if run := next.(Model).automation.automationRuns["note-1"]; run.Status != automation.RunRunning || len(*started) != 1 {
 		t.Fatalf("run %+v started %v", run, *started)
 	}
 }
@@ -162,7 +164,7 @@ func TestDeletingADraftReportsADismissFailure(t *testing.T) {
 	m := draftTabModel(t, automation.RunFailed)
 	readOnlyAutomationRoot(t, m)
 	m = press(t, m, runes("d"))
-	if _, tracked := m.automationRuns["note-1"]; !tracked {
+	if _, tracked := m.automation.automationRuns["note-1"]; !tracked {
 		t.Fatal("a failed delete should keep the run")
 	}
 }
@@ -172,34 +174,34 @@ func TestStopAndDismissFailuresKeepTheRun(t *testing.T) {
 	previous := stopAutomation
 	stopAutomation = func(string, string) error { return errors.New("kill failed") }
 	t.Cleanup(func() { stopAutomation = previous })
-	run := m.automationRuns["note-1"]
+	run := m.automation.automationRuns["note-1"]
 	next, _ := m.stopAutomationRun(&run)
-	if next.(Model).automationRuns["note-1"].Status != automation.RunRunning {
+	if next.(Model).automation.automationRuns["note-1"].Status != automation.RunRunning {
 		t.Fatal("a failed stop should leave the run running")
 	}
 	stopped := automation.Run{Meta: automation.RunMeta{NoteID: "other"}}
-	if next, _ := m.stopAutomationRun(&stopped); len(next.(Model).automationRuns) != len(m.automationRuns) {
+	if next, _ := m.stopAutomationRun(&stopped); len(next.(Model).automation.automationRuns) != len(m.automation.automationRuns) {
 		t.Fatal("stopping a run that is not running does nothing")
 	}
 	readOnlyAutomationRoot(t, m)
 	next, _ = m.dismissAutomationRun(&run)
-	if _, tracked := next.(Model).automationRuns["note-1"]; !tracked {
+	if _, tracked := next.(Model).automation.automationRuns["note-1"]; !tracked {
 		t.Fatal("a failed dismiss should keep the run")
 	}
 }
 
 func TestApplyingRunsKeepsUnlistedRunningRunsAndSortsJobs(t *testing.T) {
 	m := runningJobsModel(t)
-	m.automationRuns["note-0"] = automation.Run{Meta: automation.RunMeta{NoteID: "note-0", Automation: "jira"}, Status: automation.RunFailed}
+	m.automation.automationRuns["note-0"] = automation.Run{Meta: automation.RunMeta{NoteID: "note-0", Automation: "jira"}, Status: automation.RunFailed}
 	m.applyAutomationRuns(nil)
-	if _, kept := m.automationRuns["note-1"]; !kept {
+	if _, kept := m.automation.automationRuns["note-1"]; !kept {
 		t.Fatal("a running run missing from disk should be kept")
 	}
 	jobs := m.automationJobRuns()
 	if len(jobs) != 1 || jobs[0].Meta.NoteID != "note-1" {
 		t.Fatalf("jobs = %+v", jobs)
 	}
-	m.automationRuns["note-0"] = automation.Run{Meta: automation.RunMeta{NoteID: "note-0"}, Status: automation.RunFailed}
+	m.automation.automationRuns["note-0"] = automation.Run{Meta: automation.RunMeta{NoteID: "note-0"}, Status: automation.RunFailed}
 	if jobs := m.automationJobRuns(); len(jobs) != 2 || jobs[0].Meta.NoteID != "note-0" {
 		t.Fatalf("jobs should be sorted by note, got %+v", jobs)
 	}

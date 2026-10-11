@@ -7,9 +7,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
-	"time"
 
 	"github.com/achandrapaul/digest/pkg/aitool"
 	"github.com/achandrapaul/digest/pkg/paths"
@@ -74,7 +72,6 @@ type Config struct {
 	AIToolType          string              `yaml:"ai_tool_type"`
 	SelectionDefault    string              `yaml:"selection_default"`
 	GitRepositoryRoots  []string            `yaml:"git_repository_roots"`
-	GitAutoSyncInterval int                 `yaml:"git_auto_sync_interval"`
 	Jobs                []JobSpec           `yaml:"jobs"`
 	GreenOnly           bool                `yaml:"green_only"`
 	JiraBaseURL         string              `yaml:"jira_base_url"`
@@ -90,6 +87,7 @@ type Config struct {
 	ShowTags            string              `yaml:"show_tags"`
 	TerminalApp         string              `yaml:"terminal_app"`
 	Automations         []AutomationSpec    `yaml:"automations,omitempty"`
+	UnknownKeys         []string            `yaml:"-"`
 }
 
 type Prompt string
@@ -278,7 +276,6 @@ func (c *Config) UnmarshalYAML(value *yaml.Node) error {
 		SelectionDefault    string               `yaml:"selection_default"`
 		GitRepositoryRoots  []string             `yaml:"git_repository_roots"`
 		LegacyRepoRoots     []string             `yaml:"repo_roots"`
-		GitAutoSyncInterval interface{}          `yaml:"git_auto_sync_interval"`
 		Jobs                []JobSpec            `yaml:"jobs"`
 		GreenOnly           *bool                `yaml:"green_only"`
 		JiraBaseURL         string               `yaml:"jira_base_url"`
@@ -346,34 +343,7 @@ func (c *Config) UnmarshalYAML(value *yaml.Node) error {
 	c.TerminalApp = raw.TerminalApp
 	c.Automations = raw.Automations
 
-	c.GitAutoSyncInterval = parseSyncInterval(raw.GitAutoSyncInterval)
-
 	return nil
-}
-
-func parseSyncInterval(val interface{}) int {
-	if val == nil {
-		return DefaultGitAutoSyncInterval
-	}
-
-	switch v := val.(type) {
-	case int:
-		return v
-	case int64:
-		return int(v)
-	case float64:
-		return int(v)
-	case string:
-		str := strings.TrimSpace(v)
-		if d, err := time.ParseDuration(str); err == nil {
-			return int(d.Seconds())
-		}
-		if i, err := strconv.Atoi(str); err == nil {
-			return i
-		}
-	}
-
-	return DefaultGitAutoSyncInterval
 }
 
 func xdgConfigHome() (string, error) {
@@ -427,6 +397,10 @@ func Load(resolvedPath string) (*Config, error) {
 	if err := cfg.validateAutomations(); err != nil {
 		return nil, fmt.Errorf("%w in %s", err, resolvedPath)
 	}
+	if err := cfg.validateJobOptions(); err != nil {
+		return nil, fmt.Errorf("%w in %s", err, resolvedPath)
+	}
+	cfg.UnknownKeys = UnknownKeys(data)
 
 	return &cfg, nil
 }

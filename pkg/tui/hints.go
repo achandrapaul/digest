@@ -110,9 +110,9 @@ func (m Model) dashboardReject(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	m.prActionFromDashboard = true
 	if item := m.currentPRItem(); item != nil {
 		if _, findings := m.loadFindings(item); len(findings) > 0 {
-			m.reviewSelected = make(map[int]bool, len(findings))
+			m.review.reviewSelected = make(map[int]bool, len(findings))
 			for index := range findings {
-				m.reviewSelected[index] = true
+				m.review.reviewSelected[index] = true
 			}
 		}
 	}

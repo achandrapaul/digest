@@ -33,31 +33,20 @@ mise run build
 
 ## Setup
 
-After installing, run these three commands once.
+After installing, run this once:
 
-1. Install what digest depends on:
+```sh
+digest bootstrap
+```
 
-   ```sh
-   digest install
-   ```
+It runs the four setup steps in order and retries a step once if it fails, printing the error each time; if the retry fails too it stops and exits with an error.
 
-   This installs any missing tools with Homebrew, the launchd agent that sends reminders, and a keyboard shortcut that opens digest. It asks before each one.
+1. `digest install` installs any missing tools with Homebrew and the launchd agent that sends reminders, then asks before adding a keyboard shortcut that opens digest.
+2. `digest doctor` lists every tool digest uses, whether it was found and which feature needs it, and warns about unknown keys in `config.yaml`. It fails when a required tool is missing.
+3. `digest init` writes the default `config.yaml`. Bootstrap keeps one that already exists.
+4. `digest setup` walks through git roots, work days, summaries, hints and notifications. You can also open it from the dashboard with `,`, and the first run of `digest` starts it on its own.
 
-2. Check that digest can run everything:
-
-   ```sh
-   digest doctor
-   ```
-
-   This lists every tool digest uses, whether it was found and which feature needs it. It exits with an error if a required tool is missing; run `digest install` again to add it.
-
-3. Configure digest:
-
-   ```sh
-   digest setup
-   ```
-
-   This walks through git roots, work days, summaries, hints and notifications. You can also open it from the dashboard with `,`, and the first run of `digest` starts it on its own.
+Each step also runs on its own with the command shown.
 
 ## Usage
 
@@ -78,7 +67,7 @@ digest migrate
 
 `digest migrate --dry-run` changes nothing and prints what it would do.
 
-Notes are named after their id and status: `<id>.md` while active, `<id>-<finished>.done.md` once done and `<id>-<archived>.archived.md` once archived, so the dashboard only opens the files it shows. Migrate renames older notes, gives old and PR notes timestamp ids, and moves their reminders with them. It also moves the old top-level `retention_days` and `janitor_patterns` into the janitor job's `options:`, removes the commands of built-in jobs (their `--root` values become the `roots` option), adds `automation_type` to built-in automations that lack it, and adds the google calendar automation when it's missing. Running it again changes nothing.
+Notes are named after their id and status: `<id>.md` while active, `<id>-<finished>.done.md` once done and `<id>-<archived>.archived.md` once archived, so the dashboard only opens the files it shows. Migrate renames older notes, gives old and PR notes timestamp ids, and moves their reminders with them. It also moves the old top-level `retention_days` and `janitor_patterns` into the janitor job's `options:`, removes the commands of built-in jobs (their `--root` values become the `roots` option), adds `automation_type` to built-in automations that lack it, adds the google calendar automation once when it's missing (delete it and it stays deleted) and removes the retired `git_auto_sync_interval`. Running it again changes nothing.
 
 Digest locks every file it writes under the digest root (the macOS `uchg` flag), so other programs can read them but can't edit, rename or delete them; digest unlocks a file only while it changes it. `reviews/`, `logs/`, `*.log` files and `config.yaml` stay unlocked because other tools use them. Migrate locks existing files and creates `.app.state.json` (your first note's date and your streak) if it doesn't exist yet, so the brag list and header are right from the first frame. To unlock by hand: `chflags -R nouchg ~/digest`.
 

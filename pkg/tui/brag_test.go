@@ -49,7 +49,7 @@ func selectBragRow(t *testing.T, m Model, title string) Model {
 	t.Helper()
 	for index, row := range m.bragRows() {
 		if row.title() == title {
-			m.bragSelected = index
+			m.brag.bragSelected = index
 			return m
 		}
 	}
@@ -150,7 +150,7 @@ func TestEnterOnMissingWeekConfirmsAndStartsJob(t *testing.T) {
 	if m.mode != ViewBragConfirm || len(*started) != 0 {
 		t.Fatalf("mode = %v started = %v", m.mode, *started)
 	}
-	m = press(t, m, runes("y"))
+	m = pressSettled(t, m, runes("y"))
 	if len(*started) != 1 || (*started)[0] != (startedBrag{"2026-W40", false}) || m.mode != ViewBragList {
 		t.Errorf("started = %v mode = %v", *started, m.mode)
 	}
@@ -162,8 +162,8 @@ func TestUnfinishedPeriodsAreBlocked(t *testing.T) {
 	for _, title := range []string{"Week 41 · 05 Oct – 11 Oct", "October 2026"} {
 		m = selectBragRow(t, m, title)
 		m = press(t, m, tea.KeyMsg{Type: tea.KeyEnter})
-		if m.mode != ViewBragList || len(*started) != 0 || !strings.Contains(m.bragNotice, "isn't over") {
-			t.Errorf("%s: mode=%v started=%v notice=%q", title, m.mode, *started, m.bragNotice)
+		if m.mode != ViewBragList || len(*started) != 0 || !strings.Contains(m.brag.bragNotice, "isn't over") {
+			t.Errorf("%s: mode=%v started=%v notice=%q", title, m.mode, *started, m.brag.bragNotice)
 		}
 	}
 }
@@ -190,7 +190,7 @@ func TestExistingBragOpensViewAndEnterEdits(t *testing.T) {
 		t.Fatalf("mode = %v editor = %q", m.mode, m.editor.Value())
 	}
 	m.editor.SetValue("## Facts\n\n- collected\n- my manual point\n\n## Summary\n\n- Did things")
-	m = press(t, m, tea.KeyMsg{Type: tea.KeyCtrlO})
+	m = pressSettled(t, m, tea.KeyMsg{Type: tea.KeyCtrlO})
 	saved, err := brag.Load(root, week40)
 	if err != nil || !strings.Contains(saved.Facts, "- my manual point") || !saved.Created.Equal(created) || m.mode != ViewBragView {
 		t.Fatalf("saved = %+v err = %v mode = %v", saved, err, m.mode)
@@ -199,7 +199,7 @@ func TestExistingBragOpensViewAndEnterEdits(t *testing.T) {
 	if m.mode != ViewBragConfirm {
 		t.Fatalf("b in view should confirm, mode %v", m.mode)
 	}
-	m = press(t, m, runes("y"))
+	m = pressSettled(t, m, runes("y"))
 	if len(*started) != 1 || (*started)[0] != (startedBrag{"2026-W40", true}) {
 		t.Errorf("started = %v", *started)
 	}
@@ -220,8 +220,8 @@ func TestBragEditRejectsMissingFacts(t *testing.T) {
 	m = press(t, m, tea.KeyMsg{Type: tea.KeyEnter})
 	m.editor.SetValue("no headings")
 	m = press(t, m, tea.KeyMsg{Type: tea.KeyCtrlO})
-	if m.mode != ViewBragEdit || !strings.Contains(m.bragNotice, "Facts") {
-		t.Errorf("mode = %v notice = %q", m.mode, m.bragNotice)
+	if m.mode != ViewBragEdit || !strings.Contains(m.brag.bragNotice, "Facts") {
+		t.Errorf("mode = %v notice = %q", m.mode, m.brag.bragNotice)
 	}
 }
 
@@ -369,13 +369,13 @@ func TestUnchangedBragRunsKeepTheirMemos(t *testing.T) {
 	var m Model
 	runs := []brag.Run{{Meta: brag.RunMeta{ID: "week-1"}, Status: brag.RunRunning, StartedAt: time.Now()}}
 	m.applyBragRuns(runs)
-	m.bragStates["week-1"] = bragRowState{label: "cached"}
+	m.brag.bragStates["week-1"] = bragRowState{label: "cached"}
 	m.applyBragRuns(append([]brag.Run(nil), runs...))
-	if m.bragStates["week-1"].label != "cached" {
+	if m.brag.bragStates["week-1"].label != "cached" {
 		t.Errorf("unchanged runs should keep the row memo")
 	}
 	m.applyBragRuns([]brag.Run{{Meta: brag.RunMeta{ID: "week-1"}, Status: brag.RunDone, StartedAt: runs[0].StartedAt}})
-	if _, kept := m.bragStates["week-1"]; kept {
+	if _, kept := m.brag.bragStates["week-1"]; kept {
 		t.Errorf("changed runs should reset the row memo")
 	}
 }

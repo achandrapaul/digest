@@ -11,7 +11,7 @@ digest follows [Semantic Versioning](https://semver.org), and the commit message
 
 Versions start at v0.0.0 under the module path `github.com/achandrapaul/digest`. The Go module proxy still lists v1.1.50 to v1.3.0 under the old `github.com/AnudeepChPaul/digest` path; those are stale and no longer updated.
 
-The last release is the commit of the newest published GitHub release tag, found with `gh release view`; without one it is the newest commit that changed `.version`. `mise run release:level` and `mise run release:notes` look at every commit after it.
+The last release is the newest `v*` tag by version, read from git after `git fetch --tags`. `mise run release:level` looks at every commit after it. `mise run release:notes` writes the section for `.version`: a version that is already tagged lists the commits from the tag before it up to its own tag and is dated by its tagged commit; an untagged one lists the commits after the newest tag. With no earlier tag the section starts at the first commit.
 
 ## Cutting a release
 
@@ -22,7 +22,7 @@ mise run release:level          # prints the level the commits call for
 mise run release:commit         # patch by default; pass minor or major to choose
 ```
 
-`release:commit` bumps `.version`, adds the new [CHANGELOG.md](../CHANGELOG.md) section with `mise run release:notes`, commits both as `release:<patch|minor|major>` and pushes the current branch. On `main` it only pushes; on any other branch it also opens a pull request into `main`. The section lists every commit since the last published release, including those of versions tagged but never published, under Changes, as a link to the commit, its title and its description; release, changelog and benchmark commits are left out.
+`release:commit` bumps `.version`, adds the new [CHANGELOG.md](../CHANGELOG.md) section with `mise run release:notes`, commits both as `release:<patch|minor|major>` and pushes the current branch. On `main` it only pushes; on any other branch it also opens a pull request into `main`. The section lists every commit since the newest tag under Changes, as a link to the commit, its title and its description; release, changelog and benchmark commits are left out.
 
 A push to `main` that changes `.version` runs the build workflow. It runs vet and tests and tags `v<version>`. Nothing is published yet.
 

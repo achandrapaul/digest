@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/achandrapaul/digest/pkg/config"
 	"github.com/achandrapaul/digest/pkg/paths"
 	"github.com/achandrapaul/digest/pkg/review"
 	"github.com/achandrapaul/digest/pkg/system"
@@ -168,6 +169,9 @@ func (j *JanitorJob) Run(dryRun bool) (*JobResult, error) {
 	if logger == nil {
 		logger = log.New(os.Stderr)
 	}
+	if err := config.ValidatePatterns(j.Patterns); err != nil {
+		return nil, err
+	}
 
 	logger.Info("Scanning for cleanup targets", "roots", strings.Join(j.Roots, ", "))
 
@@ -207,8 +211,7 @@ func (j *JanitorJob) Run(dryRun bool) (*JobResult, error) {
 			}
 
 			for _, pattern := range j.Patterns {
-				ok, _ := filepath.Match(pattern, entry.Name())
-				if !ok {
+				if matched, _ := filepath.Match(pattern, entry.Name()); !matched {
 					continue
 				}
 

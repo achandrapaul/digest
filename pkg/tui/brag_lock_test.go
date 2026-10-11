@@ -39,7 +39,7 @@ func editBragWithFlagFailure(t *testing.T, failWhen func(flags int) bool) (Model
 	}
 	t.Cleanup(func() { system.ChangeFileFlags = original })
 	m.editor.SetValue("## Facts\n\n- collected\n- typed point\n\n## Summary\n\n- Did things")
-	return press(t, m, tea.KeyMsg{Type: tea.KeyCtrlO}), week40
+	return pressSettled(t, m, tea.KeyMsg{Type: tea.KeyCtrlO}), week40
 }
 
 func TestBragEditLockFailureSavesAndWarns(t *testing.T) {
@@ -47,8 +47,8 @@ func TestBragEditLockFailureSavesAndWarns(t *testing.T) {
 	if saved, err := brag.Load(m.cfg.BragDir(), week40); err != nil || !strings.Contains(saved.Facts, "- typed point") {
 		t.Fatalf("brag should be saved: %+v %v", saved, err)
 	}
-	if m.mode != ViewBragView || m.bragNotice != "Saved but not locked" {
-		t.Errorf("mode = %v notice = %q", m.mode, m.bragNotice)
+	if m.mode != ViewBragView || m.brag.bragNotice != "Saved but not locked" {
+		t.Errorf("mode = %v notice = %q", m.mode, m.brag.bragNotice)
 	}
 }
 
@@ -57,7 +57,7 @@ func TestBragEditUnlockFailureKeepsTheEditor(t *testing.T) {
 	if saved, _ := brag.Load(m.cfg.BragDir(), week40); saved == nil || strings.Contains(saved.Facts, "- typed point") {
 		t.Fatalf("nothing should be written: %+v", saved)
 	}
-	if m.mode != ViewBragEdit || !strings.Contains(m.editor.Value(), "- typed point") || !strings.Contains(m.bragNotice, "unlock") {
-		t.Errorf("editor should stay open with the text: mode %v notice %q", m.mode, m.bragNotice)
+	if m.mode != ViewBragEdit || !strings.Contains(m.editor.Value(), "- typed point") || !strings.Contains(m.brag.bragNotice, "unlock") {
+		t.Errorf("editor should stay open with the text: mode %v notice %q", m.mode, m.brag.bragNotice)
 	}
 }

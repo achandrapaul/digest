@@ -76,12 +76,12 @@ func TestRejectBoxIgnoresHalfPageKeys(t *testing.T) {
 			t.Errorf("%s bound to %v in the reject box", name, binding.action)
 		}
 	}
-	m.rejectInput.SetValue("first\nsecond\nthird")
-	line := m.rejectInput.Line()
+	m.review.rejectInput.SetValue("first\nsecond\nthird")
+	line := m.review.rejectInput.Line()
 	m = pressControl(t, m, tea.KeyCtrlU)
 	m = pressControl(t, m, tea.KeyCtrlD)
-	if m.rejectInput.Value() != "first\nsecond\nthird" || m.rejectInput.Line() != line || m.mode != ViewRejectComment {
-		t.Errorf("value %q line %d->%d mode %v", m.rejectInput.Value(), line, m.rejectInput.Line(), m.mode)
+	if m.review.rejectInput.Value() != "first\nsecond\nthird" || m.review.rejectInput.Line() != line || m.mode != ViewRejectComment {
+		t.Errorf("value %q line %d->%d mode %v", m.review.rejectInput.Value(), line, m.review.rejectInput.Line(), m.mode)
 	}
 }
 
@@ -117,13 +117,13 @@ func longArchiveModel(t *testing.T) Model {
 }
 
 func archiveSelectionVisible(m Model) bool {
-	summary := m.getArchivedNotes()[m.archivedSelected].Summary
-	return strings.Contains(stripANSI(m.archivedViewport.View()), summary)
+	summary := m.getArchivedNotes()[m.notesUI.archivedSelected].Summary
+	return strings.Contains(stripANSI(m.notesUI.archivedViewport.View()), summary)
 }
 
 func TestArchivePagingMovesTheSelectionAndScrollFollows(t *testing.T) {
 	m := longArchiveModel(t)
-	page := max(m.archivedViewport.Height, 1)
+	page := max(m.notesUI.archivedViewport.Height, 1)
 	half := max(page/2, 1)
 	steps := []struct {
 		key  tea.KeyMsg
@@ -136,18 +136,18 @@ func TestArchivePagingMovesTheSelectionAndScrollFollows(t *testing.T) {
 	}
 	for _, step := range steps {
 		m = press(t, m, step.key)
-		if m.archivedSelected != step.want || m.mode != ViewArchived {
-			t.Fatalf("%s: selected %d want %d mode %v", step.key, m.archivedSelected, step.want, m.mode)
+		if m.notesUI.archivedSelected != step.want || m.mode != ViewArchived {
+			t.Fatalf("%s: selected %d want %d mode %v", step.key, m.notesUI.archivedSelected, step.want, m.mode)
 		}
 		if !archiveSelectionVisible(m) {
-			t.Errorf("%s: selected row %d scrolled out of view", step.key, m.archivedSelected)
+			t.Errorf("%s: selected row %d scrolled out of view", step.key, m.notesUI.archivedSelected)
 		}
 	}
 	for range 10 {
 		m = press(t, m, tea.KeyMsg{Type: tea.KeyPgDown})
 	}
-	if m.archivedSelected != len(m.getArchivedNotes())-1 || !archiveSelectionVisible(m) {
-		t.Errorf("pgdown should clamp to the last note and show it, selected %d", m.archivedSelected)
+	if m.notesUI.archivedSelected != len(m.getArchivedNotes())-1 || !archiveSelectionVisible(m) {
+		t.Errorf("pgdown should clamp to the last note and show it, selected %d", m.notesUI.archivedSelected)
 	}
 	for range 3 {
 		m = press(t, m, runes("k"))

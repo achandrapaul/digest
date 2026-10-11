@@ -168,7 +168,7 @@ func (m Model) dashboardData() dashboardData {
 		drafts:         m.getJobDrafts(),
 		automationRuns: m.automationJobRuns(),
 	}
-	data.jobsCount = len(data.drafts) + len(m.reviewRuns) + len(m.bragRuns) + len(data.automationRuns)
+	data.jobsCount = len(data.drafts) + len(m.review.reviewRuns) + len(m.brag.bragRuns) + len(data.automationRuns)
 	data.previousEnd = len(data.groups.previousDone)
 	data.carriedEnd = data.previousEnd + len(data.groups.carried)
 	data.addedEnd = data.carriedEnd + len(data.groups.today)

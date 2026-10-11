@@ -20,7 +20,6 @@ terminal_app: ""
 show_tags: selected
 pr_quantity_per_repo: 15
 show_daily_commits: true
-git_auto_sync_interval: 600
 green_only: true
 jira_base_url: ""
 

@@ -177,7 +177,7 @@ func TestSearchPreviewCycleAndEdit(t *testing.T) {
 		t.Fatalf("after p = %s", m.searchPreviewNote().ID)
 	}
 	m = press(t, m, tea.KeyMsg{Type: tea.KeyEnter})
-	if m.mode != ViewEdit || m.currentNote.ID != "a" {
+	if m.mode != ViewEdit || m.notesUI.currentNote.ID != "a" {
 		t.Fatalf("mode = %d", m.mode)
 	}
 	m = press(t, m, tea.KeyMsg{Type: tea.KeyCtrlO})
@@ -226,7 +226,7 @@ func TestEnterOnASearchResultOpensItsEditorOverItsPreview(t *testing.T) {
 	m := typeQuery(t, searchTestModel(t), "flaky")
 	m = press(t, m, tea.KeyMsg{Type: tea.KeyDown})
 	m = press(t, m, tea.KeyMsg{Type: tea.KeyEnter})
-	if m.mode != ViewEdit || m.currentNote.ID != "b" {
+	if m.mode != ViewEdit || m.notesUI.currentNote.ID != "b" {
 		t.Fatalf("mode = %d", m.mode)
 	}
 	m = press(t, m, tea.KeyMsg{Type: tea.KeyEsc})

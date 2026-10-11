@@ -38,7 +38,7 @@ type closedThisWeekMsg struct {
 }
 
 func (m Model) startupNotesCmd() tea.Cmd {
-	notes, err := m.notes, m.startupNotesErr
+	notes, err := m.notes, m.notesUI.startupNotesErr
 	return func() tea.Msg {
 		return loadNotesMsg{notes: notes, err: err}
 	}
@@ -51,14 +51,14 @@ func (m Model) loadNotesCmd() tea.Msg {
 
 func (m *Model) refreshArchivedViewport() {
 	archivedNotes := m.getArchivedNotes()
-	if m.archivedSelected >= len(archivedNotes) && len(archivedNotes) > 0 {
-		m.archivedSelected = len(archivedNotes) - 1
+	if m.notesUI.archivedSelected >= len(archivedNotes) && len(archivedNotes) > 0 {
+		m.notesUI.archivedSelected = len(archivedNotes) - 1
 	}
-	if m.archivedSelected < 0 {
-		m.archivedSelected = 0
+	if m.notesUI.archivedSelected < 0 {
+		m.notesUI.archivedSelected = 0
 	}
 	modalWidth := modalWidthFor(m.width)
-	m.archivedViewport.SetContent(m.renderArchivedContent(modalWidth-6, m.archivedSelected))
+	m.notesUI.archivedViewport.SetContent(m.renderArchivedContent(modalWidth-6, m.notesUI.archivedSelected))
 }
 
 func startOfDay(moment time.Time) time.Time {
@@ -163,7 +163,7 @@ func (m Model) renderArchivedContent(width int, selectedIndex int) string {
 		}
 
 		prefix := "  "
-		if m.archivedSelectedMap != nil && m.archivedSelectedMap[index] {
+		if m.notesUI.archivedSelectedMap != nil && m.notesUI.archivedSelectedMap[index] {
 			prefix = amberDiamond.Render() + " "
 		}
 
@@ -217,8 +217,8 @@ func (m Model) browseNotesCmd() tea.Cmd {
 }
 
 func (m Model) notesForBrowsing() []*model.Note {
-	if m.browsedNotes != nil {
-		return m.browsedNotes
+	if m.notesUI.browsedNotes != nil {
+		return m.notesUI.browsedNotes
 	}
 	return m.notes
 }
@@ -234,8 +234,8 @@ func (m *Model) refreshBrowsedView() {
 			m.updatePreviewViewport()
 		}
 	case ViewBragList:
-		if rows := m.bragRows(); m.bragSelected >= len(rows) {
-			m.bragSelected = max(len(rows)-1, 0)
+		if rows := m.bragRows(); m.brag.bragSelected >= len(rows) {
+			m.brag.bragSelected = max(len(rows)-1, 0)
 		}
 	}
 }
@@ -245,16 +245,16 @@ func (m Model) browsing() bool {
 }
 
 func (m *Model) shareDashboardNotes() {
-	if m.browsedNotes == nil {
+	if m.notesUI.browsedNotes == nil {
 		return
 	}
 	byPath := make(map[string]*model.Note, len(m.notes))
 	for _, note := range m.notes {
 		byPath[note.FilePath] = note
 	}
-	for index, note := range m.browsedNotes {
+	for index, note := range m.notesUI.browsedNotes {
 		if shared, onDashboard := byPath[note.FilePath]; onDashboard {
-			m.browsedNotes[index] = shared
+			m.notesUI.browsedNotes[index] = shared
 		}
 	}
 }
@@ -299,7 +299,7 @@ func (m Model) renderArchivedModal(modalWidth int) string {
 	if innerHeight < 4 {
 		innerHeight = 4
 	}
-	m.archivedViewport.Height = innerHeight
+	m.notesUI.archivedViewport.Height = innerHeight
 
 	footerText := renderModalFooter(m.archiveFooterItems(), modalWidth-6)
 
@@ -307,7 +307,7 @@ func (m Model) renderArchivedModal(modalWidth int) string {
 		lipgloss.Left,
 		titleText,
 		"",
-		m.archivedViewport.View(),
+		m.notesUI.archivedViewport.View(),
 		"",
 		footerText,
 	)
@@ -340,8 +340,8 @@ func (m Model) editorNoticeLine() string {
 }
 
 func (m Model) openArchive(tea.KeyMsg) (tea.Model, tea.Cmd) {
-	m.archivedSelected = 0
-	m.archivedSelectedMap = make(map[int]bool)
+	m.notesUI.archivedSelected = 0
+	m.notesUI.archivedSelectedMap = make(map[int]bool)
 	modalWidth := modalWidthFor(m.width)
 	innerWidth := modalWidth - 6
 	innerHeight := m.height - 10 - footerLineCount(m.archiveFooterItems())
@@ -349,15 +349,15 @@ func (m Model) openArchive(tea.KeyMsg) (tea.Model, tea.Cmd) {
 		innerHeight = 4
 	}
 
-	m.archivedViewport = viewport.New(innerWidth, innerHeight)
-	m.archivedViewport.SetContent(m.renderArchivedContent(innerWidth, m.archivedSelected))
+	m.notesUI.archivedViewport = viewport.New(innerWidth, innerHeight)
+	m.notesUI.archivedViewport.SetContent(m.renderArchivedContent(innerWidth, m.notesUI.archivedSelected))
 	m.mode = ViewArchived
 	return m, m.browseNotesCmd()
 }
 
 func (m Model) newNote(tea.KeyMsg) (tea.Model, tea.Cmd) {
-	m.mode = ViewEdit
-	m.currentNote = &model.Note{
+	m.pushMode(ViewEdit)
+	m.notesUI.currentNote = &model.Note{
 		Status:  model.StatusActive,
 		Source:  model.SourceManual,
 		Created: m.currentDate,
@@ -371,11 +371,11 @@ func (m Model) newNote(tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 func (m Model) inlineEditSelected(tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if item, ok := m.selectedNavItem(); ok && item.Note != nil {
-		m.currentNote = item.Note
+		m.notesUI.currentNote = item.Note
 		m.mode = ViewInlineEdit
-		m.inlineInput.Width = m.inlineEditWidth(item.Note)
-		m.inlineInput.SetValue(item.Note.Summary)
-		m.inlineInput.Focus()
+		m.notesUI.inlineInput.Width = m.inlineEditWidth(item.Note)
+		m.notesUI.inlineInput.SetValue(item.Note.Summary)
+		m.notesUI.inlineInput.Focus()
 		return m, textinput.Blink
 	}
 	return m, nil
@@ -385,13 +385,13 @@ func (m *Model) beginNoteDelete(note *model.Note, returnMode ViewMode) {
 	if note == nil {
 		return
 	}
-	m.deleteTargetNotes = []*model.Note{note}
-	m.deleteReturnMode = returnMode
+	m.notesUI.deleteTargetNotes = []*model.Note{note}
 	m.clearPendingConfirms()
 	if note.FilePath == "" {
 		m.confirmTitle, m.confirmPrompt = " DELETE CONFIRMATION ", "This note doesn't exist. Delete?"
 	}
-	m.mode = ViewDeleteConfirm
+	m.mode = returnMode
+	m.pushMode(ViewDeleteConfirm)
 }
 
 func (m *Model) dropUnsavedNotes(targets []*model.Note) []*model.Note {
@@ -402,7 +402,7 @@ func (m *Model) dropUnsavedNotes(targets []*model.Note) []*model.Note {
 			continue
 		}
 		m.notes = slices.DeleteFunc(m.notes, func(note *model.Note) bool { return note == target })
-		m.browsedNotes = slices.DeleteFunc(m.browsedNotes, func(note *model.Note) bool { return note == target })
+		m.notesUI.browsedNotes = slices.DeleteFunc(m.notesUI.browsedNotes, func(note *model.Note) bool { return note == target })
 	}
 	m.contentVersion++
 	return saved
@@ -447,36 +447,36 @@ func (m Model) archivedInnerWidth() int {
 func (m Model) archivedTargets() []*model.Note {
 	archivedNotes := m.getArchivedNotes()
 	var targets []*model.Note
-	if len(m.archivedSelectedMap) > 0 {
-		for idx := range m.archivedSelectedMap {
+	if len(m.notesUI.archivedSelectedMap) > 0 {
+		for idx := range m.notesUI.archivedSelectedMap {
 			if idx < len(archivedNotes) {
 				targets = append(targets, archivedNotes[idx])
 			}
 		}
-	} else if len(archivedNotes) > 0 && m.archivedSelected < len(archivedNotes) {
-		targets = append(targets, archivedNotes[m.archivedSelected])
+	} else if len(archivedNotes) > 0 && m.notesUI.archivedSelected < len(archivedNotes) {
+		targets = append(targets, archivedNotes[m.notesUI.archivedSelected])
 	}
 	return targets
 }
 
 func (m Model) closeArchive(tea.KeyMsg) (tea.Model, tea.Cmd) {
-	m.archivedSelectedMap = make(map[int]bool)
+	m.notesUI.archivedSelectedMap = make(map[int]bool)
 	m.mode = ViewDashboard
 	return m, nil
 }
 
 func (m Model) toggleArchiveSelection(tea.KeyMsg) (tea.Model, tea.Cmd) {
 	archivedNotes := m.getArchivedNotes()
-	if len(archivedNotes) > 0 && m.archivedSelected < len(archivedNotes) {
-		if m.archivedSelectedMap == nil {
-			m.archivedSelectedMap = make(map[int]bool)
+	if len(archivedNotes) > 0 && m.notesUI.archivedSelected < len(archivedNotes) {
+		if m.notesUI.archivedSelectedMap == nil {
+			m.notesUI.archivedSelectedMap = make(map[int]bool)
 		}
-		if m.archivedSelectedMap[m.archivedSelected] {
-			delete(m.archivedSelectedMap, m.archivedSelected)
+		if m.notesUI.archivedSelectedMap[m.notesUI.archivedSelected] {
+			delete(m.notesUI.archivedSelectedMap, m.notesUI.archivedSelected)
 		} else {
-			m.archivedSelectedMap[m.archivedSelected] = true
+			m.notesUI.archivedSelectedMap[m.notesUI.archivedSelected] = true
 		}
-		m.archivedViewport.SetContent(m.renderArchivedContent(m.archivedInnerWidth(), m.archivedSelected))
+		m.notesUI.archivedViewport.SetContent(m.renderArchivedContent(m.archivedInnerWidth(), m.notesUI.archivedSelected))
 	}
 	return m, nil
 }
@@ -500,20 +500,20 @@ func (m Model) archivedRowLine(selectedIndex int) int {
 }
 
 func (m Model) moveArchiveSelection(delta int) (tea.Model, tea.Cmd) {
-	m.archivedSelected = max(min(m.archivedSelected+delta, len(m.getArchivedNotes())-1), 0)
-	m.archivedViewport.SetContent(m.renderArchivedContent(m.archivedInnerWidth(), m.archivedSelected))
-	selectedLine, viewHeight := m.archivedRowLine(m.archivedSelected), max(m.archivedViewport.Height, 1)
+	m.notesUI.archivedSelected = max(min(m.notesUI.archivedSelected+delta, len(m.getArchivedNotes())-1), 0)
+	m.notesUI.archivedViewport.SetContent(m.renderArchivedContent(m.archivedInnerWidth(), m.notesUI.archivedSelected))
+	selectedLine, viewHeight := m.archivedRowLine(m.notesUI.archivedSelected), max(m.notesUI.archivedViewport.Height, 1)
 	switch {
-	case selectedLine < m.archivedViewport.YOffset:
-		m.archivedViewport.SetYOffset(selectedLine)
-	case selectedLine >= m.archivedViewport.YOffset+viewHeight:
-		m.archivedViewport.SetYOffset(selectedLine - viewHeight + 1)
+	case selectedLine < m.notesUI.archivedViewport.YOffset:
+		m.notesUI.archivedViewport.SetYOffset(selectedLine)
+	case selectedLine >= m.notesUI.archivedViewport.YOffset+viewHeight:
+		m.notesUI.archivedViewport.SetYOffset(selectedLine - viewHeight + 1)
 	}
 	return m, nil
 }
 
 func (m Model) archivePageSize() int {
-	return max(m.archivedViewport.Height, 1)
+	return max(m.notesUI.archivedViewport.Height, 1)
 }
 
 func (m Model) archiveCursorDown(tea.KeyMsg) (tea.Model, tea.Cmd) { return m.moveArchiveSelection(1) }
@@ -538,10 +538,10 @@ func (m Model) archivePageUp(tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 func (m Model) deleteArchived(tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if targets := m.archivedTargets(); len(targets) > 0 {
-		m.deleteTargetNotes = targets
-		m.deleteReturnMode = ViewArchived
+		m.notesUI.deleteTargetNotes = targets
 		m.clearPendingConfirms()
-		m.mode = ViewDeleteConfirm
+		m.mode = ViewArchived
+		m.pushMode(ViewDeleteConfirm)
 	}
 	return m, nil
 }
@@ -551,8 +551,7 @@ func (m Model) restoreArchived(tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if len(targets) == 0 {
 		return m, nil
 	}
-	m.deleteTargetNotes = targets
-	m.deleteReturnMode = ViewArchived
+	m.notesUI.deleteTargetNotes = targets
 	m.clearPendingConfirms()
 	m.restoreOnConfirm = true
 	m.confirmTitle = " RESTORE CONFIRMATION "
@@ -560,7 +559,8 @@ func (m Model) restoreArchived(tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if len(targets) == 1 {
 		m.confirmPrompt = fmt.Sprintf("Restore this note to %s?\n\n\"%s\"", m.currentDate.Format("Mon 02 Jan"), targets[0].Summary)
 	}
-	m.mode = ViewDeleteConfirm
+	m.mode = ViewArchived
+	m.pushMode(ViewDeleteConfirm)
 	return m, nil
 }
 
@@ -571,7 +571,7 @@ func (m Model) restoreArchivedNotes(targets []*model.Note) (tea.Model, tea.Cmd) 
 		noteToRestore.Created = m.currentDate
 		noteToRestore.Updated = m.currentDate
 	}
-	m.archivedSelectedMap = make(map[int]bool)
+	m.notesUI.archivedSelectedMap = make(map[int]bool)
 	return m, m.saveNotesCmd(targets...)
 }
 
@@ -581,15 +581,15 @@ func (m Model) cancelInlineEdit(tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) saveInlineEdit(tea.KeyMsg) (tea.Model, tea.Cmd) {
-	if m.currentNote != nil && strings.TrimSpace(m.inlineInput.Value()) == "" {
-		m.beginNoteDelete(m.currentNote, ViewDashboard)
+	if m.notesUI.currentNote != nil && strings.TrimSpace(m.notesUI.inlineInput.Value()) == "" {
+		m.beginNoteDelete(m.notesUI.currentNote, ViewDashboard)
 		m.confirmTitle, m.confirmPrompt = " DELETE CONFIRMATION ", "Delete this note?"
 		return m, nil
 	}
-	if m.currentNote != nil {
-		m.currentNote.Summary = strings.TrimSpace(m.inlineInput.Value())
+	if m.notesUI.currentNote != nil {
+		m.notesUI.currentNote.Summary = strings.TrimSpace(m.notesUI.inlineInput.Value())
 		m.mode = ViewDashboard
-		return m, m.saveNotesCmd(m.currentNote)
+		return m, m.saveNotesCmd(m.notesUI.currentNote)
 	}
 	m.mode = ViewDashboard
 	return m, m.loadNotesCmd
@@ -608,14 +608,14 @@ func (m Model) saveNote(tea.KeyMsg) (tea.Model, tea.Cmd) {
 		body = strings.TrimSpace(lines[1])
 	}
 
-	m.currentNote.Summary = summary
-	m.currentNote.Body = body
-	if m.currentNote.ID == "" {
-		m.awaitingNewNoteSave = true
+	m.notesUI.currentNote.Summary = summary
+	m.notesUI.currentNote.Body = body
+	if m.notesUI.currentNote.ID == "" {
+		m.notesUI.awaitingNewNoteSave = true
 	}
 
 	m.mode = m.returnFromEdit()
-	return m, m.saveNotesFromPreviewCmd(m.currentNote)
+	return m, m.saveNotesFromPreviewCmd(m.notesUI.currentNote)
 }
 
 func (m Model) copyEditor(tea.KeyMsg) (tea.Model, tea.Cmd) {
@@ -632,8 +632,7 @@ func (m Model) cancelEdit(tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) returnFromEdit() ViewMode {
-	returnMode := m.editReturnMode
-	m.editReturnMode = ViewDashboard
+	returnMode := m.popMode()
 	switch returnMode {
 	case ViewPreview:
 		m.updatePreviewViewport()
@@ -642,9 +641,9 @@ func (m *Model) returnFromEdit() ViewMode {
 }
 
 func (m Model) beginNoteEdit(note *model.Note, returnMode ViewMode) (tea.Model, tea.Cmd) {
-	m.currentNote = note
-	m.editReturnMode = returnMode
-	m.mode = ViewEdit
+	m.notesUI.currentNote = note
+	m.mode = returnMode
+	m.pushMode(ViewEdit)
 	m.replaceEditorText(fmt.Sprintf("%s\n\n%s", note.Summary, note.Body))
 	m.editorNotice = ""
 	m.editor.Focus()
@@ -755,9 +754,9 @@ func (m Model) renderRow(n *model.Note, selected bool, width int) string {
 }
 
 func (m Model) noteRowCacheKey(n *model.Note, selected bool, width int) noteRowKey {
-	run, tracked := m.automationRuns[n.ID]
+	run, tracked := m.automation.automationRuns[n.ID]
 	notifyInterval := ""
-	if entry, reminding := m.notifyEntries[n.ID]; reminding && noteIsActive(n) {
+	if entry, reminding := m.notesUI.notifyEntries[n.ID]; reminding && noteIsActive(n) {
 		notifyInterval = entry.Interval
 	}
 	return noteRowKey{
@@ -813,13 +812,13 @@ func (m Model) renderNoteRowWithTags(n *model.Note, selected bool, width int, ta
 	var leftBlock string
 	switch {
 	case selected && m.mode == ViewInlineEdit:
-		leftBlock = fmt.Sprintf("%s%s %s", prefix, checkPending.Render(), m.inlineInput.View())
+		leftBlock = fmt.Sprintf("%s%s %s", prefix, checkPending.Render(), m.notesUI.inlineInput.View())
 		tags = nil
 	case selected && m.mode == ViewNotifyInput:
 		leftBlock = fmt.Sprintf("%s%s %s", prefix, selectedPendingBox.Render(boxChar), selectedTitle(n.Summary))
-		tags = append([]string{m.notifyInput.View()}, m.noteRowTagsWithoutNotify(n)...)
-		if m.notifyNotice != "" {
-			tags = []string{m.notifyInput.View(), staleStyle.Render(m.notifyNotice)}
+		tags = append([]string{m.notesUI.notifyInput.View()}, m.noteRowTagsWithoutNotify(n)...)
+		if m.notesUI.notifyNotice != "" {
+			tags = []string{m.notesUI.notifyInput.View(), staleStyle.Render(m.notesUI.notifyNotice)}
 		}
 	case selected:
 		boxStyle := selectedPendingBox
@@ -857,9 +856,9 @@ func (notesSection) ApplyMessage(m Model, msg tea.Msg) (tea.Model, tea.Cmd, bool
 		if !m.browsing() || !storeResultUsable(msg.err) {
 			return messageHandled(m, nil)
 		}
-		m.browsedNotes = msg.notes
-		if m.browsedNotes == nil {
-			m.browsedNotes = []*model.Note{}
+		m.notesUI.browsedNotes = msg.notes
+		if m.notesUI.browsedNotes == nil {
+			m.notesUI.browsedNotes = []*model.Note{}
 		}
 		m.shareDashboardNotes()
 		m.refreshBrowsedView()
@@ -870,7 +869,7 @@ func (notesSection) ApplyMessage(m Model, msg tea.Msg) (tea.Model, tea.Cmd, bool
 			m.reportStoreError(msg.err)
 			return messageHandled(m, nil)
 		}
-		m.closedThisWeekElsewhere = msg.count
+		m.notesUI.closedThisWeekElsewhere = msg.count
 		return messageHandled(m, nil)
 
 	case notesChangedMsg:
@@ -900,13 +899,17 @@ func (notesSection) ApplyMessage(m Model, msg tea.Msg) (tea.Model, tea.Cmd, bool
 			m.showError("NOTIFY ERROR", msg.err)
 			return messageHandled(m, nil)
 		}
-		m.notifyEntries = msg.entries
+		m.notesUI.notifyEntries = msg.entries
 		return messageHandled(m, nil)
 
 	case appStateSavedMsg:
 		if msg.err != nil {
 			m.showError("STATE ERROR", msg.err)
 		}
+		return messageHandled(m, nil)
+
+	case rootRelockedMsg:
+		m.showError("LOCK ERROR", msg.err)
 		return messageHandled(m, nil)
 	}
 	return m, nil, false
@@ -921,9 +924,9 @@ func (notesSection) storeLoadedNotes(m *Model, msg loadNotesMsg) {
 		m.initialSelectionPending = false
 		m.selectLaunchItem()
 	}
-	if m.selectAfterReload != "" {
-		m.selectNoteByID(m.selectAfterReload)
-		m.selectAfterReload = ""
+	if m.notesUI.selectAfterReload != "" {
+		m.selectNoteByID(m.notesUI.selectAfterReload)
+		m.notesUI.selectAfterReload = ""
 	}
 }
 
@@ -1046,18 +1049,18 @@ func (notesSection) mergeNotes(m *Model, notes []model.Note) {
 			merged = m.notes[index]
 			*merged = changed
 		}
-		if index := indexOfNote(m.browsedNotes, nil, changed); index >= 0 {
+		if index := indexOfNote(m.notesUI.browsedNotes, nil, changed); index >= 0 {
 			if merged == nil {
-				merged = m.browsedNotes[index]
+				merged = m.notesUI.browsedNotes[index]
 			}
-			*m.browsedNotes[index] = changed
-			m.browsedNotes[index] = merged
+			*m.notesUI.browsedNotes[index] = changed
+			m.notesUI.browsedNotes[index] = merged
 		}
 		if merged == nil {
 			changedCopy := changed
 			merged = &changedCopy
-			if m.browsedNotes != nil {
-				m.browsedNotes = append(m.browsedNotes, merged)
+			if m.notesUI.browsedNotes != nil {
+				m.notesUI.browsedNotes = append(m.notesUI.browsedNotes, merged)
 			}
 		}
 		if !slices.Contains(m.notes, merged) && m.belongsOnDashboard(merged) {

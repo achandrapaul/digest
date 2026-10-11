@@ -24,8 +24,6 @@ type PendingRepoGroup struct {
 	Items []GitPRItem
 }
 
-type autoSyncTickMsg time.Time
-
 type daySyncDueMsg struct {
 	generation int
 }
@@ -71,15 +69,6 @@ type gitPendingMsg struct {
 	failedHosts []string
 	err         error
 	sections    <-chan sourcecontrol.Section
-}
-
-func autoSyncTickCmd(intervalSecs int) tea.Cmd {
-	if intervalSecs <= 0 {
-		return nil
-	}
-	return tea.Tick(time.Duration(intervalSecs)*time.Second, func(t time.Time) tea.Msg {
-		return autoSyncTickMsg(t)
-	})
 }
 
 func (m *Model) loadGitOnStartup() {
@@ -151,10 +140,6 @@ func (m Model) filteredGitItems() []GitPRItem {
 		}
 	}
 	return filtered
-}
-
-func (m Model) gitNavStart() int {
-	return gitNavStartFor(m.groupNotes())
 }
 
 func (m Model) renderGitStrip(width int, active bool, groups noteGroups) (lines []string, selectedRow int) {
@@ -253,6 +238,8 @@ func (m *Model) beginGitFetch() {
 	m.postMessage(messageSourceGit, messageProgress, "syncing")
 }
 
+var syncGitSections = sourcecontrol.Sync
+
 func (m Model) gitFetchCmd() tea.Cmd {
 	if !m.cfg.GitEnabled() {
 		return nil
@@ -261,15 +248,17 @@ func (m Model) gitFetchCmd() tea.Cmd {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	sections := sourcecontrol.Sync(ctx, sourcecontrol.SyncParams{
+	params := sourcecontrol.SyncParams{
 		Config:      m.cfg,
 		Today:       m.currentDate,
 		PreviousDay: m.previousNoteDay(),
 		Sort:        m.git.pendingSort,
 		KnownMyPRs:  m.git.knownMyPRs,
-	})
-
-	return waitForGitSection(sections, m.git.fetchGeneration)
+	}
+	generation := m.git.fetchGeneration
+	return func() tea.Msg {
+		return waitForGitSection(syncGitSections(ctx, params), generation)()
+	}
 }
 
 func (m Model) myPRsFetchCmd() tea.Cmd {
@@ -573,13 +562,13 @@ func (m Model) confirmReview(tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if item == nil {
 		return m, nil
 	}
-	queued, payload, err := m.buildPayload(item, m.reviewEvent, m.reviewBody)
+	queued, payload, err := m.buildPayload(item, m.review.reviewEvent, m.review.reviewBody)
 	if err != nil {
-		m.reviewNotice = err.Error()
+		m.review.reviewNotice = err.Error()
 		return m.refreshPreview(), nil
 	}
-	m.reviewNotice = "Submitting to GitHub…"
-	event := m.reviewEvent
+	m.review.reviewNotice = "Submitting to GitHub…"
+	event := m.review.reviewEvent
 	return m.refreshPreview(), func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 		defer cancel()
@@ -595,20 +584,20 @@ func (m Model) cancelReview(tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) confirmReviewRun(tea.KeyMsg) (tea.Model, tea.Cmd) {
-	m.mode = m.reviewRunReturnMode
-	if m.reviewRunAction == reviewActionStart {
+	m.mode = m.popMode()
+	if m.review.reviewRunAction == reviewActionStart {
 		item := m.currentPRItem()
-		if item == nil || m.refFor(item).URL != m.reviewRunTarget.URL {
+		if item == nil || m.refFor(item).URL != m.review.reviewRunTarget.URL {
 			return m, nil
 		}
 		_, next, cmd := m.startReview(item)
 		return next, cmd
 	}
-	if err := stopReview(m.reviewRoot(), m.reviewRunTarget); err != nil {
+	if err := stopReview(m.reviewRoot(), m.review.reviewRunTarget); err != nil {
 		m.showError("REVIEW ERROR", err)
 		return m, nil
 	}
-	m.reviewNotice = "Review stopped"
+	m.review.reviewNotice = "Review stopped"
 	selectedKey, selectedOccurrence := m.selectedNavKey()
 	m.refreshReviewRuns()
 	m.restoreSelection(selectedKey, selectedOccurrence)
@@ -623,7 +612,7 @@ func (m Model) confirmReviewRun(tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) cancelReviewRun(tea.KeyMsg) (tea.Model, tea.Cmd) {
-	m.mode = m.reviewRunReturnMode
+	m.mode = m.popMode()
 	if m.mode == ViewPreview {
 		m.updatePreviewViewport()
 	}
@@ -631,9 +620,9 @@ func (m Model) cancelReviewRun(tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) submitRejectComment(tea.KeyMsg) (tea.Model, tea.Cmd) {
-	body := strings.TrimSpace(m.rejectInput.Value())
+	body := strings.TrimSpace(m.review.rejectInput.Value())
 	if body == "" {
-		m.reviewNotice = review.ErrRejectNeedsComment.Error()
+		m.review.reviewNotice = review.ErrRejectNeedsComment.Error()
 		return m, nil
 	}
 	item := m.currentPRItem()
@@ -641,19 +630,19 @@ func (m Model) submitRejectComment(tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.mode = ViewPreview
 		return m, nil
 	}
-	m.rejectInput.Blur()
-	m.reviewNotice = ""
-	m.reviewEvent, m.reviewBody = review.EventRequestChanges, body
+	m.review.rejectInput.Blur()
+	m.review.reviewNotice = ""
+	m.review.reviewEvent, m.review.reviewBody = review.EventRequestChanges, body
 	return m.confirmReview(tea.KeyMsg{})
 }
 
 func (m Model) copyRejectComment(tea.KeyMsg) (tea.Model, tea.Cmd) {
-	m.copyText(strings.TrimSpace(m.rejectInput.Value()))
+	m.copyText(strings.TrimSpace(m.review.rejectInput.Value()))
 	return m, nil
 }
 
 func (m Model) cancelRejectComment(tea.KeyMsg) (tea.Model, tea.Cmd) {
-	m.rejectInput.Blur()
+	m.review.rejectInput.Blur()
 	if m.mode = m.prActionReturnMode(); m.mode == ViewDashboard {
 		return m, nil
 	}
@@ -669,7 +658,7 @@ func (m Model) startReviewFromKey(tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) toggleFinding(tea.KeyMsg) (tea.Model, tea.Cmd) {
-	m.reviewSelected[m.reviewCursor] = !m.reviewSelected[m.reviewCursor]
+	m.review.reviewSelected[m.review.reviewCursor] = !m.review.reviewSelected[m.review.reviewCursor]
 	return m.refreshPreview(), nil
 }
 
@@ -680,10 +669,10 @@ func (m Model) selectAllFindings(tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 	_, findings := m.loadFindings(item)
 	selectAll := m.selectedCount() < len(findings)
-	m.reviewSelected = make(map[int]bool)
+	m.review.reviewSelected = make(map[int]bool)
 	if selectAll {
 		for i := range findings {
-			m.reviewSelected[i] = true
+			m.review.reviewSelected[i] = true
 		}
 	}
 	return m.refreshPreview(), nil
@@ -719,9 +708,9 @@ func (m Model) rejectOrStopReview(tea.KeyMsg) (tea.Model, tea.Cmd) {
 		_, next, cmd := m.beginConfirm(item, review.EventRequestChanges, "")
 		return next, cmd
 	}
-	m.rejectInput.Reset()
-	m.rejectInput.Focus()
-	m.reviewNotice = ""
+	m.review.rejectInput.Reset()
+	m.review.rejectInput.Focus()
+	m.review.reviewNotice = ""
 	m.mode = ViewRejectComment
 	return m, textarea.Blink
 }
@@ -741,15 +730,15 @@ func (m Model) findingDown(tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	_, findings := m.loadFindings(item)
-	if m.reviewCursor < len(findings)-1 {
-		m.reviewCursor++
+	if m.review.reviewCursor < len(findings)-1 {
+		m.review.reviewCursor++
 	}
 	return m.refreshPreview(), nil
 }
 
 func (m Model) findingUp(tea.KeyMsg) (tea.Model, tea.Cmd) {
-	if m.reviewCursor > 0 {
-		m.reviewCursor--
+	if m.review.reviewCursor > 0 {
+		m.review.reviewCursor--
 	}
 	return m.refreshPreview(), nil
 }
@@ -759,15 +748,6 @@ func (gitSection) ApplyMessage(m Model, msg tea.Msg) (tea.Model, tea.Cmd, bool) 
 	case prAlertsMsg:
 		if msg.err != nil {
 			m.showError("PR ALERTS", msg.err)
-		}
-		return messageHandled(m, nil)
-
-	case autoSyncTickMsg:
-		if m.cfg.GitEnabled() && m.cfg.GitAutoSyncInterval > 0 {
-			return messageHandled(m, tea.Batch(
-				m.startLoadGitStatsCmd(),
-				autoSyncTickCmd(m.cfg.GitAutoSyncInterval),
-			))
 		}
 		return messageHandled(m, nil)
 

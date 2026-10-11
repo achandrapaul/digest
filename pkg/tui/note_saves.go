@@ -142,8 +142,8 @@ func (m *Model) forgetNote(target *model.Note, snapshot model.Note) {
 	if index := indexOfNote(m.notes, target, snapshot); index >= 0 {
 		m.notes = slices.Delete(m.notes, index, index+1)
 	}
-	if index := indexOfNote(m.browsedNotes, target, snapshot); index >= 0 {
-		m.browsedNotes = slices.Delete(m.browsedNotes, index, index+1)
+	if index := indexOfNote(m.notesUI.browsedNotes, target, snapshot); index >= 0 {
+		m.notesUI.browsedNotes = slices.Delete(m.notesUI.browsedNotes, index, index+1)
 	}
 }
 
@@ -172,24 +172,24 @@ func mergeSavedFields(note *model.Note, before, after model.Note) {
 
 func (m Model) applySavedNotes(msg notesSavedMsg) (tea.Model, tea.Cmd) {
 	for _, saved := range msg.saved {
-		browsedIndex := indexOfNote(m.browsedNotes, saved.target, saved.before)
+		browsedIndex := indexOfNote(m.notesUI.browsedNotes, saved.target, saved.before)
 		if browsedIndex >= 0 {
-			applySavedNote(m.browsedNotes[browsedIndex], saved)
+			applySavedNote(m.notesUI.browsedNotes[browsedIndex], saved)
 		}
 		index := m.noteIndex(saved.target, saved.before)
 		switch {
-		case index >= 0 && (browsedIndex < 0 || m.notes[index] != m.browsedNotes[browsedIndex]):
+		case index >= 0 && (browsedIndex < 0 || m.notes[index] != m.notesUI.browsedNotes[browsedIndex]):
 			applySavedNote(m.notes[index], saved)
-		case index < 0 && browsedIndex >= 0 && m.belongsOnDashboard(m.browsedNotes[browsedIndex]):
-			m.notes = append(m.notes, m.browsedNotes[browsedIndex])
+		case index < 0 && browsedIndex >= 0 && m.belongsOnDashboard(m.notesUI.browsedNotes[browsedIndex]):
+			m.notes = append(m.notes, m.notesUI.browsedNotes[browsedIndex])
 		case index < 0 && browsedIndex < 0:
 			applySavedNote(saved.target, saved)
 			if m.belongsOnDashboard(saved.target) {
 				m.notes = append(m.notes, saved.target)
 			}
 		}
-		if m.awaitingNewNoteSave && saved.before.FilePath == "" {
-			m.awaitingNewNoteSave = false
+		if m.notesUI.awaitingNewNoteSave && saved.before.FilePath == "" {
+			m.notesUI.awaitingNewNoteSave = false
 			m.selectNoteByID(saved.after.ID)
 		}
 	}
@@ -197,7 +197,7 @@ func (m Model) applySavedNotes(msg notesSavedMsg) (tea.Model, tea.Cmd) {
 	for _, failed := range msg.failed {
 		errorTexts = append(errorTexts, fmt.Sprintf("%q: %v", failed.attempted.Summary, failed.err))
 		index := m.noteIndex(failed.target, failed.attempted)
-		browsedIndex := indexOfNote(m.browsedNotes, failed.target, failed.attempted)
+		browsedIndex := indexOfNote(m.notesUI.browsedNotes, failed.target, failed.attempted)
 		switch {
 		case failed.onDisk != nil && (index >= 0 || browsedIndex >= 0) && keepsTypedText(failed):
 		case failed.onDisk != nil && (index >= 0 || browsedIndex >= 0):
@@ -205,12 +205,12 @@ func (m Model) applySavedNotes(msg notesSavedMsg) (tea.Model, tea.Cmd) {
 				*m.notes[index] = *failed.onDisk
 			}
 			if browsedIndex >= 0 {
-				*m.browsedNotes[browsedIndex] = *failed.onDisk
+				*m.notesUI.browsedNotes[browsedIndex] = *failed.onDisk
 			}
-		case errors.Is(failed.err, store.ErrNoteFileMissing) && m.missingSave == nil:
+		case errors.Is(failed.err, store.ErrNoteFileMissing) && m.notesUI.missingSave == nil:
 			missing := failed
-			m.missingSave, m.missingSaveReturnMode = &missing, m.mode
-			m.mode = ViewRecreateRow
+			m.notesUI.missingSave = &missing
+			m.pushMode(ViewRecreateRow)
 			if msg.origin == saveFromPreview {
 				m.mode = ViewRecreateConfirm
 			}
@@ -256,8 +256,8 @@ func (m Model) applyDeletedNotes(msg notesDeletedMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) confirmRecreateNote(tea.KeyMsg) (tea.Model, tea.Cmd) {
-	missing := m.missingSave
-	m.missingSave, m.mode = nil, m.missingSaveReturnMode
+	missing := m.notesUI.missingSave
+	m.notesUI.missingSave, m.mode = nil, m.popMode()
 	if missing == nil {
 		return m, nil
 	}
@@ -265,8 +265,8 @@ func (m Model) confirmRecreateNote(tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) discardMissingNote(tea.KeyMsg) (tea.Model, tea.Cmd) {
-	missing := m.missingSave
-	m.missingSave, m.mode = nil, m.missingSaveReturnMode
+	missing := m.notesUI.missingSave
+	m.notesUI.missingSave, m.mode = nil, m.popMode()
 	if missing == nil {
 		return m, nil
 	}
@@ -280,10 +280,10 @@ func recreateNoteBindings() []keyBinding {
 }
 
 func (m Model) missingNoteSummary() string {
-	if m.missingSave == nil {
+	if m.notesUI.missingSave == nil {
 		return ""
 	}
-	return m.missingSave.attempted.Summary
+	return m.notesUI.missingSave.attempted.Summary
 }
 
 func (m Model) renderRecreateConfirm(modalWidth int) string {

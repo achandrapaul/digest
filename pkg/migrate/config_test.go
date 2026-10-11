@@ -202,3 +202,37 @@ func TestMigrateReportsAConfigItCannotWrite(t *testing.T) {
 		t.Errorf("err = %v, want a failed write", err)
 	}
 }
+
+func TestMigrateRemovesTheRetiredAutoSyncInterval(t *testing.T) {
+	f := newFixture(t)
+	options, configPath := f.withConfig(t, "digest_root: ~/digest\ngit_auto_sync_interval: 600\ngreen_only: true\n")
+	options.DryRun = true
+	if _, err := Run(options); err != nil {
+		t.Fatal(err)
+	}
+	if content, _ := readConfig(t, configPath); !strings.Contains(content, "git_auto_sync_interval") {
+		t.Errorf("a dry run should leave the key:\n%s", content)
+	}
+	if !strings.Contains(f.output.String(), "would remove git_auto_sync_interval") {
+		t.Errorf("dry-run output = %q", f.output.String())
+	}
+	f.output.Reset()
+	options.DryRun = false
+	if _, err := Run(options); err != nil {
+		t.Fatal(err)
+	}
+	content, cfg := readConfig(t, configPath)
+	if strings.Contains(content, "git_auto_sync_interval") || !cfg.GreenOnly {
+		t.Errorf("the key should be gone and the rest kept:\n%s", content)
+	}
+	if !strings.Contains(f.output.String(), "removed git_auto_sync_interval") {
+		t.Errorf("output = %q", f.output.String())
+	}
+	f.output.Reset()
+	if _, err := Run(options); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(f.output.String(), "git_auto_sync_interval") {
+		t.Errorf("second run output = %q", f.output.String())
+	}
+}

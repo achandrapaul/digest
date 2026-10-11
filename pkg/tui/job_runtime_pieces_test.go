@@ -14,15 +14,15 @@ import (
 	"github.com/achandrapaul/digest/pkg/model"
 )
 
-var realExecuteJobBackground = executeJobBackground
+var realStartJobProcess = startJobProcess
 
 func tempDigestRoot(t *testing.T) string {
 	t.Helper()
-	previousRoot := digestRoot
-	digestRoot = t.TempDir()
+	previousRoot := currentDigestRoot()
+	setDigestRoot(t.TempDir())
 	t.Cleanup(func() {
-		createdLogsDirs.Delete(filepath.Join(digestRoot, "logs"))
-		digestRoot = previousRoot
+		createdLogsDirs.Delete(filepath.Join(currentDigestRoot(), "logs"))
+		setDigestRoot(previousRoot)
 	})
 	return getLogsDir()
 }
@@ -100,7 +100,7 @@ func TestUnreadableDryRunExitFileCountsAsAFailure(t *testing.T) {
 
 func TestDryRunWithoutTheDryRunFlagRecordsTheFailure(t *testing.T) {
 	tempDigestRoot(t)
-	err := startDryRunBackground(config.JobSpec{Name: "janitor", DryRunCommand: "digest janitor"})
+	err := dryRunJobProcess(config.JobSpec{Name: "janitor", DryRunCommand: "digest janitor"})
 	if !errors.Is(err, errDryRunFlagMissing) {
 		t.Fatalf("err = %v", err)
 	}
@@ -113,7 +113,7 @@ func TestDryRunWithoutTheDryRunFlagRecordsTheFailure(t *testing.T) {
 func TestDryRunFailsWhenTheLogCannotOpen(t *testing.T) {
 	logsDir := tempDigestRoot(t)
 	readOnlyLogsDir(t, logsDir)
-	if err := startDryRunBackground(config.JobSpec{Name: "nightly", DryRunCommand: "true"}); err == nil {
+	if err := dryRunJobProcess(config.JobSpec{Name: "nightly", DryRunCommand: "true"}); err == nil {
 		t.Fatal("an unwritable logs dir should fail")
 	}
 }
@@ -121,7 +121,7 @@ func TestDryRunFailsWhenTheLogCannotOpen(t *testing.T) {
 func TestDryRunFailsWhenTheShellIsMissing(t *testing.T) {
 	tempDigestRoot(t)
 	t.Setenv("PATH", t.TempDir())
-	if err := startDryRunBackground(config.JobSpec{Name: "nightly", DryRunCommand: "true"}); err == nil {
+	if err := dryRunJobProcess(config.JobSpec{Name: "nightly", DryRunCommand: "true"}); err == nil {
 		t.Fatal("a missing shell should fail")
 	}
 	if _, exitCode, finished := loadDryRunResult("nightly"); !finished || exitCode != 1 {
@@ -132,7 +132,7 @@ func TestDryRunFailsWhenTheShellIsMissing(t *testing.T) {
 func TestDryRunReportsAnUnwritablePIDFile(t *testing.T) {
 	tempDigestRoot(t)
 	blockWithADirectory(t, dryRunFilePath("nightly", "pid"))
-	err := startDryRunBackground(config.JobSpec{Name: "nightly", DryRunCommand: "true"})
+	err := dryRunJobProcess(config.JobSpec{Name: "nightly", DryRunCommand: "true"})
 	if err == nil || !strings.Contains(err.Error(), "pid file could not be written") {
 		t.Fatalf("err = %v", err)
 	}
@@ -182,7 +182,7 @@ func jobConfig(t *testing.T, command string) *config.Config {
 
 func TestJobRunWithoutACommandFails(t *testing.T) {
 	tempDigestRoot(t)
-	if err := realExecuteJobBackground(&config.Config{DigestRoot: t.TempDir()}, "custom"); !errors.Is(err, errNoJobCommand) {
+	if err := runJobProcess(&config.Config{DigestRoot: t.TempDir()}, "custom"); !errors.Is(err, errNoJobCommand) {
 		t.Fatalf("err = %v", err)
 	}
 }
@@ -191,7 +191,7 @@ func TestJobRunRotatesThePreviousLogAndCleansItsPIDFile(t *testing.T) {
 	logsDir := tempDigestRoot(t)
 	writeLogsFile(t, "nightly.log", "previous run\n")
 	cfg := jobConfig(t, "echo fresh run")
-	if err := realExecuteJobBackground(cfg, "nightly"); err != nil {
+	if err := runJobProcess(cfg, "nightly"); err != nil {
 		t.Fatal(err)
 	}
 	archives, _ := filepath.Glob(filepath.Join(logsDir, "nightly-*.log"))
@@ -208,7 +208,7 @@ func TestJobRunRotatesThePreviousLogAndCleansItsPIDFile(t *testing.T) {
 func TestJobRunFailsWhenTheLogCannotOpen(t *testing.T) {
 	logsDir := tempDigestRoot(t)
 	readOnlyLogsDir(t, logsDir)
-	if err := realExecuteJobBackground(jobConfig(t, "true"), "nightly"); err == nil {
+	if err := runJobProcess(jobConfig(t, "true"), "nightly"); err == nil {
 		t.Fatal("an unwritable logs dir should fail")
 	}
 }
@@ -216,7 +216,7 @@ func TestJobRunFailsWhenTheLogCannotOpen(t *testing.T) {
 func TestJobRunFailsWhenTheShellIsMissing(t *testing.T) {
 	tempDigestRoot(t)
 	t.Setenv("PATH", t.TempDir())
-	if err := realExecuteJobBackground(jobConfig(t, "true"), "nightly"); err == nil {
+	if err := runJobProcess(jobConfig(t, "true"), "nightly"); err == nil {
 		t.Fatal("a missing shell should fail")
 	}
 }
@@ -224,7 +224,7 @@ func TestJobRunFailsWhenTheShellIsMissing(t *testing.T) {
 func TestJobRunReportsAnUnwritablePIDFile(t *testing.T) {
 	logsDir := tempDigestRoot(t)
 	blockWithADirectory(t, filepath.Join(logsDir, "nightly.pid"))
-	err := realExecuteJobBackground(jobConfig(t, "true"), "nightly")
+	err := runJobProcess(jobConfig(t, "true"), "nightly")
 	if err == nil || !strings.Contains(err.Error(), "abort unavailable") {
 		t.Fatalf("err = %v", err)
 	}
@@ -287,8 +287,8 @@ func TestLatestJobOutputPicksTheNewerLog(t *testing.T) {
 
 func TestDryRunOutputIsShownOnlyAfterARun(t *testing.T) {
 	m := syncTestModel(t)
-	m.jobDryRunHasRun = map[string]bool{"nightly": true}
-	m.jobDryRunOutputs = map[string]string{"nightly": "checked"}
+	m.jobs.jobDryRunHasRun = map[string]bool{"nightly": true}
+	m.jobs.jobDryRunOutputs = map[string]string{"nightly": "checked"}
 	if m.jobDryRunOutputFor("nightly") != "checked" {
 		t.Fatal("a finished dry run shows its output")
 	}
@@ -320,8 +320,14 @@ func TestPreviewedRunningJobOnlyForJobPreviews(t *testing.T) {
 func TestDryRunStartFailureShowsAJobError(t *testing.T) {
 	tempDigestRoot(t)
 	m, _, _ := jobTestModel(t)
-	startDryRunBackground = func(config.JobSpec) error { return errors.New("no shell") }
-	if cmd := m.startJobDryRunCmd("nightly"); cmd != nil || latestMessageText(m) != "no shell" {
+	startJobProcess = func(launch jobLaunch) error {
+		if launch.dryRun {
+			return errors.New("no shell")
+		}
+		return nil
+	}
+	next, followUp := m.applyJobLaunch(m.startJobDryRunCmd("nightly")().(jobLaunchedMsg))
+	if m = next.(Model); followUp != nil || latestMessageText(m) != "no shell" {
 		t.Fatalf("message %q", latestMessageText(m))
 	}
 }

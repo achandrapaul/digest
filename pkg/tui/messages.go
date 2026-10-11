@@ -223,11 +223,10 @@ func (m Model) renderMessageLog(width int) string {
 }
 
 func (m Model) openMessageLog(tea.KeyMsg) (tea.Model, tea.Cmd) {
-	m.errorReturnMode = m.mode
 	m.errorTitle = messageLogTitle
 	m.errorLines = nil
 	m.messageLogExpanded = false
-	m.mode = ViewError
+	m.pushMode(ViewError)
 	return m, nil
 }
 

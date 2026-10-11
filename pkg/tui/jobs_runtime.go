@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -24,12 +25,24 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-var digestRoot = (*config.Config)(nil).Root()
+var digestRoot atomic.Value
+
+func init() {
+	setDigestRoot((*config.Config)(nil).Root())
+}
+
+func setDigestRoot(root string) {
+	digestRoot.Store(root)
+}
+
+func currentDigestRoot() string {
+	return digestRoot.Load().(string)
+}
 
 var createdLogsDirs sync.Map
 
 func getLogsDir() string {
-	dir := filepath.Join(digestRoot, "logs")
+	dir := filepath.Join(currentDigestRoot(), "logs")
 	if _, created := createdLogsDirs.Load(dir); !created {
 		if system.MkdirAll(dir) == nil {
 			createdLogsDirs.Store(dir, true)
@@ -132,65 +145,6 @@ func writeDryRunFailure(jobName string, failure error) {
 	_ = system.Write(dryRunFilePath(jobName, "exit"), []byte("1"))
 }
 
-var startDryRunBackground = func(spec config.JobSpec) error {
-	cmdStr, err := resolveJobCommand(spec, true)
-	if err != nil {
-		writeDryRunFailure(spec.Name, err)
-		return err
-	}
-
-	logPath := dryRunFilePath(spec.Name, "log")
-	pidPath := dryRunFilePath(spec.Name, "pid")
-	exitPath := dryRunFilePath(spec.Name, "exit")
-	_ = system.Remove(exitPath)
-
-	logFile, err := system.OpenLog(logPath)
-	if err != nil {
-		writeDryRunFailure(spec.Name, err)
-		return err
-	}
-	defer logFile.Close()
-
-	var cmd *exec.Cmd
-	if runtime.GOOS == "windows" {
-		cmd = exec.Command("cmd", "/c", cmdStr)
-	} else {
-		cmd = exec.Command("sh", "-c", `sh -c "$1"; echo $? > "$2"`, "digest-dry-run", cmdStr, exitPath)
-		cmd.SysProcAttr = &syscall.SysProcAttr{
-			Setsid: true,
-		}
-	}
-	cmd.Env = append(os.Environ(), spec.OptionsEnv()...)
-	if home, err := os.UserHomeDir(); err == nil {
-		cmd.Dir = home
-	}
-	cmd.Stdout = logFile
-	cmd.Stderr = logFile
-
-	if err := cmd.Start(); err != nil {
-		writeDryRunFailure(spec.Name, err)
-		return err
-	}
-
-	ownPid := strconv.Itoa(cmd.Process.Pid)
-	pidWriteErr := system.Write(pidPath, []byte(ownPid))
-
-	go func() {
-		waitErr := cmd.Wait()
-		if runtime.GOOS == "windows" {
-			_ = system.Write(exitPath, []byte(strconv.Itoa(commandExitCode(cmd.ProcessState, waitErr))))
-		}
-		if data, err := system.Read(pidPath); err == nil && strings.TrimSpace(string(data)) == ownPid {
-			_ = system.Remove(pidPath)
-		}
-	}()
-
-	if pidWriteErr != nil {
-		return fmt.Errorf("dry run for %q started but its pid file could not be written: %w", spec.Name, pidWriteErr)
-	}
-	return nil
-}
-
 func commandExitCode(state *os.ProcessState, waitErr error) int {
 	if state == nil {
 		if waitErr != nil {
@@ -205,11 +159,11 @@ func commandExitCode(state *os.ProcessState, waitErr error) int {
 }
 
 func (m Model) jobRunning(jobName string) bool {
-	return m.runningJobPIDs[jobName] > 0
+	return m.jobs.runningJobPIDs[jobName] > 0
 }
 
 func (m Model) isAnyDryRunInFlight() bool {
-	return len(m.dryRunsInFlight) > 0
+	return len(m.jobs.dryRunsInFlight) > 0
 }
 
 type previewedJob struct {
@@ -225,12 +179,12 @@ func (m Model) previewedJobState() previewedJob {
 		return previewedJob{}
 	}
 	name := item.Draft.Name
-	_, running := m.runningJobPIDs[name]
-	return previewedJob{name: name, inFlight: m.dryRunsInFlight[name], hasRun: m.jobDryRunHasRun[name], running: running, exitCode: m.jobDryRunExitCodes[name], outputLength: len(m.jobDryRunOutputs[name])}
+	_, running := m.jobs.runningJobPIDs[name]
+	return previewedJob{name: name, inFlight: m.jobs.dryRunsInFlight[name], hasRun: m.jobs.jobDryRunHasRun[name], running: running, exitCode: m.jobs.jobDryRunExitCodes[name], outputLength: len(m.jobs.jobDryRunOutputs[name])}
 }
 
 func (m Model) isAnyJobRunning() bool {
-	return len(m.runningJobPIDs) > 0
+	return len(m.jobs.runningJobPIDs) > 0
 }
 
 var builtinJobNames = map[string]bool{
@@ -318,68 +272,139 @@ func pruneJobLogArchives(logsDir, jobName string, retentionDays int, now time.Ti
 	}
 }
 
-var executeJobBackground = func(cfg *config.Config, jobName string) error {
-	spec := findJobSpec(cfg, jobName)
-	commandStr, err := resolveJobCommand(spec, false)
-	if err != nil {
-		return err
+type jobLaunch struct {
+	cfg             *config.Config
+	spec            config.JobSpec
+	dryRun          bool
+	stopDryRunFirst bool
+	states          jobStatesQuery
+}
+
+type jobLaunchedMsg struct {
+	launch        jobLaunch
+	dryRunStopped bool
+	err           error
+	states        jobStates
+}
+
+func jobLaunchKey(jobName string, dryRun bool) string {
+	if dryRun {
+		return "dry-run:" + jobName
 	}
+	return "job:" + jobName
+}
 
-	logsDir := getLogsDir()
-	activeLog := filepath.Join(logsDir, fmt.Sprintf("%s.log", jobName))
-	pidFile := filepath.Join(logsDir, fmt.Sprintf("%s.pid", jobName))
-
-	if system.Exists(activeLog) {
-		timestamp := time.Now().Format(jobLogArchiveFormat)
-		archivedLog := filepath.Join(logsDir, fmt.Sprintf("%s-%s.log", jobName, timestamp))
-		_ = system.Rename(activeLog, archivedLog)
-	}
-	pruneJobLogArchives(logsDir, jobName, cfg.Retention(), time.Now())
-
-	logFile, err := system.OpenLog(activeLog)
-	if err != nil {
-		return err
-	}
-	defer logFile.Close()
-
-	var cmd *exec.Cmd
-	if runtime.GOOS == "windows" {
-		cmd = exec.Command("cmd", "/c", commandStr)
-	} else {
-		cmd = exec.Command("sh", "-c", commandStr)
-		cmd.SysProcAttr = &syscall.SysProcAttr{
-			Setsid: true,
+func launchJobCmd(launch jobLaunch) tea.Cmd {
+	return func() tea.Msg {
+		msg := jobLaunchedMsg{launch: launch}
+		if launch.stopDryRunFirst {
+			msg.err = stopJobDryRun(launch.spec.Name)
+			msg.dryRunStopped = msg.err == nil
 		}
+		if msg.err == nil {
+			msg.err = startJobProcess(launch)
+		}
+		msg.states = launch.states.load()
+		return msg
 	}
+}
 
-	cmd.Env = append(os.Environ(), spec.OptionsEnv()...)
+type jobFiles struct {
+	log, pid, exit string
+}
 
+func (launch jobLaunch) files() jobFiles {
+	if launch.dryRun {
+		return jobFiles{log: dryRunFilePath(launch.spec.Name, "log"), pid: dryRunFilePath(launch.spec.Name, "pid"), exit: dryRunFilePath(launch.spec.Name, "exit")}
+	}
+	logsDir := getLogsDir()
+	return jobFiles{log: filepath.Join(logsDir, launch.spec.Name+".log"), pid: filepath.Join(logsDir, launch.spec.Name+".pid")}
+}
+
+func (launch jobLaunch) failed(err error) error {
+	if launch.dryRun {
+		writeDryRunFailure(launch.spec.Name, err)
+	}
+	return err
+}
+
+func (launch jobLaunch) prepareLog(files jobFiles) {
+	if launch.dryRun {
+		_ = system.Remove(files.exit)
+		return
+	}
+	if system.Exists(files.log) {
+		archivedLog := filepath.Join(filepath.Dir(files.log), fmt.Sprintf("%s-%s.log", launch.spec.Name, time.Now().Format(jobLogArchiveFormat)))
+		_ = system.Rename(files.log, archivedLog)
+	}
+	pruneJobLogArchives(filepath.Dir(files.log), launch.spec.Name, launch.cfg.Retention(), time.Now())
+}
+
+func (launch jobLaunch) command(commandStr string, files jobFiles) *exec.Cmd {
+	var cmd *exec.Cmd
+	switch {
+	case runtime.GOOS == "windows":
+		cmd = exec.Command("cmd", "/c", commandStr)
+	case launch.dryRun:
+		cmd = exec.Command("sh", "-c", `sh -c "$1"; echo $? > "$2"`, "digest-dry-run", commandStr, files.exit)
+	default:
+		cmd = exec.Command("sh", "-c", commandStr)
+	}
+	if runtime.GOOS != "windows" {
+		cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+	}
+	cmd.Env = append(os.Environ(), launch.spec.OptionsEnv()...)
 	if home, err := os.UserHomeDir(); err == nil {
 		cmd.Dir = home
 	}
-	if cfg != nil {
-		cmd.Dir = cfg.NotesDir()
+	if !launch.dryRun && launch.cfg != nil {
+		cmd.Dir = launch.cfg.NotesDir()
 	}
+	return cmd
+}
 
+func (launch jobLaunch) pidWriteError(err error) error {
+	if launch.dryRun {
+		return fmt.Errorf("dry run for %q started but its pid file could not be written: %w", launch.spec.Name, err)
+	}
+	return fmt.Errorf("job %q started but its pid file could not be written (abort unavailable): %w", launch.spec.Name, err)
+}
+
+var startJobProcess = func(launch jobLaunch) error {
+	commandStr, err := resolveJobCommand(launch.spec, launch.dryRun)
+	if err != nil {
+		return launch.failed(err)
+	}
+	files := launch.files()
+	launch.prepareLog(files)
+	logFile, err := system.OpenLog(files.log)
+	if err != nil {
+		return launch.failed(err)
+	}
+	defer logFile.Close()
+
+	cmd := launch.command(commandStr, files)
 	cmd.Stdout = logFile
 	cmd.Stderr = logFile
-
 	if err := cmd.Start(); err != nil {
-		return err
+		return launch.failed(err)
 	}
 
 	ownPid := strconv.Itoa(cmd.Process.Pid)
-	pidWriteErr := system.Write(pidFile, []byte(ownPid))
+	pidWriteErr := system.Write(files.pid, []byte(ownPid))
 
 	go func() {
-		_ = cmd.Wait()
-		if data, err := system.Read(pidFile); err == nil && strings.TrimSpace(string(data)) == ownPid {
-			_ = system.Remove(pidFile)
+		waitErr := cmd.Wait()
+		if launch.dryRun && runtime.GOOS == "windows" {
+			_ = system.Write(files.exit, []byte(strconv.Itoa(commandExitCode(cmd.ProcessState, waitErr))))
+		}
+		if data, err := system.Read(files.pid); err == nil && strings.TrimSpace(string(data)) == ownPid {
+			_ = system.Remove(files.pid)
 		}
 	}()
 
 	if pidWriteErr != nil {
-		return fmt.Errorf("job %q started but its pid file could not be written (abort unavailable): %w", jobName, pidWriteErr)
+		return launch.pidWriteError(pidWriteErr)
 	}
 	return nil
 }
@@ -506,10 +531,10 @@ func latestJobOutput(jobName string, dryRunOutput string) (string, bool) {
 }
 
 func (m Model) jobDryRunOutputFor(jobName string) string {
-	if m.jobDryRunHasRun == nil || !m.jobDryRunHasRun[jobName] {
+	if m.jobs.jobDryRunHasRun == nil || !m.jobs.jobDryRunHasRun[jobName] {
 		return ""
 	}
-	return m.jobDryRunOutputs[jobName]
+	return m.jobs.jobDryRunOutputs[jobName]
 }
 
 func tickCtrlCResetCmd(pressSequence int) tea.Cmd {
@@ -543,17 +568,8 @@ func (m Model) previewedRunningJob() string {
 }
 
 func (m *Model) startJobDryRunCmd(jobName string) tea.Cmd {
-	if m.cfg == nil || m.dryRunsInFlight[jobName] {
+	if m.cfg == nil || m.jobs.dryRunsInFlight[jobName] || !m.beginLaunch(jobLaunchKey(jobName, true)) {
 		return nil
 	}
-	err := startDryRunBackground(findJobSpec(m.cfg, jobName))
-	m.refreshDryRunResults()
-	if m.mode == ViewPreview {
-		m.updatePreviewViewport()
-	}
-	if err != nil {
-		m.showError("JOB ERROR", err)
-		return nil
-	}
-	return tea.Batch(m.ensureRunStatePoll(), m.ensureSyncPulse())
+	return launchJobCmd(jobLaunch{cfg: m.cfg, spec: findJobSpec(m.cfg, jobName), dryRun: true, states: m.jobStatesQuery(true)})
 }

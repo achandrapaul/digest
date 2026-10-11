@@ -64,9 +64,9 @@ func TestConfiguredDigestCommandsUseTheRunningBinary(t *testing.T) {
 }
 
 func TestDryRunRecordsTheCommandsExitCodeAndOutput(t *testing.T) {
-	previousRoot := digestRoot
-	digestRoot = t.TempDir()
-	t.Cleanup(func() { digestRoot = previousRoot })
+	previousRoot := currentDigestRoot()
+	setDigestRoot(t.TempDir())
+	t.Cleanup(func() { setDigestRoot(previousRoot) })
 	cases := map[string]struct {
 		command  string
 		exitCode int
@@ -76,7 +76,7 @@ func TestDryRunRecordsTheCommandsExitCodeAndOutput(t *testing.T) {
 		"dry-signal": {command: "echo checked; kill -TERM $$", exitCode: 143},
 	}
 	for jobName, expected := range cases {
-		if err := startDryRunBackground(config.JobSpec{Name: jobName, DryRunCommand: expected.command}); err != nil {
+		if err := dryRunJobProcess(config.JobSpec{Name: jobName, DryRunCommand: expected.command}); err != nil {
 			t.Fatal(err)
 		}
 		deadline := time.Now().Add(5 * time.Second)

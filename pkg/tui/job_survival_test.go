@@ -17,16 +17,16 @@ func TestHelperLaunchesJobsThenQuits(t *testing.T) {
 	if root == "" {
 		t.Skip("only runs as a helper process")
 	}
-	digestRoot = root
+	setDigestRoot(root)
 	showGit := false
 	cfg := &config.Config{DigestRoot: root, ShowGit: &showGit, Jobs: []config.JobSpec{{Name: "survivor", Command: "sleep 0.5; echo after the app quit"}}}
 	if err := os.MkdirAll(cfg.NotesDir(), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if err := startDryRunBackground(config.JobSpec{Name: "survivor-dry", DryRunCommand: "sleep 0.5; echo after the app quit; exit 4"}); err != nil {
+	if err := dryRunJobProcess(config.JobSpec{Name: "survivor-dry", DryRunCommand: "sleep 0.5; echo after the app quit; exit 4"}); err != nil {
 		t.Fatal(err)
 	}
-	if err := executeJobBackground(cfg, "survivor"); err != nil {
+	if err := runJobProcess(cfg, "survivor"); err != nil {
 		t.Fatal(err)
 	}
 	os.Exit(0)
@@ -39,9 +39,9 @@ func TestJobsKeepRunningAfterTheAppQuits(t *testing.T) {
 	if output, err := helper.CombinedOutput(); err != nil {
 		t.Fatalf("helper failed: %v\n%s", err, output)
 	}
-	previousRoot := digestRoot
-	digestRoot = root
-	t.Cleanup(func() { digestRoot = previousRoot })
+	previousRoot := currentDigestRoot()
+	setDigestRoot(root)
+	t.Cleanup(func() { setDigestRoot(previousRoot) })
 	deadline := time.Now().Add(5 * time.Second)
 	output, exitCode, finished := loadDryRunResult("survivor-dry")
 	for (!finished || !strings.Contains(readJobLog("survivor"), "after the app quit")) && time.Now().Before(deadline) {

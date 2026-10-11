@@ -260,7 +260,7 @@ func TestCtrlYInBragViewCopiesTheBrag(t *testing.T) {
 	copied := captureClipboard(t)
 	m := savedBragModel(t)
 	m = press(t, m, tea.KeyMsg{Type: tea.KeyCtrlY})
-	if m.mode != ViewBragView || len(*copied) != 1 || (*copied)[0] != strings.TrimSpace(m.bragEntry.Body()) {
+	if m.mode != ViewBragView || len(*copied) != 1 || (*copied)[0] != strings.TrimSpace(m.brag.bragEntry.Body()) {
 		t.Fatalf("mode=%v copied = %q", m.mode, *copied)
 	}
 	if !strings.Contains((*copied)[0], "## Facts") || !strings.Contains((*copied)[0], "- Did things") {

@@ -4,10 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/achandrapaul/digest/pkg/brag"
-	"github.com/achandrapaul/digest/pkg/model"
 	"github.com/achandrapaul/digest/pkg/review"
-	"github.com/achandrapaul/digest/pkg/sourcecontrol"
 
 	"github.com/charmbracelet/bubbles/viewport"
 	"github.com/charmbracelet/lipgloss"
@@ -173,13 +170,13 @@ func (m Model) renderDeleteConfirmModal(modalWidth int) string {
 		prompt = m.confirmPrompt
 	} else {
 		titleText = deleteTitleStyle.Render(" DELETE CONFIRMATION ")
-		if len(m.deleteTargetNotes) > 1 {
-			prompt = fmt.Sprintf("Are you sure you want to permanently delete these %d selected notes?", len(m.deleteTargetNotes))
-		} else if len(m.deleteTargetNotes) == 1 {
-			if m.deleteReturnMode == ViewArchived {
-				prompt = fmt.Sprintf("Are you sure you want to permanently delete this note?\n\n\"%s\"", m.deleteTargetNotes[0].Summary)
+		if len(m.notesUI.deleteTargetNotes) > 1 {
+			prompt = fmt.Sprintf("Are you sure you want to permanently delete these %d selected notes?", len(m.notesUI.deleteTargetNotes))
+		} else if len(m.notesUI.deleteTargetNotes) == 1 {
+			if m.returnMode() == ViewArchived {
+				prompt = fmt.Sprintf("Are you sure you want to permanently delete this note?\n\n\"%s\"", m.notesUI.deleteTargetNotes[0].Summary)
 			} else {
-				prompt = fmt.Sprintf("Are you sure you want to archive this note?\n\n\"%s\"", m.deleteTargetNotes[0].Summary)
+				prompt = fmt.Sprintf("Are you sure you want to archive this note?\n\n\"%s\"", m.notesUI.deleteTargetNotes[0].Summary)
 			}
 		} else {
 			prompt = "No notes selected for deletion."
@@ -201,88 +198,13 @@ func (m Model) renderDeleteConfirmModal(modalWidth int) string {
 }
 
 func (m Model) renderPreviewModal(modalWidth, innerWidth int) string {
-	headerTitle := " PREVIEW "
-	statusBadge := badgeActive.Render("IDLE")
-	tagBadge := tagStyle.Render("#general")
-
+	header := previewHeading{title: " PREVIEW ", status: badgeActive.Render("IDLE"), tag: tagStyle.Render("#general")}
 	if item, found := m.selectedNavItem(); found {
-		switch item.Kind {
-		case KindGitRepo:
-			headerTitle = fmt.Sprintf(" GIT REPO: %s ", item.GitRepo.Name)
-			statusBadge = badgeActive.Render("SYNCED")
-			tagBadge = tagStyle.Render("#git")
-		case KindPendingGit:
-			if item.PendingGitPR != nil {
-				headerTitle = fmt.Sprintf(" PENDING PR REVIEW: %s ", item.PendingGitPR.Repository)
-				if item.PendingGitPR.Kind == sourcecontrol.ReReviewKind {
-					headerTitle = fmt.Sprintf(" RE-REVIEW: %s ", item.PendingGitPR.Repository)
-				}
-				statusBadge = m.prStateBadge(item.PendingGitPR)
-				if pid, running := m.reviewPIDFor(item.PendingGitPR); running {
-					statusBadge = badgeActive.Render(fmt.Sprintf("RUNNING · PID %d", pid))
-				}
-				tagBadge = tagStyle.Render("#github")
-			}
-		case KindMyPR:
-			if item.MyPR != nil {
-				headerTitle = fmt.Sprintf(" MY PR: %s #%d ", item.MyPR.Ref.Repo, item.MyPR.Ref.Number)
-				statusBadge = badgeActive.Render(strings.ToUpper(myPRCIText(item.MyPR.CIState)))
-				tagBadge = tagStyle.Render("#my-pr")
-			}
-		case KindReviewRun:
-			headerTitle = fmt.Sprintf(" REVIEW JOB: %s ", reviewRunLabel(*item.ReviewRun))
-			statusBadge = stateStyle(review.StateFailed).Render("FAILED")
-			if state := m.localReviews[review.StateDir(m.reviewRoot(), item.ReviewRun.Meta.Ref)]; state.pid > 0 {
-				statusBadge = badgeActive.Render(fmt.Sprintf("RUNNING · PID %d", state.pid))
-			}
-			tagBadge = tagStyle.Render("#github")
-		case KindBragRun:
-			headerTitle = fmt.Sprintf(" BRAG JOB: %s ", item.BragRun.Meta.ID)
-			statusBadge = stateStyle(review.StateFailed).Render("FAILED")
-			if item.BragRun.Status == brag.RunRunning {
-				statusBadge = badgeActive.Render("RUNNING")
-			}
-			tagBadge = tagStyle.Render("#brag")
-		case KindAutomationRun:
-			headerTitle = fmt.Sprintf(" AUTOMATION JOB: %s ", item.AutomationRun.Meta.Automation)
-			statusBadge = stateStyle(review.StateFailed).Render("FAILED")
-			if m.automationJobRunning(item.AutomationRun) {
-				statusBadge = badgeActive.Render("RUNNING")
-			}
-			tagBadge = tagStyle.Render("#" + string(item.AutomationRun.Meta.Phase))
-		case KindJobDraft:
-			headerTitle = fmt.Sprintf(" JOB: %s ", item.Draft.Name)
-			if pid := m.runningJobPIDs[item.Draft.Name]; pid > 0 {
-				statusBadge = badgeActive.Render(fmt.Sprintf("RUNNING · PID %d", pid))
-			} else if item.Draft.DryRunInFlight {
-				statusBadge = badgeActive.Render("DRY RUNNING")
-			} else if m.previewJobLogFinished {
-				statusBadge = badgeDone.Render("FINISHED")
-			} else if item.Draft.HasRunDryRun {
-				if item.Draft.ExitCode == 0 {
-					statusBadge = badgeDone.Render("SUCCESS")
-				} else {
-					statusBadge = staleStyle.Render("NEED ACT")
-				}
-			} else {
-				statusBadge = badgeActive.Render("IDLE")
-			}
-			tagBadge = tagStyle.Render("#job")
-		default:
-			if item.Note != nil {
-				headerTitle = " PREVIEW NOTE "
-				if item.Note.Status == model.StatusDone {
-					statusBadge = badgeDone.Render("DONE")
-				}
-				if item.Note.Subject != "" {
-					tagBadge = tagStyle.Render("#" + item.Note.Subject)
-				}
-			}
-		}
+		kindHandlerFor(item.Kind).header(m, item, &header)
 	}
 
-	headerLeft := modalTitleStyle.Render(headerTitle)
-	rightCol := lipgloss.JoinVertical(lipgloss.Right, statusBadge, tagBadge)
+	headerLeft := modalTitleStyle.Render(header.title)
+	rightCol := lipgloss.JoinVertical(lipgloss.Right, header.status, header.tag)
 	gap := innerWidth - lipgloss.Width(headerLeft) - lipgloss.Width(rightCol)
 
 	topLine := lipgloss.JoinHorizontal(lipgloss.Top, headerLeft, safeRepeat(" ", gap), rightCol)
@@ -297,8 +219,8 @@ func (m Model) renderPreviewModal(modalWidth, innerWidth int) string {
 		partsAbove = append(partsAbove, m.renderPreviewTabs(), "")
 	}
 	partsBelow := []string{""}
-	if prItem != nil && m.reviewNotice != "" {
-		partsBelow = append(partsBelow, yellowBadgeStyle.Render(m.reviewNotice), "")
+	if prItem != nil && m.review.reviewNotice != "" {
+		partsBelow = append(partsBelow, yellowBadgeStyle.Render(m.review.reviewNotice), "")
 	}
 	if m.previewNotice != "" {
 		partsBelow = append(partsBelow, stateStyle(review.StateFailed).Render(m.previewNotice), "")

@@ -3,7 +3,6 @@ package tui
 import (
 	"context"
 	"fmt"
-	"github.com/achandrapaul/digest/pkg/appstate"
 	"os/exec"
 	"regexp"
 	"runtime"
@@ -11,16 +10,16 @@ import (
 	"strings"
 	"time"
 
+	"github.com/achandrapaul/digest/pkg/appstate"
 	"github.com/achandrapaul/digest/pkg/automation"
-
 	"github.com/achandrapaul/digest/pkg/brag"
 	"github.com/achandrapaul/digest/pkg/config"
 	"github.com/achandrapaul/digest/pkg/model"
-	"github.com/achandrapaul/digest/pkg/notify"
 	"github.com/achandrapaul/digest/pkg/review"
 	"github.com/achandrapaul/digest/pkg/running"
 	"github.com/achandrapaul/digest/pkg/sourcecontrol"
 	"github.com/achandrapaul/digest/pkg/store"
+	"github.com/achandrapaul/digest/pkg/system"
 	"github.com/achandrapaul/digest/pkg/tui/textarea"
 
 	"github.com/charmbracelet/bubbles/cursor"
@@ -111,6 +110,7 @@ type localReviewState struct {
 	pid            int
 	recommendation string
 	cloned         bool
+	logTail        string
 }
 
 func safeRepeat(s string, count int) string {
@@ -205,110 +205,56 @@ func daysAgo(from, to time.Time) int {
 }
 
 type Model struct {
-	git   gitState
-	mode  ViewMode
-	cfg   *config.Config
-	store *store.NoteStore
-	notes []*model.Note
+	git             gitState
+	notesUI         notesState
+	review          reviewState
+	brag            bragState
+	automation      automationState
+	jobs            jobsState
+	mode            ViewMode
+	modeStack       []ViewMode
+	launchesPending map[string]bool
+	cfg             *config.Config
+	store           *store.NoteStore
+	notes           []*model.Note
 
 	sessionCtx         context.Context
-	startupNotesErr    error
 	appState           appstate.State
 	appStateKnown      bool
 	cancelSession      context.CancelFunc
 	searchCache        *searchMemo
-	reviewReports      *reviewReportMemo
 	contentVersion     int
 	scrollPending      bool
 	frames             *dashboardFrameCache
-	bragSaved          *bragSavedMemo
-	dryRunLogStamps    map[string]string
 	selected           int
 	scrollOffset       int
-	archivedSelected   int
 	ctrlCCount         int
 	ctrlCPressSequence int
-	currentNote        *model.Note
 	currentDate        time.Time
 
-	jobDryRunOutputs   map[string]string
-	jobDryRunExitCodes map[string]int
-	jobDryRunHasRun    map[string]bool
-
-	archivedSelectedMap  map[int]bool
-	deleteTargetNotes    []*model.Note
-	deleteReturnMode     ViewMode
-	jobToExecute         string
-	jobToAbort           string
-	bragRunToStop        *brag.Run
-	automationRunToStop  *automation.Run
-	jobRunStopsDryRun    bool
-	jobDryRunToStart     string
-	staleJobToClear      string
-	runToRetry           *NavItem
-	draftToDelete        string
-	discardingEdit       bool
-	jobConfirmError      string
-	previewNotice        string
-	editorStartText      string
-	editorNotice         string
-	confirmTitle         string
-	confirmPrompt        string
-	restoreOnConfirm     bool
-	actionMenuReturnMode ViewMode
-	linkMenuItems        []string
-	linkMenuSelected     int
-	linkMenuReturnMode   ViewMode
+	bragRunToStop       *brag.Run
+	automationRunToStop *automation.Run
+	runToRetry          *NavItem
+	draftToDelete       string
+	discardingEdit      bool
+	previewNotice       string
+	editorStartText     string
+	editorNotice        string
+	confirmTitle        string
+	confirmPrompt       string
+	restoreOnConfirm    bool
 
 	syncPulseFrame   int
 	bannerWaveActive bool
 	bannerWaveFrame  int
 
-	syncPulseRunning      bool
-	jobLogRunning         bool
-	jobLogStamp           string
-	runStatePolling       bool
-	runningJobPIDs        map[string]int
-	dryRunsInFlight       map[string]bool
-	localReviews          map[string]localReviewState
-	previewPollStamp      previewStamp
-	previewJobLogFinished bool
-	previewFindingsCount  int
-	bragStates            map[string]bragRowState
-	historyRequested      map[string]bool
+	syncPulseRunning bool
+	previewPollStamp previewStamp
 
 	initialSelectionPending bool
-	selectAfterReload       string
-	awaitingNewNoteSave     bool
-	browsedNotes            []*model.Note
-	closedThisWeekElsewhere int
-	missingSave             *failedNoteSave
-	missingSaveReturnMode   ViewMode
-	helpReturnMode          ViewMode
-	reviewRuns              []review.ReviewRun
-	reviewRunAction         string
-	reviewRunTarget         review.PRRef
-	reviewRunReturnMode     ViewMode
 	tagCells                *rowTagCellCache
 	noteRows                *noteRowCache
 	popupMemo               *framedPopupMemo
-	bragRuns                []brag.Run
-	bragSelected            int
-	bragExpanded            map[int]bool
-	bragPeriod              brag.Period
-	bragEntry               *brag.Brag
-	bragRegenerate          bool
-	bragConfirmReturn       ViewMode
-	bragNotice              string
-	automationRuns          map[string]automation.Run
-	automationNoteID        string
-	automationReturnMode    ViewMode
-	actionMenuNoteID        string
-	actionMenuItems         []noteAction
-	actionMenuSelected      int
-	notifyInput             *textinput.Model
-	notifyNotice            string
-	notifyEntries           map[string]notify.Entry
 	hintGeneration          int
 	hintVisible             bool
 	editorRevision          int
@@ -317,13 +263,9 @@ type Model struct {
 	setup                   *setupState
 	setupInput              *textinput.Model
 	configPath              string
-	automationName          string
-	automationPhase         automation.Phase
-	automationNotice        string
 
 	previewViewport  viewport.Model
 	previewPlainText string
-	archivedViewport viewport.Model
 
 	editor      *textarea.Model
 	searchInput *textinput.Model
@@ -333,24 +275,14 @@ type Model struct {
 	searchPreviewID  string
 	searchPreviewing bool
 	searchNotice     string
-	editReturnMode   ViewMode
-	inlineInput      *textinput.Model
 
-	previewTab     int
-	reviewCursor   int
-	reviewSelected map[int]bool
-	reviewEvent    review.Event
-	reviewBody     string
-	reviewNotice   string
-	rejectInput    *textarea.Model
-	contextCache   map[string]string
-	reviewPolling  bool
+	previewTab    int
+	reviewPolling bool
 
 	errorTitle           string
 	messages             []appMessage
 	messageExpiryPending bool
 	errorLines           []string
-	errorReturnMode      ViewMode
 	messageLogExpanded   bool
 	messageLogViewport   viewport.Model
 	screenError          string
@@ -398,7 +330,7 @@ func NewModel(cfg *config.Config, startupErr error) Model {
 	}
 
 	storePath := cfg.NotesDir()
-	digestRoot = cfg.Root()
+	setDigestRoot(cfg.Root())
 
 	rejectArea := textarea.New()
 	rejectArea.Placeholder = "Explain what needs to change..."
@@ -410,34 +342,27 @@ func NewModel(cfg *config.Config, startupErr error) Model {
 
 	m := Model{
 		initialSelectionPending: true,
-		rejectInput:             &rejectArea,
-		reviewSelected:          make(map[int]bool),
-		contextCache:            make(map[string]string),
 		mode:                    ViewDashboard,
 		cfg:                     cfg,
 		store:                   store.New(storePath),
 		searchInput:             &ti,
-		inlineInput:             &ii,
-		notifyInput:             &notifyInput,
 		frames:                  newDashboardFrameCache(),
 		noteRows:                newNoteRowCache(),
 		popupMemo:               &framedPopupMemo{},
 		editor:                  &ta,
 		editorCache:             &editorViewCache{},
 		searchCache:             &searchMemo{},
-		reviewReports:           &reviewReportMemo{},
+		review:                  reviewState{rejectInput: &rejectArea, reviewSelected: make(map[int]bool), contextCache: make(map[string]string), reviewReports: &reviewReportMemo{}},
+		notesUI:                 notesState{inlineInput: &ii, notifyInput: &notifyInput, archivedSelectedMap: make(map[int]bool)},
+		jobs:                    jobsState{jobDryRunOutputs: make(map[string]string), jobDryRunExitCodes: make(map[string]int), jobDryRunHasRun: make(map[string]bool)},
 		git:                     gitState{loadingCommits: cfg != nil && cfg.DailyCommitsEnabled()},
 		currentDate:             time.Now(),
-		archivedSelectedMap:     make(map[int]bool),
-		jobDryRunOutputs:        make(map[string]string),
-		jobDryRunExitCodes:      make(map[string]int),
-		jobDryRunHasRun:         make(map[string]bool),
 		bannerWaveActive:        true,
 	}
 	m.sessionCtx, m.cancelSession = context.WithCancel(context.Background())
-	m.notes, m.startupNotesErr = m.store.ListDashboard(m.currentDate, m.previousNoteDay())
+	m.notes, m.notesUI.startupNotesErr = m.store.ListDashboard(m.currentDate, m.previousNoteDay())
 	m.loadAppState()
-	m.notifyEntries = listNotifyEntries(cfg.Root()).entries
+	m.notesUI.notifyEntries = listNotifyEntries(cfg.Root()).entries
 	m.git.fetchedPreviousDay = m.previousNoteDay()
 	m.git.loadingGit = false
 	if cfg.GitEnabled() {
@@ -450,15 +375,32 @@ func NewModel(cfg *config.Config, startupErr error) Model {
 	m.applyAutomationRuns(automation.ListRuns(m.automationRoot()))
 	m.reviewPolling = m.anyReviewRunning() || m.anyBragRunning() || m.anyAutomationRunning()
 	m.syncPulseRunning = m.headerAnimating()
-	m.runStatePolling = m.isAnyDryRunInFlight() || m.isAnyJobRunning()
+	m.jobs.runStatePolling = m.isAnyDryRunInFlight() || m.isAnyJobRunning()
 	if startupErr != nil {
 		m.showError("CONFIG ERROR", startupErr)
+	}
+	if cfg != nil && len(cfg.UnknownKeys) > 0 {
+		m.postMessage("config.yaml", messageError, "unknown keys "+strings.Join(cfg.UnknownKeys, ", ")+" — run digest doctor")
 	}
 	return m
 }
 
+type rootRelockedMsg struct {
+	err error
+}
+
+func relockRootCmd(root string) tea.Cmd {
+	if !system.Protected(root) {
+		return nil
+	}
+	return func() tea.Msg {
+		_, err := system.LockTree(root)
+		return rootRelockedMsg{err: err}
+	}
+}
+
 func (m Model) Init() tea.Cmd {
-	cmds := []tea.Cmd{m.startupNotesCmd(), m.rebuildAppStateCmd(), tickBannerWaveCmd(), m.loadCommitsCmd(), m.startupHintCmd()}
+	cmds := []tea.Cmd{m.startupNotesCmd(), m.rebuildAppStateCmd(), tickBannerWaveCmd(), m.loadCommitsCmd(), m.startupHintCmd(), relockRootCmd(m.cfg.Root())}
 	if m.syncPulseRunning {
 		cmds = append(cmds, tickSyncPulseCmd())
 	}
@@ -467,14 +409,11 @@ func (m Model) Init() tea.Cmd {
 	} else if m.git.loadingMyPRs {
 		cmds = append(cmds, m.myPRsFetchCmd())
 	}
-	if m.runStatePolling {
-		cmds = append(cmds, tickRunStatePollCmd())
+	if m.jobs.runStatePolling {
+		cmds = append(cmds, m.tickRunStatePollCmd())
 	}
 	if m.reviewPolling {
 		cmds = append(cmds, m.tickReviewPollCmd())
-	}
-	if m.cfg.GitEnabled() && m.cfg.GitAutoSyncInterval > 0 {
-		cmds = append(cmds, autoSyncTickCmd(m.cfg.GitAutoSyncInterval))
 	}
 	return tea.Batch(cmds...)
 }
@@ -493,25 +432,7 @@ func (m *Model) showError(title string, errs ...error) {
 }
 
 func navItemKey(item NavItem) string {
-	switch {
-	case item.Kind == KindJobDraft && item.Draft != nil:
-		return "job:" + item.Draft.Name
-	case item.Kind == KindReviewRun && item.ReviewRun != nil:
-		return "review:" + item.ReviewRun.Meta.Ref.URL
-	case item.Kind == KindBragRun && item.BragRun != nil:
-		return "brag:" + item.BragRun.Meta.ID
-	case item.Kind == KindAutomationRun && item.AutomationRun != nil:
-		return automationNavKeyPrefix + item.AutomationRun.Meta.NoteID
-	case item.MyPR != nil:
-		return "mine:" + item.MyPR.Ref.URL
-	case item.PendingGitPR != nil:
-		return "pr:" + item.PendingGitPR.URL
-	case item.GitRepo != nil:
-		return "repo:" + item.GitRepo.Name
-	case item.Note != nil:
-		return fmt.Sprintf("note:%d:%s", item.Kind, item.Note.ID)
-	}
-	return ""
+	return kindHandlerFor(item.Kind).key(item)
 }
 
 func (m Model) selectedNavKey() (string, int) {
@@ -585,65 +506,48 @@ func (m *Model) updatePreviewViewport() {
 	if !found {
 		return
 	}
-
 	_, innerWidth, innerHeight := previewModalSize(m.width, m.height)
+	kindHandlerFor(item.Kind).preview(m, item, innerWidth, innerHeight)
+}
 
-	var mdContent string
-	if item.Kind == KindGitRepo {
-		commitsLine := ""
-		if m.cfg.DailyCommitsEnabled() {
-			commitsLine = fmt.Sprintf("- Commits: %d\n", item.GitRepo.Commits)
-		}
-		mdContent = renderMarkdown(fmt.Sprintf("# Repository Activity: %s\n%s- PRs Reviewed: %d\n- PRs Assigned: %d\n\nPress **[Tab]** on this repository item to view and open PRs directly in your browser.", item.GitRepo.Name, commitsLine, item.GitRepo.Reviewed, item.GitRepo.Assigned), innerWidth)
-	} else if item.Kind == KindPendingGit && item.PendingGitPR != nil {
-		m.setPRPreviewContent(item.PendingGitPR, innerWidth, innerHeight)
-		return
-	} else if item.Kind == KindJobDraft && item.Draft != nil {
-		m.refreshJobStates()
-		running := m.jobRunning(item.Draft.Name)
-		logText, isDryRunOutput := latestJobOutput(item.Draft.Name, m.jobDryRunOutputFor(item.Draft.Name))
-		m.previewJobLogFinished = logText != "" && !isDryRunOutput
-		if !running && item.Draft.DryRunInFlight {
-			mdContent = renderMarkdown(fmt.Sprintf("# Job: %s (DRY RUN IN PROGRESS)\n\nDry run in progress...", item.Draft.Name), innerWidth)
-		} else if logText != "" {
-			statusHeader := "FINISHED / LOG OUTPUT"
-			if running {
-				statusHeader = "LIVE EXECUTION LOG"
-			} else if isDryRunOutput {
-				statusHeader = "DRY RUN ANALYSIS"
-			}
-			mdContent = runPreview{heading: fmt.Sprintf("# Job: %s (%s)", item.Draft.Name, statusHeader), log: logText}.render(innerWidth)
-		} else {
-			keyGuide := "(r) run"
-			if jobHasDryRun(item.Draft.DryRunCommand) {
-				keyGuide = "(d) dry-run " + keyGuide
-			}
-			mdContent = renderMarkdown(fmt.Sprintf("# Job: %s\n\nNo dry-run analysis or log output available.\n%s", item.Draft.Name, keyGuide), innerWidth)
-		}
-	} else if item.Kind == KindReviewRun && item.ReviewRun != nil {
-		mdContent = reviewRunPreview(m.reviewRoot(), *item.ReviewRun).render(innerWidth)
-	} else if item.Kind == KindBragRun && item.BragRun != nil {
-		mdContent = bragRunPreview(m.bragRoot(), *item.BragRun).render(innerWidth)
-	} else if item.Kind == KindAutomationRun && item.AutomationRun != nil {
-		mdContent = m.automationRunPreview(*item.AutomationRun).render(innerWidth)
-	} else if item.Kind == KindMyPR && item.MyPR != nil {
-		mdContent = renderMarkdown(myPRDetailsMarkdown(*item.MyPR), innerWidth)
-	} else if item.Note != nil && m.onDraftTab() {
-		mdContent = renderMarkdown(m.draftTabMarkdown(item.Note), innerWidth)
-	} else if item.Note != nil {
-		fullText := fmt.Sprintf("# %s", item.Note.Summary)
-		if strings.TrimSpace(item.Note.Body) != "" {
-			fullText += fmt.Sprintf("\n\n%s", item.Note.Body)
-		}
-		mdContent = renderMarkdown(fullText, innerWidth)
-	}
-
+func (m *Model) setPreviewContent(item NavItem, mdContent string, innerWidth, innerHeight int) {
 	m.previewViewport = viewport.New(innerWidth, innerHeight)
 	m.previewViewport.SetContent(mdContent)
 	m.previewPlainText = plainText(mdContent)
-	if item.Kind == KindJobDraft || item.Kind == KindReviewRun || item.Kind == KindBragRun || item.Kind == KindAutomationRun {
+	if kindHandlerFor(item.Kind).followsLog {
 		m.previewViewport.GotoBottom()
 	}
+}
+
+func (m *Model) jobPreviewContent(draft *JobDraft, output jobOutput, width int) string {
+	running := m.jobRunning(draft.Name)
+	m.jobs.previewJobLogFinished = output.text != "" && !output.isDryRun
+	switch {
+	case !running && draft.DryRunInFlight:
+		return renderMarkdown(fmt.Sprintf("# Job: %s (DRY RUN IN PROGRESS)\n\nDry run in progress...", draft.Name), width)
+	case output.text != "":
+		statusHeader := "FINISHED / LOG OUTPUT"
+		if running {
+			statusHeader = "LIVE EXECUTION LOG"
+		} else if output.isDryRun {
+			statusHeader = "DRY RUN ANALYSIS"
+		}
+		return runPreview{heading: fmt.Sprintf("# Job: %s (%s)", draft.Name, statusHeader), log: output.text}.render(width)
+	}
+	keyGuide := "(r) run"
+	if jobHasDryRun(draft.DryRunCommand) {
+		keyGuide = "(d) dry-run " + keyGuide
+	}
+	return renderMarkdown(fmt.Sprintf("# Job: %s\n\nNo dry-run analysis or log output available.\n%s", draft.Name, keyGuide), width)
+}
+
+func (m *Model) showJobPreview(output jobOutput) {
+	item, found := m.selectedNavItem()
+	if !found || item.Kind != KindJobDraft || item.Draft == nil {
+		return
+	}
+	_, innerWidth, innerHeight := previewModalSize(m.width, m.height)
+	m.setPreviewContent(item, m.jobPreviewContent(item.Draft, output, innerWidth), innerWidth, innerHeight)
 }
 
 type runPreview struct {
@@ -666,11 +570,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return next, cmd
 	}
 	updated.clearScreenErrorOffScreen()
+	if updated.mode == ViewDashboard {
+		updated.modeStack = nil
+	}
 	if updated.scrollPending {
 		updated.settleScroll()
 	}
-	if updated.browsedNotes != nil && !updated.browsing() {
-		updated.browsedNotes = nil
+	if updated.notesUI.browsedNotes != nil && !updated.browsing() {
+		updated.notesUI.browsedNotes = nil
 		cmd = tea.Batch(cmd, updated.closedThisWeekCmd())
 	}
 	if updated.git.prAlertsDue {
@@ -740,8 +647,8 @@ func (m Model) handleMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		_, editorWidth, editorHeight := previewModalSize(msg.Width, msg.Height)
 		m.editor.SetWidth(editorWidth)
 		m.editor.SetHeight(editorHeight)
-		if m.mode == ViewInlineEdit && m.currentNote != nil {
-			m.inlineInput.Width = m.inlineEditWidth(m.currentNote)
+		if m.mode == ViewInlineEdit && m.notesUI.currentNote != nil {
+			m.notesUI.inlineInput.Width = m.inlineEditWidth(m.notesUI.currentNote)
 		}
 		m.updateScrollOffset()
 		if m.mode == ViewPreview {
@@ -811,7 +718,7 @@ func (m Model) openPreview(item NavItem) (tea.Model, tea.Cmd) {
 		return m, tea.Batch(cmds...)
 	}
 	if item.Kind == KindJobDraft && item.Draft != nil && m.jobRunning(item.Draft.Name) {
-		m.jobLogStamp = jobLogStampFor(item.Draft.Name, true)
+		m.jobs.jobLogStamp = jobLogStampFor(item.Draft.Name, true)
 		return m, m.ensureJobLogRefresh()
 	}
 	return m, nil

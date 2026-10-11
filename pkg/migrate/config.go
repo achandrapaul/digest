@@ -160,6 +160,29 @@ func migrateJanitorOptions(configPath string, out io.Writer, dryRun bool) error 
 	return nil
 }
 
+const retiredSyncIntervalKey = "git_auto_sync_interval"
+
+func migrateSyncInterval(configPath string, out io.Writer, dryRun bool) error {
+	document, root, err := loadConfigDocument(configPath)
+	if err != nil || root == nil {
+		return err
+	}
+	index, _ := mappingValue(root, retiredSyncIntervalKey)
+	if index < 0 {
+		return nil
+	}
+	if dryRun {
+		fmt.Fprintf(out, "would remove %s from %s\n", retiredSyncIntervalKey, configPath)
+		return nil
+	}
+	root.Content = append(root.Content[:index], root.Content[index+2:]...)
+	if err := saveConfigDocument(configPath, document); err != nil {
+		return err
+	}
+	fmt.Fprintf(out, "removed %s from %s\n", retiredSyncIntervalKey, configPath)
+	return nil
+}
+
 func templateAutomationNodes() ([]*yaml.Node, error) {
 	var template yaml.Node
 	if err := yaml.Unmarshal([]byte(config.DefaultConfigYAML), &template); err != nil {
@@ -182,21 +205,21 @@ func automationNodeName(automation *yaml.Node) string {
 	return ""
 }
 
-func migrateAutomations(configPath string, out io.Writer, dryRun bool) error {
+func migrateAutomations(configPath string, out io.Writer, dryRun, calendarOffered bool) (bool, error) {
 	document, root, err := loadConfigDocument(configPath)
 	if err != nil || root == nil {
-		return err
+		return false, err
 	}
 	_, automations := mappingValue(root, "automations")
 	if automations == nil {
-		return nil
+		return false, nil
 	}
 	if automations.Kind != yaml.SequenceNode {
-		return fmt.Errorf("parse %s: automations is not a list", configPath)
+		return false, fmt.Errorf("parse %s: automations is not a list", configPath)
 	}
 	templateNodes, err := templateAutomationNodes()
 	if err != nil {
-		return err
+		return false, err
 	}
 	templateTypes := map[string]string{}
 	var calendarTemplate *yaml.Node
@@ -233,7 +256,7 @@ func migrateAutomations(configPath string, out io.Writer, dryRun bool) error {
 		automation.Content = append(automation.Content[:nameIndex+2], append(typeEntry, automation.Content[nameIndex+2:]...)...)
 		typed = append(typed, name)
 	}
-	addCalendar := !hasCalendar && calendarTemplate != nil
+	addCalendar := !hasCalendar && !calendarOffered && calendarTemplate != nil
 	if addCalendar {
 		if prReviewIndex < 0 {
 			automations.Content = append(automations.Content, calendarTemplate)
@@ -242,14 +265,14 @@ func migrateAutomations(configPath string, out io.Writer, dryRun bool) error {
 		}
 	}
 	if len(typed) == 0 && !addCalendar {
-		return nil
+		return hasCalendar, nil
 	}
 
 	verb := "added"
 	if dryRun {
 		verb = "would add"
 	} else if err := saveConfigDocument(configPath, document); err != nil {
-		return err
+		return false, err
 	}
 	if len(typed) > 0 {
 		fmt.Fprintf(out, "%s automation_type to %s in %s\n", verb, strings.Join(typed, ", "), configPath)
@@ -257,7 +280,7 @@ func migrateAutomations(configPath string, out io.Writer, dryRun bool) error {
 	if addCalendar {
 		fmt.Fprintf(out, "%s the google calendar automation to %s\n", verb, configPath)
 	}
-	return nil
+	return hasCalendar || addCalendar, nil
 }
 
 var jobCommandKeys = []string{"command", "dry-run-command", "cmd", "dry_run_command"}

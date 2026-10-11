@@ -377,7 +377,7 @@ func (m Model) previewBindings() []keyBinding {
 	switch {
 	case item.Kind == KindPendingGit && item.PendingGitPR != nil:
 		return m.prPreviewBindings(item.PendingGitPR)
-	case item.Kind == KindReviewRun && item.ReviewRun != nil, item.Kind == KindBragRun && item.BragRun != nil, item.Kind == KindAutomationRun && item.AutomationRun != nil:
+	case backgroundRunFor(item) != nil:
 		return m.runPreviewBindings(item)
 	case item.Kind == KindMyPR && item.MyPR != nil:
 		return append([]keyBinding{
@@ -422,7 +422,7 @@ func (m Model) runPreviewBindings(item NavItem) []keyBinding {
 
 func (m Model) prPreviewBindings(item *GitPRItem) []keyBinding {
 	onReviewTab := m.previewTab == previewTabReview
-	hasFindings := onReviewTab && m.previewFindingsCount > 0
+	hasFindings := onReviewTab && m.review.previewFindingsCount > 0
 	bindings := append([]keyBinding{
 		newKeyBinding(actionSwitchPreviewTab, []string{"tab"}, "tab", "tabs"),
 	}, m.itemBindings(NavItem{Kind: KindPendingGit, PendingGitPR: item}, false)...)

@@ -107,8 +107,8 @@ func TestOOnAPRPreviewOpensTheCloneInTmux(t *testing.T) {
 	m, cloneDir := clonedPRModel(t)
 	next, cmd := m.Update(runes("o"))
 	m = next.(Model)
-	if m.reviewNotice != "Opening PR clone in nvim…" || cmd == nil {
-		t.Fatalf("notice %q cmd %v", m.reviewNotice, cmd != nil)
+	if m.review.reviewNotice != "Opening PR clone in nvim…" || cmd == nil {
+		t.Fatalf("notice %q cmd %v", m.review.reviewNotice, cmd != nil)
 	}
 	if len(*opened) != 0 {
 		t.Fatalf("tmux ran on the UI loop")
@@ -122,8 +122,8 @@ func TestOOnAPRPreviewOpensTheCloneInTmux(t *testing.T) {
 		t.Fatalf("opened = %+v", *opened)
 	}
 	m = update(m, ready)
-	if m.reviewNotice != "Opened clone in a new tmux window" {
-		t.Errorf("notice %q", m.reviewNotice)
+	if m.review.reviewNotice != "Opened clone in a new tmux window" {
+		t.Errorf("notice %q", m.review.reviewNotice)
 	}
 }
 
@@ -134,8 +134,8 @@ func TestOOutsideTmuxSaysSoAndOpensTheCloneFolder(t *testing.T) {
 	m, cloneDir := clonedPRModel(t)
 	next, cmd := m.Update(runes("o"))
 	m = next.(Model)
-	if cmd != nil || len(*opened) != 0 || m.reviewNotice != "Not inside tmux; cannot open a new nvim window" {
-		t.Errorf("notice %q opened %+v", m.reviewNotice, *opened)
+	if cmd != nil || len(*opened) != 0 || m.review.reviewNotice != "Not inside tmux; cannot open a new nvim window" {
+		t.Errorf("notice %q opened %+v", m.review.reviewNotice, *opened)
 	}
 	if len(*folders) != 1 || (*folders)[0] != cloneDir {
 		t.Errorf("preview should open the clone folder, opened %v", *folders)
@@ -155,8 +155,8 @@ func TestOWithoutACloneDoesNothing(t *testing.T) {
 	m := reviewTestModel(t)
 	next, cmd := m.Update(runes("o"))
 	m = next.(Model)
-	if cmd != nil || len(*opened) != 0 || m.reviewNotice != "" || m.mode != ViewPreview {
-		t.Errorf("o without a clone: notice %q opened %+v mode %v", m.reviewNotice, *opened, m.mode)
+	if cmd != nil || len(*opened) != 0 || m.review.reviewNotice != "" || m.mode != ViewPreview {
+		t.Errorf("o without a clone: notice %q opened %+v mode %v", m.review.reviewNotice, *opened, m.mode)
 	}
 	if footer := footerText(m.reviewFooterItems(m.currentPRItem())); strings.Contains(footer, "o nvim") {
 		t.Errorf("footer offers o without a clone: %s", footer)
@@ -173,7 +173,7 @@ func TestPRFooterOffersOOnceACloneExists(t *testing.T) {
 func TestOpenCloneErrorShowsInTheNotice(t *testing.T) {
 	m, _ := clonedPRModel(t)
 	m = update(m, reviewCloneReadyMsg{ref: m.currentPRItem().PR.Ref, err: os.ErrPermission})
-	if !strings.HasPrefix(m.reviewNotice, "Clone failed: ") {
-		t.Errorf("notice %q", m.reviewNotice)
+	if !strings.HasPrefix(m.review.reviewNotice, "Clone failed: ") {
+		t.Errorf("notice %q", m.review.reviewNotice)
 	}
 }

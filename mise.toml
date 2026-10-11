@@ -2,6 +2,7 @@
 go = "1.27.1"
 gotestsum = "1.13.0"
 semver = "3.4.0"
+staticcheck = "2026.2.1"
 
 [vars]
 project = "digest"
@@ -25,14 +26,22 @@ printf '\033[33m↑\033[0m version \033[2m%s\033[0m → \033[1m%s\033[0m\n' "$cu
 '''
 
 [tasks."release:level"]
-description = "Print the release level the commits since the last release call for (major, minor, patch or none)"
+description = "Print the release level the commits since the latest v* tag call for (major, minor, patch or none)"
 quiet = true
-run = "go run ./cmd/release level"
+run = '''
+set -eu
+git fetch --tags -q
+go run ./cmd/release level
+'''
 
 [tasks."release:notes"]
-description = "Add the current .version section to CHANGELOG.md from the commits since the last release, then print it"
+description = "Add the current .version section to CHANGELOG.md from the commits since the previous v* tag, then print it"
 quiet = true
-run = "go run ./cmd/release notes \"$(cat .version)\""
+run = '''
+set -eu
+git fetch --tags -q
+go run ./cmd/release notes "$(cat .version)"
+'''
 
 [tasks."release:commit"]
 description = "Bump .version, add its CHANGELOG.md section, commit as release:<level> and push; off main it also opens a PR"
@@ -41,7 +50,6 @@ usage = 'arg "[level]" default="patch" help="patch, minor or major" { choices "p
 run = '''
 set -eu
 release_level="$usage_level"
-git fetch --tags -q
 mise run bump "$release_level"
 mise run release:notes > /dev/null
 git add .version CHANGELOG.md
@@ -63,6 +71,21 @@ run = "gotestsum --format testname ./..."
 description = "Run go vet"
 quiet = true
 run = "go vet ./..."
+
+[tasks."test:race"]
+description = "Run tests with the race detector"
+quiet = true
+run = "go test -race ./..."
+
+[tasks.lint]
+description = "Run staticcheck"
+quiet = true
+run = "staticcheck ./..."
+
+[tasks."mod:check"]
+description = "Fail when go.mod or go.sum need go mod tidy"
+quiet = true
+run = "go mod tidy -diff"
 
 [tasks.build]
 description = "Build a dev {{vars.project}} into ~/.config/bin"

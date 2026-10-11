@@ -39,8 +39,8 @@ func reviewTabText(t *testing.T, m Model) string {
 }
 
 func withLocalReview(m Model, state localReviewState) Model {
-	m.localReviews = map[string]localReviewState{reviewStateDir(m): state}
-	m.reviewReports = &reviewReportMemo{}
+	m.review.localReviews = map[string]localReviewState{reviewStateDir(m): state}
+	m.review.reviewReports = &reviewReportMemo{}
 	return m
 }
 
@@ -58,7 +58,7 @@ func TestReviewTabWhileRunningShowsTheLogTail(t *testing.T) {
 		log.WriteString("log line " + string(rune('a'+line)) + "\n")
 	}
 	writeReviewStateFile(t, reviewStateDir(m), review.LogFile, log.String())
-	m = withLocalReview(m, localReviewState{status: review.RunRunning})
+	m = withLocalReview(m, localReviewState{status: review.RunRunning, logTail: readReviewLogTail(reviewStateDir(m))})
 	text := reviewTabText(t, m)
 	if !strings.Contains(text, "Claude is reviewing this PR in the background…") || !strings.Contains(text, "log line u") {
 		t.Fatalf("review tab:\n%s", text)
@@ -71,7 +71,7 @@ func TestReviewTabWhileRunningShowsTheLogTail(t *testing.T) {
 func TestReviewTabAfterAFailureOffersARetryWithTheLog(t *testing.T) {
 	m := reviewTestModel(t)
 	writeReviewStateFile(t, reviewStateDir(m), review.LogFile, "clone exploded\n")
-	m = withLocalReview(m, localReviewState{status: review.RunFailed})
+	m = withLocalReview(m, localReviewState{status: review.RunFailed, logTail: readReviewLogTail(reviewStateDir(m))})
 	text := reviewTabText(t, m)
 	if !strings.Contains(text, "Review failed. Press r to retry.") || !strings.Contains(text, "clone exploded") {
 		t.Fatalf("review tab:\n%s", text)
@@ -137,7 +137,7 @@ func TestDetailsTabShowsLastReviewMoreFilesAndLoading(t *testing.T) {
 	pr.MyLastReviewAt = time.Now().Add(-30 * time.Minute)
 	pr.Files = []string{"a.go", "b.go"}
 	pr.ChangedFiles = 5
-	m.historyRequested = map[string]bool{pr.Ref.URL: true}
+	m.review.historyRequested = map[string]bool{pr.Ref.URL: true}
 	details := m.renderDetailsMarkdown(m.currentPRItem())
 	for _, want := range []string{"**Your last review:** 30m ago", "- … and 3 more", "Loading…"} {
 		if !strings.Contains(details, want) {
@@ -149,12 +149,12 @@ func TestDetailsTabShowsLastReviewMoreFilesAndLoading(t *testing.T) {
 func TestDetailsTabListsHistoryAndHistoryFailures(t *testing.T) {
 	m := detailedPRModel(t)
 	url := m.currentPRItem().URL
-	m.contextCache = map[string]string{url: "abc123 first\ndef456 second"}
+	m.review.contextCache = map[string]string{url: "abc123 first\ndef456 second"}
 	details := m.renderDetailsMarkdown(m.currentPRItem())
 	if !strings.Contains(details, "- abc123 first\n- def456 second") {
 		t.Fatalf("details:\n%s", details)
 	}
-	m.contextCache[url] = historyFailurePrefix + "no origin"
+	m.review.contextCache[url] = historyFailurePrefix + "no origin"
 	if details := m.renderDetailsMarkdown(m.currentPRItem()); !strings.Contains(details, "Couldn't read history: no origin") {
 		t.Fatalf("details:\n%s", details)
 	}
@@ -233,15 +233,15 @@ func TestBrokenURLHelpersReturnEmptyResults(t *testing.T) {
 		t.Fatal("an empty ref should not open the confirm")
 	}
 	_, next, _ := m.beginConfirm(item, review.EventApprove, "")
-	if got := next.(Model); got.mode != ViewPreview || got.reviewNotice == "" {
-		t.Fatalf("beginConfirm mode %v notice %q", got.mode, got.reviewNotice)
+	if got := next.(Model); got.mode != ViewPreview || got.review.reviewNotice == "" {
+		t.Fatalf("beginConfirm mode %v notice %q", got.mode, got.review.reviewNotice)
 	}
 	_, next, _ = m.startReview(item)
-	if next.(Model).reviewNotice == "" {
+	if next.(Model).review.reviewNotice == "" {
 		t.Fatal("startReview should report the URL error")
 	}
 	_, next, _ = m.openClone(item)
-	if next.(Model).reviewNotice == "" {
+	if next.(Model).review.reviewNotice == "" {
 		t.Fatal("openClone should report the URL error")
 	}
 }
@@ -252,8 +252,9 @@ func TestStartReviewReportsABackgroundStartFailure(t *testing.T) {
 	t.Cleanup(func() { startBackground = previous })
 	m := reviewTestModel(t)
 	_, next, cmd := m.startReview(m.currentPRItem())
-	if next.(Model).reviewNotice != "cannot spawn" || cmd != nil {
-		t.Fatalf("notice %q", next.(Model).reviewNotice)
+	next, cmd = next.(Model).applyReviewStarted(cmd().(reviewStartedMsg))
+	if next.(Model).review.reviewNotice != "cannot spawn" || cmd != nil {
+		t.Fatalf("notice %q", next.(Model).review.reviewNotice)
 	}
 }
 
@@ -263,8 +264,8 @@ func TestOpenCloneWithoutASessionContextStillClones(t *testing.T) {
 	m, _ := clonedPRModel(t)
 	m.sessionCtx = nil
 	_, next, cmd := m.openClone(m.currentPRItem())
-	if next.(Model).reviewNotice != "Opening PR clone in nvim…" || cmd == nil {
-		t.Fatalf("notice %q", next.(Model).reviewNotice)
+	if next.(Model).review.reviewNotice != "Opening PR clone in nvim…" || cmd == nil {
+		t.Fatalf("notice %q", next.(Model).review.reviewNotice)
 	}
 }
 
@@ -278,7 +279,7 @@ func TestCloneReadyNoticesForEachOutcome(t *testing.T) {
 	}
 	for want, msg := range cases {
 		next, _ := m.handleCloneReady(msg)
-		if got := next.(Model).reviewNotice; got != want {
+		if got := next.(Model).review.reviewNotice; got != want {
 			t.Fatalf("notice = %q, want %q", got, want)
 		}
 	}
@@ -322,8 +323,8 @@ func TestOpenInNvimReportsTmuxOutputOnFailure(t *testing.T) {
 func TestReviewSubmittedNoticesAndFollowUps(t *testing.T) {
 	m := reviewTestModel(t)
 	next, cmd := m.handleReviewSubmitted(reviewSubmittedMsg{err: errors.New("403")})
-	if got := next.(Model); got.reviewNotice != "" || cmd != nil {
-		t.Fatalf("an error should clear the notice, got %q", got.reviewNotice)
+	if got := next.(Model); got.review.reviewNotice != "" || cmd != nil {
+		t.Fatalf("an error should clear the notice, got %q", got.review.reviewNotice)
 	}
 	pr := *m.currentPRItem().PR
 	for event, want := range map[review.Event]string{
@@ -331,14 +332,14 @@ func TestReviewSubmittedNoticesAndFollowUps(t *testing.T) {
 		review.EventComment:        "Comments posted ✓",
 	} {
 		next, cmd := m.handleReviewSubmitted(reviewSubmittedMsg{event: event, pr: pr})
-		if got := next.(Model); got.reviewNotice != want || cmd == nil {
-			t.Fatalf("notice = %q, want %q", got.reviewNotice, want)
+		if got := next.(Model); got.review.reviewNotice != want || cmd == nil {
+			t.Fatalf("notice = %q, want %q", got.review.reviewNotice, want)
 		}
 	}
 	m.mode = ViewDashboard
 	next, _ = m.handleReviewSubmitted(reviewSubmittedMsg{event: review.EventApprove})
-	if next.(Model).reviewNotice != "Approved ✓" {
-		t.Fatalf("notice = %q", next.(Model).reviewNotice)
+	if next.(Model).review.reviewNotice != "Approved ✓" {
+		t.Fatalf("notice = %q", next.(Model).review.reviewNotice)
 	}
 }
 
@@ -351,7 +352,7 @@ func TestReviewedHeadSHAUsesTheReviewedCommitWhenFindingsArePicked(t *testing.T)
 	if got := m.reviewedHeadSHA(queued); got != "sha" {
 		t.Fatalf("without picks = %q", got)
 	}
-	m.reviewSelected = map[int]bool{0: true}
+	m.review.reviewSelected = map[int]bool{0: true}
 	if got := m.reviewedHeadSHA(queued); got != "reviewed-sha" {
 		t.Fatalf("with picks = %q", got)
 	}
@@ -359,8 +360,8 @@ func TestReviewedHeadSHAUsesTheReviewedCommitWhenFindingsArePicked(t *testing.T)
 
 func TestReviewConfirmShowsTheComment(t *testing.T) {
 	m := reviewTestModel(t)
-	m.reviewEvent = review.EventComment
-	m.reviewBody = "please rename"
+	m.review.reviewEvent = review.EventComment
+	m.review.reviewBody = "please rename"
 	if text := stripANSI(m.renderReviewConfirm(80)); !strings.Contains(text, "Comment:") || !strings.Contains(text, "please rename") {
 		t.Fatalf("confirm:\n%s", text)
 	}
@@ -368,7 +369,7 @@ func TestReviewConfirmShowsTheComment(t *testing.T) {
 
 func TestRejectCommentPopupShowsTheHintAndNotice(t *testing.T) {
 	m := rejectCommentModel(t)
-	m.reviewNotice = "comment required"
+	m.review.reviewNotice = "comment required"
 	text := stripANSI(m.View())
 	for _, want := range []string{"REQUEST CHANGES", "No comments selected. Write a comment for the author.", "comment required"} {
 		if !strings.Contains(text, want) {
@@ -415,7 +416,7 @@ func TestLoadRecommendationIsEmptyWithoutAReport(t *testing.T) {
 func TestDoneReviewBuildsAMemoWhenNoneIsShared(t *testing.T) {
 	m := reviewTestModel(t)
 	m.refreshLocalReviews()
-	m.reviewReports = nil
+	m.review.reviewReports = nil
 	if memo, done := m.doneReview(reviewStateDir(m)); !done || memo.report == nil {
 		t.Fatalf("memo %+v done %v", memo, done)
 	}
@@ -424,16 +425,16 @@ func TestDoneReviewBuildsAMemoWhenNoneIsShared(t *testing.T) {
 func TestPreviewContentKeepsAMinimumHeightAndScrollsUpToTheCursor(t *testing.T) {
 	m := reviewTestModel(t)
 	m.previewTab = previewTabReview
-	m.reviewNotice = "notice"
+	m.review.reviewNotice = "notice"
 	m.setPRPreviewContent(m.currentPRItem(), 80, 4)
 	if m.previewViewport.Height != 3 {
 		t.Fatalf("height = %d", m.previewViewport.Height)
 	}
-	m.reviewNotice = ""
+	m.review.reviewNotice = ""
 	m.previewViewport = viewport.New(80, 3)
 	m.previewViewport.SetContent(strings.Repeat("line\n", 40))
 	m.previewViewport.SetYOffset(20)
-	m.reviewCursor = 0
+	m.review.reviewCursor = 0
 	m.setPRPreviewContent(m.currentPRItem(), 80, 5)
 	if m.previewViewport.YOffset >= 20 {
 		t.Fatalf("the view should scroll up to the cursor, offset = %d", m.previewViewport.YOffset)
@@ -488,7 +489,7 @@ func TestRelatedHistoryCmdSkipsAndCapsFiles(t *testing.T) {
 		return "", nil
 	}
 	t.Cleanup(func() { gitLogForFiles = previous })
-	m.historyRequested = nil
+	m.review.historyRequested = nil
 	cmd := m.relatedHistoryCmd(item)
 	if cmd == nil {
 		t.Fatal("expected a history command")
@@ -497,7 +498,7 @@ func TestRelatedHistoryCmdSkipsAndCapsFiles(t *testing.T) {
 	if len(requestedFiles) != 20 {
 		t.Fatalf("files = %d, want 20", len(requestedFiles))
 	}
-	m.contextCache = map[string]string{item.PR.Ref.URL: ""}
+	m.review.contextCache = map[string]string{item.PR.Ref.URL: ""}
 	if m.relatedHistoryCmd(item) != nil {
 		t.Fatal("cached history should not reload")
 	}
@@ -505,10 +506,10 @@ func TestRelatedHistoryCmdSkipsAndCapsFiles(t *testing.T) {
 
 func TestRelatedHistoryCreatesTheCacheAndRecordsFailures(t *testing.T) {
 	m := reviewTestModel(t)
-	m.contextCache = nil
+	m.review.contextCache = nil
 	url := m.currentPRItem().URL
 	next, _ := m.handleRelatedHistory(relatedHistoryMsg{url: url, err: errors.New("boom")})
-	if got := next.(Model).contextCache[url]; got != historyFailurePrefix+"boom" {
+	if got := next.(Model).review.contextCache[url]; got != historyFailurePrefix+"boom" {
 		t.Fatalf("cache = %q", got)
 	}
 }
@@ -524,7 +525,7 @@ func TestAfterGitSectionRefreshesThePreviewAndPollsRunningReviews(t *testing.T) 
 func TestPreviewStampCoversRunRows(t *testing.T) {
 	m := reviewTestModel(t)
 	m.mode = ViewDashboard
-	if m.previewStamp() != (previewStamp{}) {
+	if m.previewStamp(statPreviewLog(m.previewLogPath())) != (previewStamp{}) {
 		t.Fatal("outside the preview the stamp is empty")
 	}
 	if _, found := m.previewedLocalReview(); found {
@@ -554,5 +555,15 @@ func TestPollInBragViewReloadsTheBrag(t *testing.T) {
 	next, _ := m.handleReviewPoll(reviewPollSnapshot{})
 	if next.(Model).mode != ViewBragView {
 		t.Fatal("the brag view should stay open")
+	}
+}
+
+func TestLocalReviewsCarryTheLogTailOfAFailedReview(t *testing.T) {
+	m := reviewTestModel(t)
+	writeReviewStateFile(t, reviewStateDir(m), "review.exit", "1")
+	writeReviewStateFile(t, reviewStateDir(m), review.LogFile, "clone exploded\n")
+	states := readLocalReviews(m.reviewRoot(), []review.PRRef{m.currentPRItem().PR.Ref}, nil)
+	if state := states[reviewStateDir(m)]; state.status != review.RunFailed || !strings.Contains(state.logTail, "clone exploded") {
+		t.Fatalf("state = %+v", state)
 	}
 }

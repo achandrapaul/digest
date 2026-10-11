@@ -98,8 +98,8 @@ func TestStartupReadsOnlyDashboardNotes(t *testing.T) {
 		t.Errorf("startup notes = %q", got)
 	}
 	m, _ = applyNoteMessages(t, m, m.Init())
-	if got := loadedSummaries(m); !slices.Equal(got, []string{"active", "done yesterday"}) || m.browsedNotes != nil {
-		t.Errorf("startup should never load every note, notes = %q browsed = %d", got, len(m.browsedNotes))
+	if got := loadedSummaries(m); !slices.Equal(got, []string{"active", "done yesterday"}) || m.notesUI.browsedNotes != nil {
+		t.Errorf("startup should never load every note, notes = %q browsed = %d", got, len(m.notesUI.browsedNotes))
 	}
 }
 
@@ -109,8 +109,8 @@ func TestADashboardReloadKeepsTheNotesSearchIsShowing(t *testing.T) {
 	m, _ = applyNoteMessages(t, next.(Model), cmd)
 	partial := m.loadNotesCmd()
 	m = update(m, loadNotesMsg{notes: partial.(loadNotesMsg).notes[:1]})
-	if len(m.notes) != 1 || len(m.browsedNotes) != 4 {
-		t.Errorf("a dashboard reload should only replace the dashboard notes: %q browsed %d", loadedSummaries(m), len(m.browsedNotes))
+	if len(m.notes) != 1 || len(m.notesUI.browsedNotes) != 4 {
+		t.Errorf("a dashboard reload should only replace the dashboard notes: %q browsed %d", loadedSummaries(m), len(m.notesUI.browsedNotes))
 	}
 }
 
@@ -160,11 +160,11 @@ func TestDeletingRemovesTheNoteFromMemoryWithoutReloading(t *testing.T) {
 	next, cmd := m.openArchive(tea.KeyMsg{})
 	m, _ = applyNoteMessages(t, next.(Model), cmd)
 	archived := m.getArchivedNotes()[0]
-	m.deleteTargetNotes, m.deleteReturnMode, m.mode = []*model.Note{archived}, ViewArchived, ViewDeleteConfirm
+	m.notesUI.deleteTargetNotes, m.modeStack, m.mode = []*model.Note{archived}, []ViewMode{ViewArchived}, ViewDeleteConfirm
 	next, cmd = m.Update(runes("y"))
 	m = next.(Model)
 	m, _ = applyNoteMessages(t, m, cmd)
-	if slices.Contains(browsedSummaries(m), "archived") || len(m.browsedNotes) != 3 || len(m.notes) != 2 {
+	if slices.Contains(browsedSummaries(m), "archived") || len(m.notesUI.browsedNotes) != 3 || len(m.notes) != 2 {
 		t.Errorf("notes after delete = %q, archive list %q", loadedSummaries(m), browsedSummaries(m))
 	}
 	if _, err := os.Stat(archived.FilePath); !os.IsNotExist(err) {
@@ -298,7 +298,7 @@ func TestArchiveSearchAndBragLoadEveryNoteWhenOpened(t *testing.T) {
 		m := noteSaveModel(t, dashboardNotes(time.Now())...)
 		next, cmd := open(m)
 		m, _ = applyNoteMessages(t, next.(Model), cmd)
-		if len(m.browsedNotes) != 4 || !slices.Contains(browsedSummaries(m), "archived") {
+		if len(m.notesUI.browsedNotes) != 4 || !slices.Contains(browsedSummaries(m), "archived") {
 			t.Errorf("%s should load every note, got %q", name, browsedSummaries(m))
 		}
 	}

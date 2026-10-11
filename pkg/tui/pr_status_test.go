@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"maps"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,7 +12,7 @@ import (
 	"github.com/achandrapaul/digest/pkg/sourcecontrol"
 )
 
-func locallyReviewedItem(t *testing.T, m Model, number int, finishedAt time.Time, kind string, pr review.QueuedPR) GitPRItem {
+func locallyReviewedItem(t *testing.T, m *Model, number int, finishedAt time.Time, kind string, pr review.QueuedPR) GitPRItem {
 	t.Helper()
 	pr.Ref = prRef("console", number)
 	pr.CIState = "SUCCESS"
@@ -31,7 +32,16 @@ func locallyReviewedItem(t *testing.T, m Model, number int, finishedAt time.Time
 			t.Fatal(err)
 		}
 	}
+	cacheLocalReview(m, pr.Ref)
 	return sourcecontrol.NewPRItem(pr, kind)
+}
+
+func cacheLocalReview(m *Model, ref review.PRRef) {
+	m.review.localReviews = maps.Clone(m.review.localReviews)
+	if m.review.localReviews == nil {
+		m.review.localReviews = map[string]localReviewState{}
+	}
+	maps.Copy(m.review.localReviews, readLocalReviews(m.reviewRoot(), []review.PRRef{ref}, nil))
 }
 
 func TestPRStatusFollowsMyProgress(t *testing.T) {
@@ -58,7 +68,7 @@ func TestPRStatusFollowsMyProgress(t *testing.T) {
 		{"re-review with changes requested", time.Time{}, sourcecontrol.ReReviewKind, review.QueuedPR{MyLastReviewState: "CHANGES_REQUESTED", MyLastReviewAt: earlier}, review.StateChangesRequested},
 	}
 	for index, c := range cases {
-		item := locallyReviewedItem(t, m, 100+index, c.finishedAt, c.kind, c.pr)
+		item := locallyReviewedItem(t, &m, 100+index, c.finishedAt, c.kind, c.pr)
 		if got := m.prState(&item); got != c.want {
 			t.Errorf("%s: %s, want %s", c.name, got, c.want)
 		}
@@ -67,7 +77,7 @@ func TestPRStatusFollowsMyProgress(t *testing.T) {
 
 func TestPRStatusTagText(t *testing.T) {
 	m := selectionTestModel(t)
-	item := locallyReviewedItem(t, m, 200, time.Time{}, "Pending Review", review.QueuedPR{MyLastReviewState: "CHANGES_REQUESTED", MyLastReviewAt: time.Now()})
+	item := locallyReviewedItem(t, &m, 200, time.Time{}, "Pending Review", review.QueuedPR{MyLastReviewState: "CHANGES_REQUESTED", MyLastReviewAt: time.Now()})
 	if tag := m.renderPRTag(&item, false); !strings.Contains(tag, "Changes requested") {
 		t.Errorf("row tag = %q", tag)
 	}
@@ -113,6 +123,7 @@ func TestFailedLocalReviewThenMyGitHubReview(t *testing.T) {
 		if err := os.Chtimes(exitPath, failedAt, failedAt); err != nil {
 			t.Fatal(err)
 		}
+		cacheLocalReview(&m, pr.Ref)
 		item := sourcecontrol.NewPRItem(pr, "Pending Review")
 		if got := m.prState(&item); got != c.want {
 			t.Errorf("reviewed at %v: %s, want %s", c.reviewedAt, got, c.want)

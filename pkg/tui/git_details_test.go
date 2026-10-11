@@ -1,12 +1,12 @@
 package tui
 
 import (
+	"context"
 	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/achandrapaul/digest/pkg/review"
 	"github.com/achandrapaul/digest/pkg/sourcecontrol"
@@ -117,26 +117,11 @@ func TestMyPRNotesMessageOutcomes(t *testing.T) {
 	}
 }
 
-func TestAutoSyncTickWithGitOffDoesNothing(t *testing.T) {
-	m := syncTestModel(t)
-	off := false
-	m.cfg.ShowGit = &off
-	if _, cmd := m.Update(autoSyncTickMsg(time.Now())); cmd != nil {
-		t.Fatal("no sync should start with git off")
-	}
-	if autoSyncTickCmd(0) != nil {
-		t.Fatal("a zero interval should not tick")
-	}
-	if _, isTick := autoSyncTickCmd(1)().(autoSyncTickMsg); !isTick {
-		t.Fatal("the tick should produce an auto sync message")
-	}
-}
-
 func TestReviewSubmittedMessageReachesTheHandler(t *testing.T) {
 	m := reviewTestModel(t)
 	next, _ := m.Update(reviewSubmittedMsg{event: review.EventApprove})
-	if next.(Model).reviewNotice != "Approved ✓" {
-		t.Fatalf("notice = %q", next.(Model).reviewNotice)
+	if next.(Model).review.reviewNotice != "Approved ✓" {
+		t.Fatalf("notice = %q", next.(Model).review.reviewNotice)
 	}
 }
 
@@ -153,11 +138,11 @@ func TestConfirmReviewSubmitsThroughGh(t *testing.T) {
 	inputFile := filepath.Join(t.TempDir(), "input")
 	fakeGhOnPath(t, `case "$*" in *pulls/7/reviews*) cat > `+inputFile+`;; esac`)
 	m := reviewTestModel(t)
-	m.reviewEvent = review.EventApprove
+	m.review.reviewEvent = review.EventApprove
 	m.mode = ViewReviewConfirm
 	next, cmd := m.confirmReview(tea.KeyMsg{})
-	if next.(Model).reviewNotice != "Submitting to GitHub…" || cmd == nil {
-		t.Fatalf("notice %q", next.(Model).reviewNotice)
+	if next.(Model).review.reviewNotice != "Submitting to GitHub…" || cmd == nil {
+		t.Fatalf("notice %q", next.(Model).review.reviewNotice)
 	}
 	submitted, ok := cmd().(reviewSubmittedMsg)
 	if !ok || submitted.err != nil || submitted.event != review.EventApprove {
@@ -175,27 +160,27 @@ func TestConfirmReviewWithoutAPROrWithABadPayload(t *testing.T) {
 		t.Fatal("no PR means nothing to submit")
 	}
 	m.selected = 0
-	m.reviewEvent = review.EventComment
+	m.review.reviewEvent = review.EventComment
 	next, cmd := m.confirmReview(tea.KeyMsg{})
-	if cmd != nil || next.(Model).reviewNotice == "" {
-		t.Fatalf("a comment without picks should fail, notice %q", next.(Model).reviewNotice)
+	if cmd != nil || next.(Model).review.reviewNotice == "" {
+		t.Fatalf("a comment without picks should fail, notice %q", next.(Model).review.reviewNotice)
 	}
 }
 
 func TestConfirmReviewRunGuardsAndStopFailures(t *testing.T) {
 	m := reviewTestModel(t)
-	m.reviewRunAction = reviewActionStart
-	m.reviewRunTarget = review.PRRef{URL: "https://github.com/o/other/pull/1"}
-	m.reviewRunReturnMode = ViewPreview
+	m.review.reviewRunAction = reviewActionStart
+	m.review.reviewRunTarget = review.PRRef{URL: "https://github.com/o/other/pull/1"}
+	m.modeStack = []ViewMode{ViewPreview}
 	if _, cmd := m.confirmReviewRun(tea.KeyMsg{}); cmd != nil {
 		t.Fatal("a different PR should not start")
 	}
 	previous := stopReview
 	stopReview = func(string, review.PRRef) error { return errors.New("kill failed") }
 	t.Cleanup(func() { stopReview = previous })
-	m.reviewRunAction = reviewActionStop
+	m.review.reviewRunAction = reviewActionStop
 	next, _ := m.confirmReviewRun(tea.KeyMsg{})
-	if next.(Model).reviewNotice == "Review stopped" {
+	if next.(Model).review.reviewNotice == "Review stopped" {
 		t.Fatal("a failed stop should not report success")
 	}
 }
@@ -216,7 +201,7 @@ func TestPRKeysDoNothingWithoutAPR(t *testing.T) {
 			t.Fatalf("%s should do nothing", name)
 		}
 	}
-	m.rejectInput.SetValue("needs work")
+	m.review.rejectInput.SetValue("needs work")
 	if next, _ := m.submitRejectComment(tea.KeyMsg{}); next.(Model).mode != ViewPreview {
 		t.Fatal("a comment without a PR returns to the preview")
 	}
@@ -247,14 +232,6 @@ func TestFetchCommandsRunWithoutASessionContext(t *testing.T) {
 	}
 }
 
-func TestAutoSyncTickWithoutAnIntervalDoesNothing(t *testing.T) {
-	m := syncTestModel(t)
-	m.cfg.GitAutoSyncInterval = 0
-	if _, cmd := m.Update(autoSyncTickMsg(time.Now())); cmd != nil {
-		t.Fatal("no interval means no sync")
-	}
-}
-
 func TestRefreshCommitsWithDailyCommitsOffAndOutsideASync(t *testing.T) {
 	m := syncTestModel(t)
 	off := false
@@ -280,4 +257,25 @@ func TestScheduledDaySyncFiresAfterTheDelay(t *testing.T) {
 		}
 	}
 	t.Fatal("expected the day sync due message")
+}
+
+func TestGitFetchCmdStartsTheSyncOnlyWhenItRuns(t *testing.T) {
+	m := syncTestModel(t)
+	starts := 0
+	original := syncGitSections
+	syncGitSections = func(context.Context, sourcecontrol.SyncParams) <-chan sourcecontrol.Section {
+		starts++
+		sections := make(chan sourcecontrol.Section, 1)
+		sections <- sourcecontrol.Section{Pending: &sourcecontrol.PendingResult{}}
+		close(sections)
+		return sections
+	}
+	t.Cleanup(func() { syncGitSections = original })
+	cmd := m.gitFetchCmd()
+	if cmd == nil || starts != 0 {
+		t.Fatalf("building the command must not start the sync, starts %d", starts)
+	}
+	if _, isPending := cmd().(gitPendingMsg); !isPending || starts != 1 {
+		t.Fatalf("running the command should start the sync once, starts %d", starts)
+	}
 }

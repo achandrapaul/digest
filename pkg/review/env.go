@@ -3,6 +3,8 @@ package review
 import (
 	"os"
 	"strings"
+
+	"github.com/achandrapaul/digest/pkg/system"
 )
 
 var allowedEnvNames = map[string]bool{
@@ -24,12 +26,7 @@ var reviewEnvNames = map[string]bool{
 
 var reviewEnvPrefixes = []string{"ANTHROPIC_", "CLAUDE_"}
 
-var gitSafetyEnv = []string{
-	"GIT_CONFIG_COUNT=2",
-	"GIT_CONFIG_KEY_0=core.hooksPath", "GIT_CONFIG_VALUE_0=/dev/null",
-	"GIT_CONFIG_KEY_1=core.fsmonitor", "GIT_CONFIG_VALUE_1=false",
-	"GIT_TERMINAL_PROMPT=0", "CI=true",
-}
+var gitSafetyEnv = append(system.GitSafeEnv(), "GIT_TERMINAL_PROMPT=0", "CI=true")
 
 func allowlistedEnv(extraNames map[string]bool, extraPrefixes []string) []string {
 	var kept []string

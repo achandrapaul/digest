@@ -5,7 +5,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/achandrapaul/digest/pkg/config"
 	"github.com/achandrapaul/digest/pkg/model"
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -18,23 +17,23 @@ func TestClampingKeepsPopupSelectionsInRange(t *testing.T) {
 		t.Fatalf("git selection = %d", m.git.gitPopupSelected)
 	}
 	archive := openArchiveModel(t)
-	archive.archivedSelected = 99
+	archive.notesUI.archivedSelected = 99
 	archive.clampScreenSelection()
-	if archive.archivedSelected != 2 {
-		t.Fatalf("archive selection = %d", archive.archivedSelected)
+	if archive.notesUI.archivedSelected != 2 {
+		t.Fatalf("archive selection = %d", archive.notesUI.archivedSelected)
 	}
-	archive.archivedSelected = -2
+	archive.notesUI.archivedSelected = -2
 	archive.clampScreenSelection()
-	if archive.archivedSelected != 0 {
-		t.Fatalf("archive selection = %d", archive.archivedSelected)
+	if archive.notesUI.archivedSelected != 0 {
+		t.Fatalf("archive selection = %d", archive.notesUI.archivedSelected)
 	}
 }
 
 func TestRejectCommentBoxTakesTypedText(t *testing.T) {
 	m := rejectCommentModel(t)
 	m = press(t, m, runes("x"))
-	if m.rejectInput.Value() != "x" {
-		t.Fatalf("value = %q", m.rejectInput.Value())
+	if m.review.rejectInput.Value() != "x" {
+		t.Fatalf("value = %q", m.review.rejectInput.Value())
 	}
 }
 
@@ -91,12 +90,17 @@ func TestOpeningARepoRowShowsItsDetailsAndCopyTakesTheName(t *testing.T) {
 func TestRunningAJobThatFailsToStartShowsTheError(t *testing.T) {
 	tempDigestRoot(t)
 	m, _, _ := jobTestModel(t)
-	executeJobBackground = func(*config.Config, string) error { return errors.New("no shell") }
-	m.jobToExecute = "nightly"
-	m.deleteReturnMode = ViewDashboard
-	next, _ := m.confirmDelete(tea.KeyMsg{})
-	if latestMessageText(next.(Model)) != "no shell" {
-		t.Fatalf("message = %q", latestMessageText(next.(Model)))
+	startJobProcess = func(launch jobLaunch) error {
+		if launch.dryRun {
+			return nil
+		}
+		return errors.New("no shell")
+	}
+	m.jobs.jobToExecute = "nightly"
+	m.modeStack = []ViewMode{ViewDashboard}
+	next, cmd := m.confirmDelete(tea.KeyMsg{})
+	if settled := settleBackground(t, next.(Model), cmd); latestMessageText(settled) != "no shell" {
+		t.Fatalf("message = %q", latestMessageText(settled))
 	}
 }
 
@@ -104,8 +108,8 @@ func TestArchivingFromTheDashboardSavesTheNote(t *testing.T) {
 	m := noteSaveModel(t, dashboardNotes(time.Now())...)
 	selectNavKind(t, &m, KindCarriedNote)
 	note := m.allNavItems()[m.selected].Note
-	m.deleteTargetNotes = []*model.Note{note}
-	m.deleteReturnMode = ViewDashboard
+	m.notesUI.deleteTargetNotes = []*model.Note{note}
+	m.modeStack = []ViewMode{ViewDashboard}
 	if _, cmd := m.confirmDelete(tea.KeyMsg{}); cmd == nil || note.Status != model.StatusArchived {
 		t.Fatalf("status = %v", note.Status)
 	}
@@ -129,7 +133,7 @@ func TestSearchKeysWithoutResultsDoNothing(t *testing.T) {
 
 func TestDismissingAnErrorRefreshesTheArchive(t *testing.T) {
 	m := openArchiveModel(t)
-	m.errorReturnMode, m.mode = ViewArchived, ViewError
+	m.modeStack, m.mode = []ViewMode{ViewArchived}, ViewError
 	if next, _ := m.dismissError(tea.KeyMsg{}); next.(Model).mode != ViewArchived {
 		t.Fatalf("mode = %v", next.(Model).mode)
 	}

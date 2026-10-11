@@ -131,7 +131,7 @@ func actionEntries(section string, bindings []keyBinding, skip func(keyAction) b
 }
 
 func (m Model) helpEntries() []helpEntry {
-	switch m.helpReturnMode {
+	switch m.returnMode() {
 	case ViewPreview:
 		return actionEntries("PREVIEW", m.previewBindings(), func(action keyAction) bool { return action == actionOpenHelp })
 	}
@@ -145,14 +145,12 @@ func (m Model) helpEntries() []helpEntry {
 }
 
 func (m Model) openHelp(tea.KeyMsg) (tea.Model, tea.Cmd) {
-	m.helpReturnMode = m.mode
-	m.mode = ViewHelp
+	m.pushMode(ViewHelp)
 	return m, nil
 }
 
 func (m Model) closeHelp(tea.KeyMsg) (tea.Model, tea.Cmd) {
-	m.mode = m.helpReturnMode
-	m.helpReturnMode = ViewDashboard
+	m.mode = m.popMode()
 	return m, nil
 }
 

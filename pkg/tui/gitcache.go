@@ -33,7 +33,7 @@ type gitSyncCache struct {
 }
 
 var gitCachePath = func() string {
-	return filepath.Join(digestRoot, "cache", "git-sync.json")
+	return filepath.Join(currentDigestRoot(), "cache", "git-sync.json")
 }
 
 func toCachedItems(items []GitPRItem) []cachedGitItem {

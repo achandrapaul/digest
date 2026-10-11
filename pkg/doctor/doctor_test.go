@@ -186,3 +186,19 @@ func TestDoctorReportsGitRoots(t *testing.T) {
 		t.Errorf("roots with a repo should pass: %+v", roots)
 	}
 }
+
+func TestUnknownConfigKeysWarnWithoutFailing(t *testing.T) {
+	cfg := testConfig()
+	cfg.UnknownKeys = []string{"green_onyl", "show_tag"}
+	results := Check(cfg, fakeLookPath("git", "gh", "terminal-notifier", "pbcopy", "claude", "digest"))
+	result, found := resultFor(results, "config.yaml")
+	if !found || result.Warning != "unknown keys green_onyl, show_tag" {
+		t.Fatalf("config.yaml result = %+v, found %v", result, found)
+	}
+	if line := Format([]Result{result}); !strings.HasPrefix(line, "! config.yaml  unknown keys green_onyl, show_tag") {
+		t.Errorf("format = %q", line)
+	}
+	if _, found := resultFor(Check(testConfig(), fakeLookPath()), "config.yaml"); found {
+		t.Error("a config without unknown keys should not be listed")
+	}
+}

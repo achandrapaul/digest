@@ -32,8 +32,8 @@ func TestNewNoteIsSelectedAfterSave(t *testing.T) {
 	if !ok || item.Note == nil || item.Note.Summary != "Freshly added" {
 		t.Errorf("selected = %+v", item)
 	}
-	if m.selectAfterReload != "" {
-		t.Errorf("selection request not cleared: %q", m.selectAfterReload)
+	if m.notesUI.selectAfterReload != "" {
+		t.Errorf("selection request not cleared: %q", m.notesUI.selectAfterReload)
 	}
 }
 
@@ -46,17 +46,17 @@ func TestInlineEditScrollsToCursor(t *testing.T) {
 		}
 	}
 	m = press(t, m, runes("i"))
-	if m.inlineInput.Width <= 0 {
-		t.Fatalf("inline width not set: %d", m.inlineInput.Width)
+	if m.notesUI.inlineInput.Width <= 0 {
+		t.Fatalf("inline width not set: %d", m.notesUI.inlineInput.Width)
 	}
 	typed := strings.Repeat("x", 80) + "END"
 	m = press(t, m, runes(typed))
-	view := stripANSI(m.inlineInput.View())
+	view := stripANSI(m.notesUI.inlineInput.View())
 	if !strings.Contains(view, "END") {
 		t.Errorf("newest characters not visible: %q", view)
 	}
-	if visibleWidth := len([]rune(strings.TrimRight(view, " "))); visibleWidth > m.inlineInput.Width+1 {
-		t.Errorf("view wider than input: %d > %d", visibleWidth, m.inlineInput.Width)
+	if visibleWidth := len([]rune(strings.TrimRight(view, " "))); visibleWidth > m.notesUI.inlineInput.Width+1 {
+		t.Errorf("view wider than input: %d > %d", visibleWidth, m.notesUI.inlineInput.Width)
 	}
 	if body := strings.Join(plainLines(m.renderDashboardBody()), "\n"); !strings.Contains(body, "END") {
 		t.Errorf("dashboard row does not show the cursor end:\n%s", body)

@@ -58,7 +58,7 @@ func (m Model) firstNoteTime() time.Time {
 }
 
 func (m Model) bragYearExpanded(year int) bool {
-	if expanded, ok := m.bragExpanded[year]; ok {
+	if expanded, ok := m.brag.bragExpanded[year]; ok {
 		return expanded
 	}
 	return year == bragClock().Year()
@@ -105,12 +105,12 @@ type bragRowState struct {
 }
 
 func (m Model) bragRowStateFor(period brag.Period) bragRowState {
-	if state, cached := m.bragStates[period.ID()]; cached {
+	if state, cached := m.brag.bragStates[period.ID()]; cached {
 		return state
 	}
 	state := m.readBragRowState(period)
-	if m.bragStates != nil {
-		m.bragStates[period.ID()] = state
+	if m.brag.bragStates != nil {
+		m.brag.bragStates[period.ID()] = state
 	}
 	return state
 }
@@ -139,27 +139,27 @@ func (m Model) readBragRowState(period brag.Period) bragRowState {
 
 func (m Model) selectedBragRow() (bragRow, bool) {
 	rows := m.bragRows()
-	if m.bragSelected < 0 || m.bragSelected >= len(rows) {
+	if m.brag.bragSelected < 0 || m.brag.bragSelected >= len(rows) {
 		return bragRow{}, false
 	}
-	return rows[m.bragSelected], true
+	return rows[m.brag.bragSelected], true
 }
 
 func (m *Model) refreshBragRuns() {
-	m.bragStates = nil
+	m.brag.bragStates = nil
 	m.applyBragRuns(brag.ListRuns(m.bragRoot()))
 }
 
 func (m *Model) applyBragRuns(runs []brag.Run) {
-	unchanged := m.bragStates != nil && slices.EqualFunc(m.bragRuns, runs, func(previous, current brag.Run) bool {
+	unchanged := m.brag.bragStates != nil && slices.EqualFunc(m.brag.bragRuns, runs, func(previous, current brag.Run) bool {
 		return previous.Meta == current.Meta && previous.Status == current.Status && previous.StartedAt.Equal(current.StartedAt)
 	})
-	m.bragRuns = runs
+	m.brag.bragRuns = runs
 	if unchanged {
 		return
 	}
-	m.bragStates = make(map[string]bragRowState)
-	m.bragSaved = &bragSavedMemo{}
+	m.brag.bragStates = make(map[string]bragRowState)
+	m.brag.bragSaved = &bragSavedMemo{}
 }
 
 type bragSavedMemo struct {
@@ -168,17 +168,17 @@ type bragSavedMemo struct {
 }
 
 func (m Model) weekBragged(week brag.Week) bool {
-	if m.bragSaved == nil {
+	if m.brag.bragSaved == nil {
 		return brag.Exists(m.bragRoot(), week)
 	}
-	if !m.bragSaved.weekStart.Equal(week.Start) {
-		m.bragSaved.weekStart, m.bragSaved.saved = week.Start, brag.Exists(m.bragRoot(), week)
+	if !m.brag.bragSaved.weekStart.Equal(week.Start) {
+		m.brag.bragSaved.weekStart, m.brag.bragSaved.saved = week.Start, brag.Exists(m.bragRoot(), week)
 	}
-	return m.bragSaved.saved
+	return m.brag.bragSaved.saved
 }
 
 func (m Model) anyBragRunning() bool {
-	for _, run := range m.bragRuns {
+	for _, run := range m.brag.bragRuns {
 		if run.Status == brag.RunRunning {
 			return true
 		}
@@ -188,12 +188,12 @@ func (m Model) anyBragRunning() bool {
 
 func (m Model) openBrag(tea.KeyMsg) (tea.Model, tea.Cmd) {
 	m.mode = ViewBragList
-	m.bragNotice = ""
+	m.brag.bragNotice = ""
 	if m.unbraggedWeekNotice() != "" {
 		m.selectBragWeek(brag.WeekOf(bragClock()).Previous())
 	}
-	if rows := m.bragRows(); m.bragSelected >= len(rows) {
-		m.bragSelected = max(len(rows)-1, 0)
+	if rows := m.bragRows(); m.brag.bragSelected >= len(rows) {
+		m.brag.bragSelected = max(len(rows)-1, 0)
 	}
 	if m.appStateKnown && !m.appState.FirstNoteCreated.IsZero() {
 		return m, nil
@@ -203,16 +203,16 @@ func (m Model) openBrag(tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 func (m *Model) selectBragWeek(week brag.Week) {
 	if year := brag.MonthOfWeek(week).Start.Year(); !m.bragYearExpanded(year) {
-		expanded := maps.Clone(m.bragExpanded)
+		expanded := maps.Clone(m.brag.bragExpanded)
 		if expanded == nil {
 			expanded = map[int]bool{}
 		}
 		expanded[year] = true
-		m.bragExpanded = expanded
+		m.brag.bragExpanded = expanded
 	}
 	for index, row := range m.bragRows() {
 		if row.period != nil && row.period.ID() == week.ID() {
-			m.bragSelected = index
+			m.brag.bragSelected = index
 			return
 		}
 	}
@@ -220,20 +220,20 @@ func (m *Model) selectBragWeek(week brag.Week) {
 
 func (m Model) closeBrag(tea.KeyMsg) (tea.Model, tea.Cmd) {
 	m.mode = ViewDashboard
-	m.bragNotice = ""
+	m.brag.bragNotice = ""
 	return m, nil
 }
 
 func (m Model) bragCursorDown(tea.KeyMsg) (tea.Model, tea.Cmd) {
-	if m.bragSelected < len(m.bragRows())-1 {
-		m.bragSelected++
+	if m.brag.bragSelected < len(m.bragRows())-1 {
+		m.brag.bragSelected++
 	}
 	return m, nil
 }
 
 func (m Model) bragCursorUp(tea.KeyMsg) (tea.Model, tea.Cmd) {
-	if m.bragSelected > 0 {
-		m.bragSelected--
+	if m.brag.bragSelected > 0 {
+		m.brag.bragSelected--
 	}
 	return m, nil
 }
@@ -243,36 +243,36 @@ func (m Model) bragListEnter(tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if !ok {
 		return m, nil
 	}
-	m.bragNotice = ""
+	m.brag.bragNotice = ""
 	if row.period == nil {
-		expanded := make(map[int]bool, len(m.bragExpanded)+1)
-		for year, value := range m.bragExpanded {
+		expanded := make(map[int]bool, len(m.brag.bragExpanded)+1)
+		for year, value := range m.brag.bragExpanded {
 			expanded[year] = value
 		}
 		expanded[row.year] = !m.bragYearExpanded(row.year)
-		m.bragExpanded = expanded
+		m.brag.bragExpanded = expanded
 		return m, nil
 	}
 	root := m.bragRoot()
 	switch {
 	case brag.IsRunning(root, row.period.ID()):
-		m.bragNotice = fmt.Sprintf("Already bragging about %s — see Jobs", row.period.Label())
+		m.brag.bragNotice = fmt.Sprintf("Already bragging about %s — see Jobs", row.period.Label())
 		return m, nil
 	case brag.Exists(root, row.period):
 		if _, err := brag.Load(root, row.period); err != nil {
-			m.bragNotice = err.Error()
-			m.bragPeriod, m.bragRegenerate, m.bragConfirmReturn = row.period, false, ViewBragList
-			m.mode = ViewBragConfirm
+			m.brag.bragNotice = err.Error()
+			m.brag.bragPeriod, m.brag.bragRegenerate = row.period, false
+			m.pushMode(ViewBragConfirm)
 			return m, nil
 		}
 		return m.showBragView(row.period)
 	case !brag.Braggable(row.period, bragClock()):
 		_, end := row.period.Range()
-		m.bragNotice = fmt.Sprintf("%s isn't over yet — brag about it from %s", row.title(), end.Format("Mon 02 Jan"))
+		m.brag.bragNotice = fmt.Sprintf("%s isn't over yet — brag about it from %s", row.title(), end.Format("Mon 02 Jan"))
 		return m, nil
 	}
-	m.bragPeriod, m.bragRegenerate, m.bragConfirmReturn = row.period, false, ViewBragList
-	m.mode = ViewBragConfirm
+	m.brag.bragPeriod, m.brag.bragRegenerate = row.period, false
+	m.pushMode(ViewBragConfirm)
 	return m, nil
 }
 
@@ -281,36 +281,40 @@ func (m Model) bragModalSize() (int, int) {
 }
 
 func (m *Model) loadBragView() error {
-	entry, err := brag.Load(m.bragRoot(), m.bragPeriod)
+	entry, err := brag.Load(m.bragRoot(), m.brag.bragPeriod)
 	if err != nil {
 		return err
 	}
-	m.bragEntry = entry
+	m.showBragEntry(entry)
+	return nil
+}
+
+func (m *Model) showBragEntry(entry *brag.Brag) {
+	m.brag.bragEntry = entry
 	modalWidth, modalHeight := m.bragModalSize()
 	innerWidth := modalWidth - 6
 	content := renderMarkdown(entry.Body(), innerWidth)
 	m.previewViewport = viewport.New(innerWidth, max(3, modalHeight-10))
 	m.previewViewport.SetContent(content)
-	return nil
 }
 
 func (m *Model) reloadBragViewIfChanged() {
-	if m.bragPeriod == nil || m.bragEntry == nil {
+	if m.brag.bragPeriod == nil || m.brag.bragEntry == nil {
 		return
 	}
-	latest, err := brag.Load(m.bragRoot(), m.bragPeriod)
-	if err != nil || (latest.Updated.Equal(m.bragEntry.Updated) && latest.SummarizedAt.Equal(m.bragEntry.SummarizedAt)) {
+	latest, err := brag.Load(m.bragRoot(), m.brag.bragPeriod)
+	if err != nil || (latest.Updated.Equal(m.brag.bragEntry.Updated) && latest.SummarizedAt.Equal(m.brag.bragEntry.SummarizedAt)) {
 		return
 	}
 	if err := m.loadBragView(); err == nil {
-		m.bragNotice = "Summary updated"
+		m.brag.bragNotice = "Summary updated"
 	}
 }
 
 func (m Model) showBragView(period brag.Period) (tea.Model, tea.Cmd) {
-	m.bragPeriod = period
+	m.brag.bragPeriod = period
 	if err := m.loadBragView(); err != nil {
-		m.bragNotice = err.Error()
+		m.brag.bragNotice = err.Error()
 		return m, nil
 	}
 	m.mode = ViewBragView
@@ -319,46 +323,74 @@ func (m Model) showBragView(period brag.Period) (tea.Model, tea.Cmd) {
 
 func (m Model) closeBragView(tea.KeyMsg) (tea.Model, tea.Cmd) {
 	m.mode = ViewBragList
-	m.bragNotice = ""
+	m.brag.bragNotice = ""
 	return m, nil
 }
 
 func (m Model) editBrag(tea.KeyMsg) (tea.Model, tea.Cmd) {
-	if m.bragEntry == nil {
+	if m.brag.bragEntry == nil {
 		return m, nil
 	}
-	m.bragNotice = ""
+	m.brag.bragNotice = ""
 	m.mode = ViewBragEdit
-	m.replaceEditorText(m.bragEntry.Body())
+	m.replaceEditorText(m.brag.bragEntry.Body())
 	m.editor.Focus()
 	startEditorAtTop(m.editor)
 	return m, textarea.Blink
 }
 
 func (m Model) saveBragEdit(tea.KeyMsg) (tea.Model, tea.Cmd) {
-	parsed, err := brag.ParseBody(m.bragPeriod, m.editor.Value())
+	parsed, err := brag.ParseBody(m.brag.bragPeriod, m.editor.Value())
 	if err != nil {
-		m.bragNotice = err.Error()
+		m.brag.bragNotice = err.Error()
 		return m, nil
 	}
 	now := time.Now()
-	parsed.Created, parsed.SummarizedAt, parsed.Updated = m.bragEntry.Created, m.bragEntry.SummarizedAt, now
+	parsed.Created, parsed.SummarizedAt, parsed.Updated = m.brag.bragEntry.Created, m.brag.bragEntry.SummarizedAt, now
 	if parsed.Created.IsZero() {
 		parsed.Created = now
 	}
-	saveErr := parsed.Save(m.bragRoot())
-	if saveErr != nil && !errors.Is(saveErr, system.ErrLock) {
-		m.bragNotice = saveErr.Error()
+	if !m.beginLaunch(bragEditLaunchKey) {
+		return m, nil
+	}
+	root, edited := m.bragRoot(), *parsed
+	return m, func() tea.Msg {
+		msg := bragEditSavedMsg{period: edited.Period, saveErr: edited.Save(root)}
+		if msg.saveErr == nil || errors.Is(msg.saveErr, system.ErrLock) {
+			msg.entry, msg.loadErr = brag.Load(root, edited.Period)
+		}
+		return msg
+	}
+}
+
+const bragEditLaunchKey = "brag-edit"
+
+type bragEditSavedMsg struct {
+	period  brag.Period
+	saveErr error
+	entry   *brag.Brag
+	loadErr error
+}
+
+func (m Model) applyBragEditSaved(msg bragEditSavedMsg) (tea.Model, tea.Cmd) {
+	m.finishLaunch(bragEditLaunchKey)
+	if msg.saveErr != nil && !errors.Is(msg.saveErr, system.ErrLock) {
+		m.brag.bragNotice = msg.saveErr.Error()
+		return m, nil
+	}
+	if m.mode != ViewBragEdit || m.brag.bragPeriod.ID() != msg.period.ID() {
 		return m, nil
 	}
 	m.editor.Blur()
-	switch err := m.loadBragView(); {
-	case err != nil:
-		m.bragNotice = err.Error()
-	case saveErr != nil:
-		m.bragNotice = "Saved but not locked"
+	switch {
+	case msg.loadErr != nil:
+		m.brag.bragNotice = msg.loadErr.Error()
+	case msg.saveErr != nil:
+		m.showBragEntry(msg.entry)
+		m.brag.bragNotice = "Saved but not locked"
 	default:
-		m.bragNotice = "Saved"
+		m.showBragEntry(msg.entry)
+		m.brag.bragNotice = "Saved"
 	}
 	m.mode = ViewBragView
 	return m, nil
@@ -369,7 +401,7 @@ func (m Model) cancelBragEdit(tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.beginDiscardConfirm(), nil
 	}
 	m.editor.Blur()
-	m.bragNotice = ""
+	m.brag.bragNotice = ""
 	m.mode = ViewBragView
 	return m, nil
 }
@@ -380,39 +412,72 @@ func (m Model) copyBragEditor(tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) copyBrag(tea.KeyMsg) (tea.Model, tea.Cmd) {
-	if m.bragEntry != nil {
-		m.copyText(strings.TrimSpace(m.bragEntry.Body()))
+	if m.brag.bragEntry != nil {
+		m.copyText(strings.TrimSpace(m.brag.bragEntry.Body()))
 	}
 	return m, nil
 }
 
 func (m Model) bragAgain(tea.KeyMsg) (tea.Model, tea.Cmd) {
-	if brag.IsRunning(m.bragRoot(), m.bragPeriod.ID()) {
-		m.bragNotice = "Already bragging — see Jobs"
+	if brag.IsRunning(m.bragRoot(), m.brag.bragPeriod.ID()) {
+		m.brag.bragNotice = "Already bragging — see Jobs"
 		return m, nil
 	}
-	m.bragRegenerate, m.bragConfirmReturn = true, ViewBragView
-	m.mode = ViewBragConfirm
+	m.brag.bragRegenerate = true
+	m.pushMode(ViewBragConfirm)
 	return m, nil
 }
 
+type bragStartedMsg struct {
+	period brag.Period
+	retry  bool
+	err    error
+}
+
+func bragLaunchKey(period brag.Period) string {
+	return "brag:" + period.ID()
+}
+
+func (m *Model) startBragCmd(period brag.Period, regenerate, retry bool) tea.Cmd {
+	if !m.beginLaunch(bragLaunchKey(period)) {
+		return nil
+	}
+	root := m.bragRoot()
+	return func() tea.Msg {
+		return bragStartedMsg{period: period, retry: retry, err: startBragRun(root, period, regenerate)}
+	}
+}
+
 func (m Model) confirmBrag(tea.KeyMsg) (tea.Model, tea.Cmd) {
-	m.mode = m.bragConfirmReturn
-	if err := startBragRun(m.bragRoot(), m.bragPeriod, m.bragRegenerate); err != nil {
-		if errors.Is(err, brag.ErrBragRunning) {
-			m.bragNotice = "Already bragging — see Jobs"
+	m.mode = m.popMode()
+	return m, m.startBragCmd(m.brag.bragPeriod, m.brag.bragRegenerate, false)
+}
+
+func (m Model) applyBragStarted(msg bragStartedMsg) (tea.Model, tea.Cmd) {
+	m.finishLaunch(bragLaunchKey(msg.period))
+	if msg.retry {
+		if msg.err != nil {
+			m.showError("BRAG ERROR", msg.err)
+			return m, nil
+		}
+		m.refreshBragRuns()
+		return m.afterRetry()
+	}
+	if msg.err != nil {
+		if errors.Is(msg.err, brag.ErrBragRunning) {
+			m.brag.bragNotice = "Already bragging — see Jobs"
 		} else {
-			m.bragNotice = err.Error()
+			m.brag.bragNotice = msg.err.Error()
 		}
 		return m, nil
 	}
-	m.bragNotice = fmt.Sprintf("Bragging about %s in the background", m.bragPeriod.Label())
+	m.brag.bragNotice = fmt.Sprintf("Bragging about %s in the background", msg.period.Label())
 	m.refreshBragRuns()
 	return m, tea.Batch(m.ensureReviewPoll(), m.ensureSyncPulse())
 }
 
 func (m Model) cancelBrag(tea.KeyMsg) (tea.Model, tea.Cmd) {
-	m.mode = m.bragConfirmReturn
+	m.mode = m.popMode()
 	return m, nil
 }
 
@@ -488,17 +553,17 @@ func (m Model) renderBragList() string {
 	title := modalTitleStyle.Render(" BRAG ")
 	footer := renderModalFooter(footerItemsFrom(bragListBindings()), innerWidth)
 	below := []string{""}
-	if m.bragNotice != "" {
-		below = append(below, yellowBadgeStyle.Render(m.bragNotice), "")
+	if m.brag.bragNotice != "" {
+		below = append(below, yellowBadgeStyle.Render(m.brag.bragNotice), "")
 	}
 	below = append(below, footer)
 	fixed := lipgloss.Height(title) + 1 + lipgloss.Height(strings.Join(below, "\n"))
 	rowsAvailable := max(1, modalHeight-modalStyle.GetVerticalFrameSize()-fixed)
 	rows := m.bragRows()
-	first, last := visibleGitRows(m.bragSelected, len(rows), rowsAvailable)
+	first, last := visibleGitRows(m.brag.bragSelected, len(rows), rowsAvailable)
 	var lines []string
 	for index := first; index < last; index++ {
-		lines = append(lines, m.renderBragRow(rows[index], index == m.bragSelected, innerWidth))
+		lines = append(lines, m.renderBragRow(rows[index], index == m.brag.bragSelected, innerWidth))
 	}
 	for len(lines) < rowsAvailable {
 		lines = append(lines, "")
@@ -514,13 +579,13 @@ func (m Model) placeBragModal(content string, modalWidth int) string {
 func (m Model) renderBragView() string {
 	modalWidth, modalHeight := m.bragModalSize()
 	innerWidth := modalWidth - 6
-	title := modalTitleStyle.Render(fmt.Sprintf(" BRAG: %s ", strings.ToUpper(m.bragPeriod.Label())))
-	if m.bragRowStateFor(m.bragPeriod).label == "Bragging..." {
+	title := modalTitleStyle.Render(fmt.Sprintf(" BRAG: %s ", strings.ToUpper(m.brag.bragPeriod.Label())))
+	if m.bragRowStateFor(m.brag.bragPeriod).label == "Bragging..." {
 		title += "  " + m.renderPulseIndicator("Bragging...")
 	}
 	below := []string{""}
-	if m.bragNotice != "" {
-		below = append(below, yellowBadgeStyle.Render(m.bragNotice), "")
+	if m.brag.bragNotice != "" {
+		below = append(below, yellowBadgeStyle.Render(m.brag.bragNotice), "")
 	}
 	below = append(below, renderModalFooter(footerItemsFrom(bragViewBindings()), innerWidth))
 	fixed := lipgloss.Height(title) + 1 + lipgloss.Height(strings.Join(below, "\n"))
@@ -532,19 +597,19 @@ func (m Model) renderBragView() string {
 func (m Model) renderBragEdit() string {
 	modalWidth, _ := m.bragModalSize()
 	innerWidth := modalWidth - 6
-	title := modalTitleStyle.Render(fmt.Sprintf(" EDIT BRAG: %s ", strings.ToUpper(m.bragPeriod.Label())))
+	title := modalTitleStyle.Render(fmt.Sprintf(" EDIT BRAG: %s ", strings.ToUpper(m.brag.bragPeriod.Label())))
 	parts := []string{title, "", m.editorView(), ""}
-	if m.bragNotice != "" {
-		parts = append(parts, yellowBadgeStyle.Render(m.bragNotice), "")
+	if m.brag.bragNotice != "" {
+		parts = append(parts, yellowBadgeStyle.Render(m.brag.bragNotice), "")
 	}
 	parts = append(parts, renderModalFooter(footerItemsFrom(bragEditBindings()), innerWidth))
 	return m.placeBragModal(lipgloss.JoinVertical(lipgloss.Left, parts...), modalWidth)
 }
 
 func (m Model) renderBragConfirm(modalWidth int) string {
-	prompt := fmt.Sprintf("Brag about %s?\n\nFacts are collected and Claude writes the summary in the background.", m.bragPeriod.Label())
-	if m.bragRegenerate {
-		prompt = fmt.Sprintf("Brag again about %s?\n\nClaude rewrites only the summary from the saved facts.", m.bragPeriod.Label())
+	prompt := fmt.Sprintf("Brag about %s?\n\nFacts are collected and Claude writes the summary in the background.", m.brag.bragPeriod.Label())
+	if m.brag.bragRegenerate {
+		prompt = fmt.Sprintf("Brag again about %s?\n\nClaude rewrites only the summary from the saved facts.", m.brag.bragPeriod.Label())
 	}
 	content := lipgloss.JoinVertical(lipgloss.Left,
 		modalTitleStyle.Render(" BRAG "),

@@ -18,6 +18,7 @@ type Result struct {
 	Found    bool
 	Required bool
 	Note     string
+	Warning  string
 }
 
 var operatingSystem = runtime.GOOS
@@ -74,7 +75,11 @@ func Check(cfg *config.Config, lookPath func(string) (string, error)) []Result {
 		results = append(results, clipboard)
 	}
 	results = append(results, configuredResults(cfg, lookPath, results)...)
-	return append(results, pluginResults(cfg)...)
+	results = append(results, pluginResults(cfg)...)
+	if len(cfg.UnknownKeys) > 0 {
+		results = append(results, Result{Name: "config.yaml", Purpose: "typo, or a retired key digest migrate removes", Found: true, Warning: "unknown keys " + strings.Join(cfg.UnknownKeys, ", ")})
+	}
+	return results
 }
 
 func configuredCommands(cfg *config.Config) [][2]string {
@@ -169,6 +174,8 @@ func Format(results []Result) string {
 	for _, result := range results {
 		var mark, status string
 		switch {
+		case result.Warning != "":
+			mark, status = "!", result.Warning
 		case result.Note != "":
 			mark, status = "-", result.Note
 		case result.Found:

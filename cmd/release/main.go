@@ -32,7 +32,7 @@ func run(args []string) error {
 	}
 	switch args[0] {
 	case "level":
-		commits, err := commitsSinceLastRelease(".")
+		commits, err := commitsForRelease(".", "")
 		if err != nil {
 			return err
 		}
@@ -55,11 +55,11 @@ func writeNotes(repoDir, version string, out io.Writer) error {
 	}
 	changelog := string(existing)
 	if !strings.Contains(changelog, "\n## v"+version+" — ") {
-		commits, err := commitsSinceLastRelease(repoDir)
+		commits, err := commitsForRelease(repoDir, version)
 		if err != nil {
 			return err
 		}
-		changelog = release.Prepend(changelog, release.Changelog(version, time.Now().UTC(), repoURL, commits))
+		changelog = release.Prepend(changelog, release.Changelog(version, releaseDate(repoDir, version), repoURL, commits))
 		if err := system.WriteWithMode(changelogFile, []byte(changelog), 0o644); err != nil {
 			return err
 		}
@@ -68,36 +68,50 @@ func writeNotes(repoDir, version string, out io.Writer) error {
 	return err
 }
 
-var latestReleaseTag = githubReleaseTag
-
-func githubReleaseTag(repoDir string) string {
-	command := exec.Command("gh", "release", "view", "--json", "tagName", "--jq", ".tagName")
+func gitOutput(repoDir string, args ...string) (string, error) {
+	command := exec.Command("git", args...)
 	command.Dir = repoDir
-	output, _ := command.Output()
-	return strings.TrimSpace(string(output))
+	output, err := command.Output()
+	if err != nil {
+		return "", fmt.Errorf("git %s: %w", strings.Join(args, " "), err)
+	}
+	return strings.TrimSpace(string(output)), nil
 }
 
-func lastReleaseCommit(repoDir string) (string, bool) {
-	gitOutput := func(args ...string) string {
-		command := exec.Command("git", args...)
-		command.Dir = repoDir
-		output, _ := command.Output()
-		return strings.TrimSpace(string(output))
+func versionTags(repoDir string) []string {
+	output, err := gitOutput(repoDir, "tag", "--list", "v*", "--sort=-v:refname")
+	if err != nil || output == "" {
+		return nil
 	}
-	if releaseTag := latestReleaseTag(repoDir); releaseTag != "" {
-		if releaseCommit := gitOutput("rev-list", "-n", "1", "refs/tags/"+releaseTag); releaseCommit != "" {
-			return releaseCommit, true
+	return strings.Split(output, "\n")
+}
+
+func releaseRange(repoDir, version string) (string, string) {
+	from, tagged := release.PreviousTag(versionTags(repoDir), version)
+	if tagged {
+		return from, "v" + version
+	}
+	return from, "HEAD"
+}
+
+func releaseDate(repoDir, version string) time.Time {
+	if _, to := releaseRange(repoDir, version); to != "HEAD" {
+		if tagDate, err := gitOutput(repoDir, "log", "-1", "--format=%cI", to); err == nil {
+			if parsed, err := time.Parse(time.RFC3339, tagDate); err == nil {
+				return parsed.UTC()
+			}
 		}
 	}
-	releaseCommit := gitOutput("log", "-1", "--format=%H", "--", ".version")
-	return releaseCommit, releaseCommit != ""
+	return time.Now().UTC()
 }
 
-func commitsSinceLastRelease(repoDir string) ([]release.Commit, error) {
-	logArgs := []string{"log", "--format=%H%x1f%s%x1f%b%x1e"}
-	if releaseCommit, found := lastReleaseCommit(repoDir); found {
-		logArgs = append(logArgs, releaseCommit+"..HEAD")
+func commitsForRelease(repoDir, version string) ([]release.Commit, error) {
+	from, to := releaseRange(repoDir, version)
+	revisions := to
+	if from != "" {
+		revisions = from + ".." + to
 	}
+	logArgs := []string{"log", "--format=%H%x1f%s%x1f%b%x1e", revisions}
 	command := exec.Command("git", logArgs...)
 	command.Dir = repoDir
 	output, err := command.Output()

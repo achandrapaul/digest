@@ -3,9 +3,7 @@ package tui
 import (
 	"slices"
 
-	"github.com/achandrapaul/digest/pkg/brag"
 	"github.com/achandrapaul/digest/pkg/model"
-	"github.com/achandrapaul/digest/pkg/review"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -82,21 +80,14 @@ func (m Model) itemBindings(item NavItem, onDashboard bool) []keyBinding {
 }
 
 func (m Model) runStopLabel(item NavItem) string {
+	run := backgroundRunFor(item)
 	switch {
-	case item.Kind == KindReviewRun && item.ReviewRun != nil && item.ReviewRun.Status == review.RunRunning:
+	case run == nil:
+		return ""
+	case run.Running(m):
 		return "stop"
-	case item.Kind == KindReviewRun && item.ReviewRun != nil:
-		return "dismiss"
-	case item.Kind == KindBragRun && item.BragRun != nil && item.BragRun.Status == brag.RunRunning:
-		return "stop"
-	case item.Kind == KindBragRun && item.BragRun != nil:
-		return "dismiss"
-	case item.Kind == KindAutomationRun && item.AutomationRun != nil && m.automationJobRunning(item.AutomationRun):
-		return "stop"
-	case item.Kind == KindAutomationRun && item.AutomationRun != nil:
-		return "dismiss"
 	}
-	return ""
+	return "dismiss"
 }
 
 func (m Model) selectedItemBindings(onDashboard bool) []keyBinding {
@@ -136,24 +127,23 @@ func hiddenCopies(bindings []keyBinding) []keyBinding {
 }
 
 func (m Model) beginStopConfirm() Model {
-	m.deleteTargetNotes = nil
-	m.deleteReturnMode = m.mode
-	m.mode = ViewDeleteConfirm
+	m.notesUI.deleteTargetNotes = nil
+	m.pushMode(ViewDeleteConfirm)
 	return m
 }
 
 func (m *Model) clearPendingConfirms() {
-	m.jobToExecute = ""
-	m.jobToAbort = ""
+	m.jobs.jobToExecute = ""
+	m.jobs.jobToAbort = ""
 	m.bragRunToStop = nil
 	m.automationRunToStop = nil
-	m.jobRunStopsDryRun = false
-	m.jobDryRunToStart = ""
-	m.staleJobToClear = ""
+	m.jobs.jobRunStopsDryRun = false
+	m.jobs.jobDryRunToStart = ""
+	m.jobs.staleJobToClear = ""
 	m.runToRetry = nil
 	m.draftToDelete = ""
 	m.discardingEdit = false
-	m.jobConfirmError = ""
+	m.jobs.jobConfirmError = ""
 	m.confirmTitle, m.confirmPrompt = "", ""
 	m.restoreOnConfirm = false
 }
@@ -171,7 +161,7 @@ func (m Model) stopTargetName() string {
 func (m Model) confirmStopRun() (tea.Model, tea.Cmd) {
 	bragRun, automationRun := m.bragRunToStop, m.automationRunToStop
 	m.clearPendingConfirms()
-	m.mode = m.deleteReturnMode
+	m.mode = m.popMode()
 	if m.mode == ViewPreview {
 		m.updatePreviewViewport()
 	}

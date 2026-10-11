@@ -58,7 +58,7 @@ func (m Model) beginDiscardConfirm() Model {
 
 func (m Model) confirmDiscardEdit() (tea.Model, tea.Cmd) {
 	m.discardingEdit = false
-	m.mode = m.deleteReturnMode
+	m.mode = m.popMode()
 	m.editorStartText = m.editor.Value()
 	switch m.mode {
 	case ViewBragEdit:

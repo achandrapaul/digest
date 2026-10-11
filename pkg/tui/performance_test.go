@@ -75,22 +75,22 @@ func TestJobLogRefreshRunsOnceKeepsScrollAndStopsWhenTheJobEnds(t *testing.T) {
 	m := jobPreviewModel(t)
 	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	m = next.(Model)
-	if m.mode != ViewPreview || cmd == nil || !m.jobLogRunning {
+	if m.mode != ViewPreview || cmd == nil || !m.jobs.jobLogRunning {
 		t.Fatalf("opening a running job should start the log refresh: mode=%v", m.mode)
 	}
 	if m.ensureJobLogRefresh() != nil {
 		t.Error("a second start should not add another log loop")
 	}
 	m.previewViewport.SetYOffset(5)
-	m = update(m, jobLogTickMsg{})
+	m = update(m, m.loadJobLogTick())
 	if m.previewViewport.YOffset != 5 {
 		t.Errorf("an unchanged log should keep the scroll, offset=%d", m.previewViewport.YOffset)
 	}
 	if err := os.Remove(filepath.Join(getLogsDir(), "janitor.pid")); err != nil {
 		t.Fatal(err)
 	}
-	next, cmd = m.Update(jobLogTickMsg{})
-	if cmd != nil || next.(Model).jobLogRunning {
+	next, cmd = m.Update(m.loadJobLogTick())
+	if cmd != nil || next.(Model).jobs.jobLogRunning {
 		t.Error("the log refresh should stop once the job ends")
 	}
 }
@@ -117,8 +117,8 @@ func TestRunStatePollRunsAsOneLoop(t *testing.T) {
 	if m.ensureRunStatePoll() == nil || m.ensureRunStatePoll() != nil {
 		t.Fatal("the run state poll should start once")
 	}
-	next, cmd := m.Update(runStatePollTickMsg{})
-	if cmd != nil || next.(Model).runStatePolling {
+	next, cmd := m.Update(m.loadRunStatePoll())
+	if cmd != nil || next.(Model).jobs.runStatePolling {
 		t.Error("the poll should stop when no job or dry run is in flight")
 	}
 }

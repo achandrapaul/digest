@@ -28,11 +28,11 @@ func (m *Model) clampScreenSelection() {
 		}
 	case ViewArchived:
 		archivedNotes := m.getArchivedNotes()
-		if m.archivedSelected >= len(archivedNotes) && len(archivedNotes) > 0 {
-			m.archivedSelected = len(archivedNotes) - 1
+		if m.notesUI.archivedSelected >= len(archivedNotes) && len(archivedNotes) > 0 {
+			m.notesUI.archivedSelected = len(archivedNotes) - 1
 		}
-		if m.archivedSelected < 0 {
-			m.archivedSelected = 0
+		if m.notesUI.archivedSelected < 0 {
+			m.notesUI.archivedSelected = 0
 		}
 	}
 }
@@ -44,10 +44,10 @@ func (m Model) forwardUnboundKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		scrollViewport(&m.previewViewport, msg.String())
 		return m, nil
 	case ViewArchived:
-		scrollViewport(&m.archivedViewport, msg.String())
+		scrollViewport(&m.notesUI.archivedViewport, msg.String())
 		return m, nil
 	case ViewInlineEdit:
-		*m.inlineInput, cmd = m.inlineInput.Update(msg)
+		*m.notesUI.inlineInput, cmd = m.notesUI.inlineInput.Update(msg)
 		return m, cmd
 	case ViewEdit, ViewBragEdit, ViewAutomationEdit:
 		*m.editor, cmd = m.editor.Update(msg)
@@ -66,7 +66,7 @@ func (m Model) forwardUnboundKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, cmd
 	case ViewRejectComment:
-		*m.rejectInput, cmd = m.rejectInput.Update(msg)
+		*m.review.rejectInput, cmd = m.review.rejectInput.Update(msg)
 		return m, cmd
 	case ViewSetup:
 		if m.setup.saving {
@@ -76,11 +76,11 @@ func (m Model) forwardUnboundKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.setup.notice = ""
 		return m, cmd
 	case ViewNotifyInput:
-		if !notifyInputAccepts(m.notifyInput.Value(), msg) {
+		if !notifyInputAccepts(m.notesUI.notifyInput.Value(), msg) {
 			return m, nil
 		}
-		*m.notifyInput, cmd = m.notifyInput.Update(msg)
-		m.notifyNotice = ""
+		*m.notesUI.notifyInput, cmd = m.notesUI.notifyInput.Update(msg)
+		m.notesUI.notifyNotice = ""
 		return m, cmd
 	}
 	return m, nil
@@ -235,12 +235,12 @@ func (m Model) confirmDelete(tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return next, cmd
 	}
 
-	targets := m.deleteTargetNotes
-	returnMode := m.deleteReturnMode
+	targets := m.notesUI.deleteTargetNotes
+	returnMode := m.popMode()
 	restoring := m.restoreOnConfirm
 	m.clearPendingConfirms()
-	m.archivedSelectedMap = make(map[int]bool)
-	m.deleteTargetNotes = nil
+	m.notesUI.archivedSelectedMap = make(map[int]bool)
+	m.notesUI.deleteTargetNotes = nil
 	if restoring {
 		return m.restoreArchivedNotes(targets)
 	}
@@ -264,8 +264,8 @@ func (m Model) confirmDelete(tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) cancelDelete(tea.KeyMsg) (tea.Model, tea.Cmd) {
-	m.mode = m.deleteReturnMode
-	m.deleteTargetNotes = nil
+	m.mode = m.popMode()
+	m.notesUI.deleteTargetNotes = nil
 	m.clearPendingConfirms()
 	return m, nil
 }
@@ -439,7 +439,7 @@ func (m Model) searchHalfPageDown(tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) dismissError(tea.KeyMsg) (tea.Model, tea.Cmd) {
-	m.mode = m.errorReturnMode
+	m.mode = m.popMode()
 	m.errorTitle = ""
 	m.errorLines = nil
 	m.messageLogExpanded = false

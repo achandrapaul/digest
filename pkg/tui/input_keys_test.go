@@ -64,7 +64,7 @@ func TestSingleLineInputsKeepTextOnHalfPageKeys(t *testing.T) {
 	if got := m.searchInput.Value(); got != "hello" {
 		t.Errorf("search text = %q, want hello", got)
 	}
-	if m.inlineInput.KeyMap.DeleteBeforeCursor.Enabled() || m.notifyInput.KeyMap.DeleteBeforeCursor.Enabled() {
+	if m.notesUI.inlineInput.KeyMap.DeleteBeforeCursor.Enabled() || m.notesUI.notifyInput.KeyMap.DeleteBeforeCursor.Enabled() {
 		t.Errorf("inline and notify inputs should not delete on ctrl+u")
 	}
 	if newSetupInput().KeyMap.DeleteBeforeCursor.Enabled() {
@@ -127,7 +127,7 @@ func TestModalEditorsOpenAtTheTop(t *testing.T) {
 	assertEditorAtTop(t, "note", next.(Model), "first summary")
 
 	m = syncTestModel(t)
-	m.bragEntry = &brag.Brag{Period: brag.WeekOf(time.Now()), Facts: "- first fact\n" + longBody}
+	m.brag.bragEntry = &brag.Brag{Period: brag.WeekOf(time.Now()), Facts: "- first fact\n" + longBody}
 	next, _ = m.editBrag(tea.KeyMsg{})
 	assertEditorAtTop(t, "brag", next.(Model), "## Facts")
 }

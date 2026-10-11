@@ -39,10 +39,10 @@ func TestResizingWhileEditingInlineRefitsTheInput(t *testing.T) {
 	if m.mode != ViewInlineEdit {
 		t.Fatalf("mode = %v", m.mode)
 	}
-	before := m.inlineInput.Width
+	before := m.notesUI.inlineInput.Width
 	m = resize(m, m.width+40, m.height)
-	if m.inlineInput.Width != m.inlineEditWidth(m.currentNote) || m.inlineInput.Width == before {
-		t.Fatalf("inline width %d (was %d)", m.inlineInput.Width, before)
+	if m.notesUI.inlineInput.Width != m.inlineEditWidth(m.notesUI.currentNote) || m.notesUI.inlineInput.Width == before {
+		t.Fatalf("inline width %d (was %d)", m.notesUI.inlineInput.Width, before)
 	}
 }
 
@@ -115,7 +115,7 @@ func TestDaysAgoIsAtLeastOne(t *testing.T) {
 func TestInitStartsThePollsThatWereRunning(t *testing.T) {
 	m := syncTestModel(t)
 	m.git.syncOnLoad, m.git.loadingMyPRs = false, true
-	m.runStatePolling, m.reviewPolling = true, true
+	m.jobs.runStatePolling, m.reviewPolling = true, true
 	if m.Init() == nil {
 		t.Fatal("init should batch the polls")
 	}

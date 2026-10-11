@@ -67,8 +67,8 @@ func TestArchiveJAndKMoveAndClamp(t *testing.T) {
 		case "up":
 			msg = tea.KeyMsg{Type: tea.KeyUp}
 		}
-		if m = press(t, m, msg); m.archivedSelected != move.want || m.mode != ViewArchived {
-			t.Fatalf("after %s selected %d want %d mode %v", move.key, m.archivedSelected, move.want, m.mode)
+		if m = press(t, m, msg); m.notesUI.archivedSelected != move.want || m.mode != ViewArchived {
+			t.Fatalf("after %s selected %d want %d mode %v", move.key, m.notesUI.archivedSelected, move.want, m.mode)
 		}
 	}
 }
@@ -76,17 +76,17 @@ func TestArchiveJAndKMoveAndClamp(t *testing.T) {
 func TestArchiveSpaceTogglesTheHighlightedNote(t *testing.T) {
 	m := openArchiveModel(t)
 	m = press(t, m, tea.KeyMsg{Type: tea.KeySpace})
-	if !m.archivedSelectedMap[0] || len(m.archivedSelectedMap) != 1 {
-		t.Fatalf("space should select row 0: %v", m.archivedSelectedMap)
+	if !m.notesUI.archivedSelectedMap[0] || len(m.notesUI.archivedSelectedMap) != 1 {
+		t.Fatalf("space should select row 0: %v", m.notesUI.archivedSelectedMap)
 	}
 	m = press(t, m, runes("j"))
 	m = press(t, m, tea.KeyMsg{Type: tea.KeySpace})
-	if !m.archivedSelectedMap[0] || !m.archivedSelectedMap[1] {
-		t.Fatalf("space should add row 1: %v", m.archivedSelectedMap)
+	if !m.notesUI.archivedSelectedMap[0] || !m.notesUI.archivedSelectedMap[1] {
+		t.Fatalf("space should add row 1: %v", m.notesUI.archivedSelectedMap)
 	}
 	m = press(t, m, tea.KeyMsg{Type: tea.KeySpace})
-	if m.archivedSelectedMap[1] || !m.archivedSelectedMap[0] {
-		t.Errorf("second space should deselect row 1: %v", m.archivedSelectedMap)
+	if m.notesUI.archivedSelectedMap[1] || !m.notesUI.archivedSelectedMap[0] {
+		t.Errorf("second space should deselect row 1: %v", m.notesUI.archivedSelectedMap)
 	}
 }
 
@@ -140,8 +140,8 @@ func TestArchiveURestoresEverySelectedNoteAndClearsTheSelection(t *testing.T) {
 	m = press(t, m, runes("j"))
 	m = press(t, m, tea.KeyMsg{Type: tea.KeySpace})
 	m = confirmArchiveRestore(t, m, runes("u"))
-	if len(m.archivedSelectedMap) != 0 {
-		t.Errorf("selection kept: %v", m.archivedSelectedMap)
+	if len(m.notesUI.archivedSelectedMap) != 0 {
+		t.Errorf("selection kept: %v", m.notesUI.archivedSelectedMap)
 	}
 	if got := strings.Join(archivedSummaries(m), ","); got != "archived middle" {
 		t.Errorf("archive lists %s", got)
@@ -157,8 +157,8 @@ func TestArchiveDAsksThenDeletesTheFilesPermanently(t *testing.T) {
 	m := openArchiveModel(t)
 	target := m.getArchivedNotes()[0]
 	m = press(t, m, runes("d"))
-	if m.mode != ViewDeleteConfirm || len(m.deleteTargetNotes) != 1 || m.deleteTargetNotes[0] != target {
-		t.Fatalf("mode %v targets %v", m.mode, m.deleteTargetNotes)
+	if m.mode != ViewDeleteConfirm || len(m.notesUI.deleteTargetNotes) != 1 || m.notesUI.deleteTargetNotes[0] != target {
+		t.Fatalf("mode %v targets %v", m.mode, m.notesUI.deleteTargetNotes)
 	}
 	if !strings.Contains(strings.ToLower(stripANSI(m.View())), "delete") {
 		t.Errorf("confirm should mention the delete")
@@ -185,13 +185,13 @@ func TestArchiveDDeletesEverySelectedNote(t *testing.T) {
 	m = press(t, m, runes("j"))
 	m = press(t, m, tea.KeyMsg{Type: tea.KeySpace})
 	m = press(t, m, runes("d"))
-	if len(m.deleteTargetNotes) != 2 {
-		t.Fatalf("targets %d", len(m.deleteTargetNotes))
+	if len(m.notesUI.deleteTargetNotes) != 2 {
+		t.Fatalf("targets %d", len(m.notesUI.deleteTargetNotes))
 	}
 	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	m, _ = applyNoteMessages(t, next.(Model), cmd)
-	if got := strings.Join(archivedSummaries(m), ","); got != "archived oldest" || len(m.archivedSelectedMap) != 0 {
-		t.Errorf("archive lists %s selection %v", got, m.archivedSelectedMap)
+	if got := strings.Join(archivedSummaries(m), ","); got != "archived oldest" || len(m.notesUI.archivedSelectedMap) != 0 {
+		t.Errorf("archive lists %s selection %v", got, m.notesUI.archivedSelectedMap)
 	}
 }
 
@@ -200,10 +200,10 @@ func TestArchiveEscAndCtrlECloseAndClearTheSelection(t *testing.T) {
 		m := openArchiveModel(t)
 		m = press(t, m, tea.KeyMsg{Type: tea.KeySpace})
 		m = press(t, m, key)
-		if m.mode != ViewDashboard || len(m.archivedSelectedMap) != 0 {
-			t.Errorf("%s: mode %v selection %v", name, m.mode, m.archivedSelectedMap)
+		if m.mode != ViewDashboard || len(m.notesUI.archivedSelectedMap) != 0 {
+			t.Errorf("%s: mode %v selection %v", name, m.mode, m.notesUI.archivedSelectedMap)
 		}
-		if m.browsedNotes != nil {
+		if m.notesUI.browsedNotes != nil {
 			t.Errorf("%s: closing should drop the archive's notes", name)
 		}
 		next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlE})
@@ -218,7 +218,7 @@ func TestArchiveOnEmptyArchiveIgnoresActionKeys(t *testing.T) {
 	m := noteSaveModel(t)
 	m = press(t, m, tea.KeyMsg{Type: tea.KeyCtrlE})
 	for _, key := range []tea.KeyMsg{{Type: tea.KeySpace}, runes("u"), runes("d"), runes("j")} {
-		if m = press(t, m, key); m.mode != ViewArchived || len(m.archivedSelectedMap) != 0 || m.archivedSelected != 0 {
+		if m = press(t, m, key); m.mode != ViewArchived || len(m.notesUI.archivedSelectedMap) != 0 || m.notesUI.archivedSelected != 0 {
 			t.Errorf("%s on empty archive: mode %v", key.String(), m.mode)
 		}
 	}

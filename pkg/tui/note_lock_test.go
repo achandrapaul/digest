@@ -70,7 +70,7 @@ func TestUnlockFailureKeepsTheEditSoSavingAgainRetries(t *testing.T) {
 		t.Fatalf("nothing should be written while unlocking fails: %+v", onDisk)
 	}
 	restore()
-	m = editAndSave(t, m, active, "active\n\n"+active.Body)
+	editAndSave(t, m, active, "active\n\n"+active.Body)
 	if onDisk, _ := store.Load(active.FilePath); onDisk == nil || onDisk.Body != "typed while locked" {
 		t.Errorf("saving again should write the kept edit: %+v", onDisk)
 	}
@@ -88,7 +88,7 @@ func TestLockFailureSavesAndWarns(t *testing.T) {
 		t.Fatalf("the note should be saved: %+v", onDisk)
 	}
 	restore()
-	m = editAndSave(t, m, active, "active\n\nsaved locked")
+	editAndSave(t, m, active, "active\n\nsaved locked")
 	var stat unix.Stat_t
 	if err := unix.Lstat(active.FilePath, &stat); err != nil || stat.Flags&unix.UF_IMMUTABLE == 0 {
 		t.Errorf("the next save should lock the note again: %v %#x", err, stat.Flags)

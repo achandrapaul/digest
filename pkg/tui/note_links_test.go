@@ -59,8 +59,8 @@ func TestOWithOneLinkOpensItDirectly(t *testing.T) {
 func TestOWithSeveralLinksOpensTheLinkMenu(t *testing.T) {
 	opened := stubOpenURL(t)
 	m := pressO(t, noteWithBody(t, docsLink+"\n"+pullLink))
-	if m.mode != ViewLinkMenu || !slices.Equal(m.linkMenuItems, []string{docsLink, pullLink}) || len(*opened) != 0 {
-		t.Errorf("mode=%v items=%v opened=%v", m.mode, m.linkMenuItems, *opened)
+	if m.mode != ViewLinkMenu || !slices.Equal(m.notesUI.linkMenuItems, []string{docsLink, pullLink}) || len(*opened) != 0 {
+		t.Errorf("mode=%v items=%v opened=%v", m.mode, m.notesUI.linkMenuItems, *opened)
 	}
 }
 
@@ -70,7 +70,7 @@ func TestLinkMenuOpensTheChosenLinkAndReturns(t *testing.T) {
 	m.mode = ViewPreview
 	m.updatePreviewViewport()
 	m = pressO(t, m)
-	for _, key := range []rune("jjk") {
+	for _, key := range "jjk" {
 		m = press(t, m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{key}})
 	}
 	m = press(t, m, tea.KeyMsg{Type: tea.KeyEnter})

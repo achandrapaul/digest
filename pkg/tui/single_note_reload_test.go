@@ -116,7 +116,7 @@ func TestCreatedAutomationReloadsOnlyItsNote(t *testing.T) {
 		t.Fatal(err)
 	}
 	meta := automation.RunMeta{NoteID: note.ID, Automation: "jira", Phase: automation.PhaseCreate}
-	m.automationRuns = map[string]automation.Run{note.ID: {Meta: meta, Status: automation.RunRunning, HasDraft: true}}
+	m.automation.automationRuns = map[string]automation.Run{note.ID: {Meta: meta, Status: automation.RunRunning, HasDraft: true}}
 	_, cmd := m.handleReviewPoll(reviewPollSnapshot{automationRuns: map[string]automation.Run{note.ID: {Meta: meta, Status: automation.RunCreated}}})
 	var changed *notesChangedMsg
 	for _, msg := range collectMsgs(cmd) {

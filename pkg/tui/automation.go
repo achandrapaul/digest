@@ -45,7 +45,7 @@ func (m Model) automatedKindKnown(kind string) bool {
 }
 
 func (m Model) automationTag(n *model.Note) string {
-	if run, tracked := m.automationRuns[n.ID]; tracked && run.Status != automation.RunCreated {
+	if run, tracked := m.automation.automationRuns[n.ID]; tracked && run.Status != automation.RunCreated {
 		switch run.Status {
 		case automation.RunRunning:
 			return yellowBadgeStyle.Render("#draft")
@@ -72,7 +72,7 @@ func (m Model) noteRun(n *model.Note) (automation.Run, bool) {
 	if n == nil {
 		return automation.Run{}, false
 	}
-	run, tracked := m.automationRuns[n.ID]
+	run, tracked := m.automation.automationRuns[n.ID]
 	return run, tracked && run.Status != automation.RunCreated
 }
 
@@ -128,7 +128,7 @@ func (m Model) canDeleteDraft() bool {
 }
 
 func (m Model) anyAutomationRunning() bool {
-	for _, run := range m.automationRuns {
+	for _, run := range m.automation.automationRuns {
 		if run.Status == automation.RunRunning {
 			return true
 		}
@@ -146,9 +146,8 @@ func (m Model) runAutomationDraft(tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) askAutomationConfirm(noteID, automationName string, phase automation.Phase) Model {
-	m.automationNoteID, m.automationName, m.automationPhase = noteID, automationName, phase
-	m.automationReturnMode = ViewPreview
-	m.mode = ViewAutomationConfirm
+	m.automation.automationNoteID, m.automation.automationName, m.automation.automationPhase = noteID, automationName, phase
+	m.pushMode(ViewAutomationConfirm)
 	return m
 }
 
@@ -175,23 +174,40 @@ func (m *Model) clearAutomationError() {
 	}
 }
 
+type automationStartedMsg struct {
+	meta automation.RunMeta
+	err  error
+}
+
 func (m Model) confirmAutomation(tea.KeyMsg) (tea.Model, tea.Cmd) {
-	m.mode = m.automationReturnMode
-	if err := startAutomation(m.automationRoot(), m.automationNoteID, m.automationName, m.automationPhase); err != nil {
-		m.showAutomationError(err)
+	m.mode = m.popMode()
+	meta := automation.RunMeta{NoteID: m.automation.automationNoteID, Automation: m.automation.automationName, Phase: m.automation.automationPhase}
+	if !m.beginLaunch(automationNavKeyPrefix + meta.NoteID) {
+		return m, nil
+	}
+	root := m.automationRoot()
+	return m, func() tea.Msg {
+		return automationStartedMsg{meta: meta, err: startAutomation(root, meta.NoteID, meta.Automation, meta.Phase)}
+	}
+}
+
+func (m Model) applyAutomationStarted(msg automationStartedMsg) (tea.Model, tea.Cmd) {
+	m.finishLaunch(automationNavKeyPrefix + msg.meta.NoteID)
+	if msg.err != nil {
+		m.showAutomationError(msg.err)
 		if m.mode == ViewPreview {
 			m.updatePreviewViewport()
 		}
 		return m, nil
 	}
 	m.clearAutomationError()
-	runs := maps.Clone(m.automationRuns)
+	runs := maps.Clone(m.automation.automationRuns)
 	if runs == nil {
 		runs = map[string]automation.Run{}
 	}
-	hasDraft := m.automationPhase == automation.PhaseCreate
-	runs[m.automationNoteID] = automation.Run{Meta: automation.RunMeta{NoteID: m.automationNoteID, Automation: m.automationName, Phase: m.automationPhase}, Status: automation.RunRunning, HasDraft: hasDraft}
-	m.automationRuns = runs
+	hasDraft := msg.meta.Phase == automation.PhaseCreate
+	runs[msg.meta.NoteID] = automation.Run{Meta: msg.meta, Status: automation.RunRunning, HasDraft: hasDraft}
+	m.automation.automationRuns = runs
 	if m.mode != ViewPreview {
 		return m, m.ensureReviewPoll()
 	}
@@ -202,7 +218,7 @@ func (m Model) confirmAutomation(tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) cancelAutomation(tea.KeyMsg) (tea.Model, tea.Cmd) {
-	m.mode = m.automationReturnMode
+	m.mode = m.popMode()
 	return m, nil
 }
 
@@ -212,14 +228,14 @@ func (m *Model) applyAutomationRuns(runs map[string]automation.Run) tea.Cmd {
 	if runs == nil {
 		runs = map[string]automation.Run{}
 	}
-	for noteID, previous := range m.automationRuns {
+	for noteID, previous := range m.automation.automationRuns {
 		if _, listed := runs[noteID]; !listed && previous.Status == automation.RunRunning {
 			runs[noteID] = previous
 		}
 	}
-	changed := len(runs) != len(m.automationRuns)
+	changed := len(runs) != len(m.automation.automationRuns)
 	for noteID, run := range runs {
-		previous, tracked := m.automationRuns[noteID]
+		previous, tracked := m.automation.automationRuns[noteID]
 		changed = changed || !tracked || previous != run
 		finished := tracked && previous.Status == automation.RunRunning && run.Status != automation.RunRunning
 		switch {
@@ -235,7 +251,7 @@ func (m *Model) applyAutomationRuns(runs map[string]automation.Run) tea.Cmd {
 			m.showError("AUTOMATION FAILED", errors.New(m.automationFailure(noteID)))
 		}
 	}
-	m.automationRuns = runs
+	m.automation.automationRuns = runs
 	if changed {
 		m.restoreSelection(selectedKey, selectedOccurrence)
 		if currentKey, _ := m.selectedNavKey(); m.mode == ViewPreview && strings.HasPrefix(selectedKey, automationNavKeyPrefix) && currentKey != selectedKey {
@@ -375,9 +391,9 @@ func (m Model) deleteDraft(noteID string) (tea.Model, tea.Cmd) {
 		m.showError(automationErrorTitle, err)
 		return m, nil
 	}
-	runs := maps.Clone(m.automationRuns)
+	runs := maps.Clone(m.automation.automationRuns)
 	delete(runs, noteID)
-	m.automationRuns = runs
+	m.automation.automationRuns = runs
 	m.previewTab = previewTabDetails
 	return m.refreshPreview(), nil
 }
@@ -393,7 +409,7 @@ func (m Model) editAutomationDraft(tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	run, _ := m.noteRun(note)
-	m.automationNoteID, m.automationName, m.automationNotice = note.ID, run.Meta.Automation, ""
+	m.automation.automationNoteID, m.automation.automationName, m.automation.automationNotice = note.ID, run.Meta.Automation, ""
 	m.replaceEditorText(draft)
 	m.editor.Focus()
 	startEditorAtTop(m.editor)
@@ -401,13 +417,34 @@ func (m Model) editAutomationDraft(tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, textarea.Blink
 }
 
+type automationDraftSavedMsg struct {
+	noteID string
+	err    error
+}
+
+const automationDraftLaunchKey = "automation-draft"
+
 func (m Model) saveAutomationEdit(tea.KeyMsg) (tea.Model, tea.Cmd) {
-	if err := automation.SaveDraft(m.automationRoot(), m.automationNoteID, m.editor.Value()); err != nil {
-		m.automationNotice = err.Error()
-		m.showAutomationError(err)
+	if !m.beginLaunch(automationDraftLaunchKey) {
+		return m, nil
+	}
+	root, noteID, draft := m.automationRoot(), m.automation.automationNoteID, m.editor.Value()
+	return m, func() tea.Msg {
+		return automationDraftSavedMsg{noteID: noteID, err: automation.SaveDraft(root, noteID, draft)}
+	}
+}
+
+func (m Model) applyAutomationDraftSaved(msg automationDraftSavedMsg) (tea.Model, tea.Cmd) {
+	m.finishLaunch(automationDraftLaunchKey)
+	if msg.err != nil {
+		m.automation.automationNotice = msg.err.Error()
+		m.showAutomationError(msg.err)
 		return m, nil
 	}
 	m.clearAutomationError()
+	if m.mode != ViewAutomationEdit || m.automation.automationNoteID != msg.noteID {
+		return m, nil
+	}
 	m.editor.Blur()
 	m.mode = ViewPreview
 	return m.refreshPreview(), nil
@@ -418,18 +455,18 @@ func (m Model) cancelAutomationEdit(tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.beginDiscardConfirm(), nil
 	}
 	m.editor.Blur()
-	m.automationNotice = ""
+	m.automation.automationNotice = ""
 	m.mode = ViewPreview
 	return m, nil
 }
 
 func (m Model) renderAutomationConfirm(modalWidth int) string {
-	prompt := fmt.Sprintf("Draft %s for this note?\n\nClaude writes the draft in the background.", m.automationName)
-	if run, tracked := m.automationRuns[m.automationNoteID]; tracked && run.HasDraft && m.automationPhase == automation.PhaseDraft {
+	prompt := fmt.Sprintf("Draft %s for this note?\n\nClaude writes the draft in the background.", m.automation.automationName)
+	if run, tracked := m.automation.automationRuns[m.automation.automationNoteID]; tracked && run.HasDraft && m.automation.automationPhase == automation.PhaseDraft {
 		prompt += "\nThis replaces the current draft."
 	}
-	if m.automationPhase == automation.PhaseCreate {
-		prompt = fmt.Sprintf("Run %s with this draft?\n\nClaude creates it in the background.", m.automationName)
+	if m.automation.automationPhase == automation.PhaseCreate {
+		prompt = fmt.Sprintf("Run %s with this draft?\n\nClaude creates it in the background.", m.automation.automationName)
 	}
 	content := lipgloss.JoinVertical(lipgloss.Left,
 		modalTitleStyle.Render(" AUTOMATE "),
@@ -443,10 +480,10 @@ func (m Model) renderAutomationConfirm(modalWidth int) string {
 
 func (m Model) renderAutomationEdit() string {
 	modalWidth, _ := m.bragModalSize()
-	title := modalTitleStyle.Render(fmt.Sprintf(" EDIT %s DRAFT ", strings.ToUpper(m.automationName)))
+	title := modalTitleStyle.Render(fmt.Sprintf(" EDIT %s DRAFT ", strings.ToUpper(m.automation.automationName)))
 	parts := []string{title, "", m.editorView(), ""}
-	if m.automationNotice != "" {
-		parts = append(parts, yellowBadgeStyle.Render(m.automationNotice), "")
+	if m.automation.automationNotice != "" {
+		parts = append(parts, yellowBadgeStyle.Render(m.automation.automationNotice), "")
 	}
 	parts = append(parts, renderModalFooter(footerItemsFrom(automationEditBindings()), modalWidth-6))
 	return m.framedPopup(lipgloss.JoinVertical(lipgloss.Left, parts...), modalWidth)
@@ -484,7 +521,7 @@ func automationEditBindings() []keyBinding {
 
 func (m Model) automationJobRuns() []automation.Run {
 	var jobRuns []automation.Run
-	for _, run := range m.automationRuns {
+	for _, run := range m.automation.automationRuns {
 		switch run.Status {
 		case automation.RunRunning, automation.RunFailed, automation.RunNeedsReauth:
 			jobRuns = append(jobRuns, run)
@@ -506,7 +543,7 @@ func (m Model) automationJobLabel(run automation.Run) string {
 }
 
 func (m Model) automationJobRunning(run *automation.Run) bool {
-	return m.automationRuns[run.Meta.NoteID].Status == automation.RunRunning
+	return m.automation.automationRuns[run.Meta.NoteID].Status == automation.RunRunning
 }
 
 func (m Model) automationRunPreview(run automation.Run) runPreview {
@@ -531,10 +568,10 @@ func (m Model) stopAutomationRun(run *automation.Run) (tea.Model, tea.Cmd) {
 	}
 	stopped := *run
 	stopped.Status = automation.RunFailed
-	runs := maps.Clone(m.automationRuns)
+	runs := maps.Clone(m.automation.automationRuns)
 	runs[stopped.Meta.NoteID] = stopped
 	selectedKey, selectedOccurrence := m.selectedNavKey()
-	m.automationRuns = runs
+	m.automation.automationRuns = runs
 	m.restoreSelection(selectedKey, selectedOccurrence)
 	if m.mode == ViewPreview {
 		m.updatePreviewViewport()
@@ -554,9 +591,9 @@ func (m Model) dismissAutomationRun(run *automation.Run) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	selectedKey, selectedOccurrence := m.selectedNavKey()
-	runs := maps.Clone(m.automationRuns)
+	runs := maps.Clone(m.automation.automationRuns)
 	delete(runs, run.Meta.NoteID)
-	m.automationRuns = runs
+	m.automation.automationRuns = runs
 	m.restoreSelection(selectedKey, selectedOccurrence)
 	if m.mode == ViewPreview {
 		m.mode = ViewDashboard

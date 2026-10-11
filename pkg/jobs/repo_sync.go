@@ -322,11 +322,11 @@ func gitCmdTimeout(cwd string, timeout time.Duration, args ...string) CmdResult 
 	cmd := exec.CommandContext(ctx, "git", args...)
 	cmd.WaitDelay = commandWaitDelay
 	cmd.Dir = cwd
-	cmd.Env = append(os.Environ(),
+	cmd.Env = append(append(os.Environ(),
 		"GIT_TERMINAL_PROMPT=0",
 		"GIT_OPTIONAL_LOCKS=0",
 		"GIT_SSH_COMMAND=ssh -o BatchMode=yes -o ConnectTimeout=5",
-	)
+	), system.GitSafeEnv()...)
 
 	var out, errOut bytes.Buffer
 	cmd.Stdout = &out

@@ -141,8 +141,8 @@ func TestInlineEditDropsTagsAndShowsEditingPill(t *testing.T) {
 	if line := noteLine(m, "Flaky deploys"); strings.Contains(line, "#manual") {
 		t.Errorf("inline edit should hide every tag: %q", line)
 	}
-	if want := m.width - 3 - 7; m.inlineInput.Width != want {
-		t.Errorf("inline width = %d, want %d", m.inlineInput.Width, want)
+	if want := m.width - 3 - 7; m.notesUI.inlineInput.Width != want {
+		t.Errorf("inline width = %d, want %d", m.notesUI.inlineInput.Width, want)
 	}
 	if view := stripANSI(m.View()); !strings.Contains(view, "✎ editing (↵)save (esc)cancel") {
 		t.Errorf("inline edit should show the editing pill")

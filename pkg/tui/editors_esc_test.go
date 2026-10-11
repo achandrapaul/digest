@@ -86,14 +86,14 @@ func rejectCommentModel(t *testing.T) Model {
 
 func TestRejectBoxEscReturnsToThePreviewWithoutAReview(t *testing.T) {
 	m := rejectCommentModel(t)
-	m.rejectInput.SetValue("half written")
+	m.review.rejectInput.SetValue("half written")
 	m = press(t, m, tea.KeyMsg{Type: tea.KeyEsc})
-	if m.mode != ViewPreview || m.reviewEvent != "" || m.rejectInput.Focused() {
-		t.Errorf("mode %v event %q focused %v", m.mode, m.reviewEvent, m.rejectInput.Focused())
+	if m.mode != ViewPreview || m.review.reviewEvent != "" || m.review.rejectInput.Focused() {
+		t.Errorf("mode %v event %q focused %v", m.mode, m.review.reviewEvent, m.review.rejectInput.Focused())
 	}
 	m = press(t, m, runes("d"))
-	if m.mode != ViewRejectComment || m.rejectInput.Value() != "" {
-		t.Errorf("reopening should start empty, got %q", m.rejectInput.Value())
+	if m.mode != ViewRejectComment || m.review.rejectInput.Value() != "" {
+		t.Errorf("reopening should start empty, got %q", m.review.rejectInput.Value())
 	}
 }
 
@@ -119,17 +119,17 @@ func TestBragEditorEscDiscardsTheEditAndReturnsToTheView(t *testing.T) {
 	if m.mode != ViewBragEdit {
 		t.Fatalf("mode %v", m.mode)
 	}
-	original := m.bragEntry.Body()
+	original := m.brag.bragEntry.Body()
 	m.editor.SetValue("## Facts\n\n- unsaved\n\n## Summary\n\n- unsaved")
-	m.bragNotice = "stale"
+	m.brag.bragNotice = "stale"
 	m = press(t, m, tea.KeyMsg{Type: tea.KeyEsc})
 	m = press(t, m, runes("y"))
-	if m.mode != ViewBragView || m.bragNotice != "" || m.editor.Focused() {
-		t.Fatalf("mode %v notice %q focused %v", m.mode, m.bragNotice, m.editor.Focused())
+	if m.mode != ViewBragView || m.brag.bragNotice != "" || m.editor.Focused() {
+		t.Fatalf("mode %v notice %q focused %v", m.mode, m.brag.bragNotice, m.editor.Focused())
 	}
 	week40 := brag.WeekOf(time.Date(2026, 9, 30, 12, 0, 0, 0, time.Local))
 	saved, err := brag.Load(m.cfg.BragDir(), week40)
-	if err != nil || strings.Contains(saved.Facts, "unsaved") || m.bragEntry.Body() != original {
+	if err != nil || strings.Contains(saved.Facts, "unsaved") || m.brag.bragEntry.Body() != original {
 		t.Errorf("esc saved the edit: facts %q err %v", saved.Facts, err)
 	}
 }
@@ -147,11 +147,11 @@ func TestAutomationDraftEditorEscKeepsTheSavedDraft(t *testing.T) {
 		t.Fatalf("mode %v", m.mode)
 	}
 	m.editor.SetValue("project: PROJ\nsummary: never saved\n")
-	m.automationNotice = "stale"
+	m.automation.automationNotice = "stale"
 	m = press(t, m, tea.KeyMsg{Type: tea.KeyEsc})
 	m = press(t, m, runes("y"))
-	if m.mode != ViewPreview || m.previewTab != previewTabDraft || m.automationNotice != "" || m.editor.Focused() {
-		t.Fatalf("mode %v tab %v notice %q", m.mode, m.previewTab, m.automationNotice)
+	if m.mode != ViewPreview || m.previewTab != previewTabDraft || m.automation.automationNotice != "" || m.editor.Focused() {
+		t.Fatalf("mode %v tab %v notice %q", m.mode, m.previewTab, m.automation.automationNotice)
 	}
 	after, _ := automation.LoadDraft(m.cfg.AutomationDir(), "note-1")
 	if after != before || strings.Contains(stripANSI(m.View()), "never saved") {

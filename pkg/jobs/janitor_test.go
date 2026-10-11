@@ -406,3 +406,18 @@ func TestJanitorRealRunQuarantinesOnlyMatchingFiles(t *testing.T) {
 		t.Errorf("a clean quarantine needs no user action: %+v", result)
 	}
 }
+
+func TestJanitorRefusesAMalformedPatternBeforeTouchingFiles(t *testing.T) {
+	root := t.TempDir()
+	victim := filepath.Join(root, "keep.log")
+	if err := os.WriteFile(victim, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	job := &JanitorJob{Roots: []string{root}, Patterns: []string{"*.log", "[bad"}, QuarantineRoot: filepath.Join(t.TempDir(), "q"), Logger: log.New(io.Discard)}
+	if _, err := job.Run(false); err == nil || !strings.Contains(err.Error(), `"[bad"`) {
+		t.Fatalf("err = %v", err)
+	}
+	if _, err := os.Stat(victim); err != nil {
+		t.Errorf("nothing should be quarantined: %v", err)
+	}
+}

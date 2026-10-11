@@ -61,10 +61,18 @@ func Run(options Options) (int, error) {
 	if err := migrateJanitorOptions(options.ConfigPath, options.Out, options.DryRun); err != nil {
 		return 0, err
 	}
-	if err := migrateAutomations(options.ConfigPath, options.Out, options.DryRun); err != nil {
+	storedState, _, err := appstate.Load(options.Root)
+	if err != nil {
+		return 0, err
+	}
+	calendarPresent, err := migrateAutomations(options.ConfigPath, options.Out, options.DryRun, storedState.CalendarOffered)
+	if err != nil {
 		return 0, err
 	}
 	if err := migrateBuiltInJobs(options.ConfigPath, options.Out, options.DryRun); err != nil {
+		return 0, err
+	}
+	if err := migrateSyncInterval(options.ConfigPath, options.Out, options.DryRun); err != nil {
 		return 0, err
 	}
 	noteStore := store.New(options.NotesDir)
@@ -121,6 +129,14 @@ func Run(options Options) (int, error) {
 			continue
 		}
 		changed++
+		if reIDed && originalID != "" {
+			if err := moveReminder(options, originalID, note.ID); err != nil {
+				return changed, err
+			}
+			if err := moveAutomationState(options, originalID, note.ID); err != nil {
+				return changed, err
+			}
+		}
 		if options.DryRun {
 			fmt.Fprintf(options.Out, "%s → %s\n", originalName, store.FileName(note))
 		} else {
@@ -132,18 +148,13 @@ func Run(options Options) (int, error) {
 		if note.Ref != before.Ref {
 			fmt.Fprintf(options.Out, "  ref %s\n", note.Ref)
 		}
-		if reIDed && originalID != "" {
-			if err := moveReminder(options, originalID, note.ID); err != nil {
-				return changed, err
-			}
-		}
 	}
 	if options.DryRun {
 		fmt.Fprintf(options.Out, "%d notes would be migrated\n", changed)
 	} else {
 		fmt.Fprintf(options.Out, "%d notes migrated\n", changed)
 	}
-	if err := migrateAppState(options, notes); err != nil {
+	if err := migrateAppState(options, notes, calendarPresent); err != nil {
 		return changed, err
 	}
 	if system.Protected(options.Root) && options.DryRun {
@@ -245,12 +256,35 @@ func moveReminder(options Options, originalID, newID string) error {
 	return notify.Remove(options.Root, originalID)
 }
 
-func migrateAppState(options Options, notes []*model.Note) error {
+func moveAutomationState(options Options, originalID, newID string) error {
+	if options.AutomationDir == "" {
+		return nil
+	}
+	from, to := automation.StateDir(options.AutomationDir, originalID), automation.StateDir(options.AutomationDir, newID)
+	if !system.Exists(from) {
+		return nil
+	}
+	if system.Exists(to) {
+		return fmt.Errorf("move automation state %s: %s already exists", originalID, to)
+	}
+	if options.DryRun {
+		fmt.Fprintf(options.Out, "  automation state %s → %s\n", originalID, newID)
+		return nil
+	}
+	if err := system.Rename(from, to); err != nil {
+		return fmt.Errorf("move automation state %s: %w", originalID, err)
+	}
+	fmt.Fprintf(options.Out, "  automation state %s → %s\n", originalID, newID)
+	return nil
+}
+
+func migrateAppState(options Options, notes []*model.Note, calendarPresent bool) error {
 	stored, found, err := appstate.Load(options.Root)
 	if err != nil {
 		return err
 	}
 	fromNotes := appstate.FromNotes(notes, options.now(), options.isWorkDay)
+	fromNotes.CalendarOffered = calendarPresent
 	if !found {
 		if options.DryRun {
 			fmt.Fprintf(options.Out, "would save %s\n", appstate.Path(options.Root))
@@ -258,14 +292,21 @@ func migrateAppState(options Options, notes []*model.Note) error {
 		}
 		return saveAppState(options.Root, fromNotes)
 	}
-	if fromNotes.FirstNoteCreated.IsZero() || fromNotes.FirstNoteCreated.Equal(stored.FirstNoteCreated) {
+	recordCalendar := calendarPresent && !stored.CalendarOffered
+	moveFirstNote := !fromNotes.FirstNoteCreated.IsZero() && !fromNotes.FirstNoteCreated.Equal(stored.FirstNoteCreated)
+	if !recordCalendar && !moveFirstNote {
 		return nil
 	}
 	if options.DryRun {
-		fmt.Fprintf(options.Out, "would set first_note_created to %s\n", fromNotes.FirstNoteCreated.Format(time.RFC3339))
+		if moveFirstNote {
+			fmt.Fprintf(options.Out, "would set first_note_created to %s\n", fromNotes.FirstNoteCreated.Format(time.RFC3339))
+		}
 		return nil
 	}
-	stored.FirstNoteCreated = fromNotes.FirstNoteCreated
+	if moveFirstNote {
+		stored.FirstNoteCreated = fromNotes.FirstNoteCreated
+	}
+	stored.CalendarOffered = stored.CalendarOffered || calendarPresent
 	return saveAppState(options.Root, stored)
 }
 

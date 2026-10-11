@@ -16,7 +16,6 @@ func gitOffModel(t *testing.T) Model {
 	showGit := false
 	m := syncTestModel(t)
 	m.cfg.ShowGit = &showGit
-	m.cfg.GitAutoSyncInterval = 600
 	m.cfg.Jobs = []config.JobSpec{
 		{Name: "branch reaper", DryRunCommand: "digest branch-reaper --dry-run", Command: "digest branch-reaper"},
 		{Name: "janitor", DryRunCommand: "digest janitor --dry-run", Command: "digest janitor"},
@@ -42,9 +41,6 @@ func TestGitOffSkipsEveryFetch(t *testing.T) {
 	}
 	if m.startLoadGitStatsCmd() != nil || m.scheduleDaySync() != nil {
 		t.Errorf("git off: stats reload and day sync should be nil")
-	}
-	if _, cmd := m.Update(autoSyncTickMsg{}); cmd != nil {
-		t.Errorf("git off: auto-sync tick should not schedule anything")
 	}
 }
 

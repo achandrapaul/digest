@@ -56,7 +56,7 @@ func TestBlankMarkdownShowsThePlaceholder(t *testing.T) {
 }
 
 func TestGitCacheDefaultsUnderTheDigestRoot(t *testing.T) {
-	if got := realGitCachePath(); got != filepath.Join(digestRoot, "cache", "git-sync.json") {
+	if got := realGitCachePath(); got != filepath.Join(currentDigestRoot(), "cache", "git-sync.json") {
 		t.Fatalf("path = %q", got)
 	}
 }
@@ -188,20 +188,12 @@ func TestRefreshCommitsOutsideASyncPostsProgress(t *testing.T) {
 	}
 }
 
-func TestAutoSyncTickMessageWithoutAnIntervalIsHandled(t *testing.T) {
-	m := syncTestModel(t)
-	m.cfg.GitAutoSyncInterval = 0
-	if _, cmd, handled := (gitSection{}).ApplyMessage(m, autoSyncTickMsg(time.Now())); !handled || cmd != nil {
-		t.Fatal("the tick should be handled without a sync")
-	}
-}
-
 func TestChangedNotesJoinTheBrowsedList(t *testing.T) {
 	m := syncTestModel(t)
-	m.browsedNotes = []*model.Note{}
+	m.notesUI.browsedNotes = []*model.Note{}
 	notesSection{}.mergeNotes(&m, []model.Note{{ID: "new", Summary: "new", Status: model.StatusArchived}})
-	if len(m.browsedNotes) != 1 {
-		t.Fatalf("browsed = %d", len(m.browsedNotes))
+	if len(m.notesUI.browsedNotes) != 1 {
+		t.Fatalf("browsed = %d", len(m.notesUI.browsedNotes))
 	}
 }
 
@@ -224,10 +216,10 @@ func TestFailedHostPRsAreNotDuplicatedWhenStillListed(t *testing.T) {
 func TestAFailedSaveRestoresTheBrowsedCopyFromDisk(t *testing.T) {
 	m := syncTestModel(t)
 	browsed := &model.Note{ID: "b", FilePath: "/notes/b.md", Summary: "typed"}
-	m.browsedNotes = []*model.Note{browsed}
+	m.notesUI.browsedNotes = []*model.Note{browsed}
 	onDisk := model.Note{ID: "b", FilePath: "/notes/b.md", Summary: "typed", Status: model.StatusDone}
 	next, _ := m.applySavedNotes(notesSavedMsg{failed: []failedNoteSave{{target: browsed, attempted: *browsed, onDisk: &onDisk, err: errors.New("locked")}}})
-	if got := next.(Model); got.browsedNotes[0].Status != model.StatusDone {
-		t.Fatalf("browsed = %+v", got.browsedNotes[0])
+	if got := next.(Model); got.notesUI.browsedNotes[0].Status != model.StatusDone {
+		t.Fatalf("browsed = %+v", got.notesUI.browsedNotes[0])
 	}
 }

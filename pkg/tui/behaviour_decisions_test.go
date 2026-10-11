@@ -43,10 +43,10 @@ func TestNotifySaveFailureKeepsTheInputOpenWithTheError(t *testing.T) {
 	m = typeText(t, m, "2")
 	m, cmd := pressKey(t, m, "enter")
 	m = applyMsgs(t, m, cmd)
-	if m.mode != ViewNotifyInput || m.notifyNotice == "" {
-		t.Fatalf("a failed save should keep the input open with the error: mode %v notice %q", m.mode, m.notifyNotice)
+	if m.mode != ViewNotifyInput || m.notesUI.notifyNotice == "" {
+		t.Fatalf("a failed save should keep the input open with the error: mode %v notice %q", m.mode, m.notesUI.notifyNotice)
 	}
-	if _, tagged := m.notifyEntries["note-1"]; tagged {
+	if _, tagged := m.notesUI.notifyEntries["note-1"]; tagged {
 		t.Error("a failed save should not add the tag")
 	}
 	m, _ = pressKey(t, m, "esc")
@@ -75,12 +75,12 @@ func TestConfirmingStopOnAFinishedBragRunKeepsItListed(t *testing.T) {
 	writeBragState(t, m, "2026-W40", "brag.exit", "1")
 	m.refreshBragRuns()
 	selectNavItem(t, &m, "brag:2026-W40")
-	run := m.bragRuns[0]
+	run := m.brag.bragRuns[0]
 	m.bragRunToStop = &run
 	m = m.beginStopConfirm()
 	m = press(t, m, runes("y"))
-	if len(m.bragRuns) != 1 || m.bragRuns[0].Status != brag.RunFailed || !system.Exists(brag.StateDir(m.cfg.BragDir(), "2026-W40")) {
-		t.Errorf("a failed run stays listed until d dismisses it: runs %+v", m.bragRuns)
+	if len(m.brag.bragRuns) != 1 || m.brag.bragRuns[0].Status != brag.RunFailed || !system.Exists(brag.StateDir(m.cfg.BragDir(), "2026-W40")) {
+		t.Errorf("a failed run stays listed until d dismisses it: runs %+v", m.brag.bragRuns)
 	}
 }
 
@@ -94,7 +94,7 @@ func TestDOnAFailedReviewRunDismissesIt(t *testing.T) {
 	if m.mode != ViewDashboard {
 		t.Errorf("dismiss should not ask, mode %v", m.mode)
 	}
-	for _, run := range m.reviewRuns {
+	for _, run := range m.review.reviewRuns {
 		if run.Meta.Ref.URL == failed.URL {
 			t.Error("the failed run should be gone from Jobs")
 		}
@@ -116,7 +116,7 @@ func TestDOnAFinishedReviewRunStillListedDismissesIt(t *testing.T) {
 	}
 	selectNavItem(t, &m, "review:"+running.URL)
 	m = press(t, m, runes("d"))
-	if m.mode == ViewReviewRunConfirm || slices.ContainsFunc(m.reviewRuns, func(run review.ReviewRun) bool { return run.Meta.Ref.URL == running.URL }) {
+	if m.mode == ViewReviewRunConfirm || slices.ContainsFunc(m.review.reviewRuns, func(run review.ReviewRun) bool { return run.Meta.Ref.URL == running.URL }) {
 		t.Errorf("a run that finished should be dismissed, mode %v", m.mode)
 	}
 }
@@ -386,13 +386,13 @@ func TestSettingsRetryKeepsTheFirstBackup(t *testing.T) {
 
 func TestRejectCommentBoxHasNoLineLimit(t *testing.T) {
 	m := reviewTestModel(t)
-	m.rejectInput.Focus()
+	m.review.rejectInput.Focus()
 	for range 150 {
-		m.rejectInput.InsertString("line")
-		*m.rejectInput, _ = m.rejectInput.Update(tea.KeyMsg{Type: tea.KeyEnter})
+		m.review.rejectInput.InsertString("line")
+		*m.review.rejectInput, _ = m.review.rejectInput.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	}
-	m.rejectInput.InsertString("end")
-	if lines := strings.Count(m.rejectInput.Value(), "\n") + 1; lines != 151 {
+	m.review.rejectInput.InsertString("end")
+	if lines := strings.Count(m.review.rejectInput.Value(), "\n") + 1; lines != 151 {
 		t.Errorf("reject comment kept %d lines, want 151", lines)
 	}
 }
@@ -404,17 +404,17 @@ func TestBragAndReviewStartErrorsStayInlineNotices(t *testing.T) {
 	m := reviewTestModel(t)
 	m.previewTab = previewTabDetails
 	m = press(t, m, runes("r"))
-	m = press(t, m, runes("y"))
-	if !strings.Contains(m.reviewNotice, "clone failed") || strings.Contains(headerTopRow(syncTestModelFrom(m)), "clone failed") {
-		t.Errorf("review start errors should be an inline notice: notice %q", m.reviewNotice)
+	m = pressSettled(t, m, runes("y"))
+	if !strings.Contains(m.review.reviewNotice, "clone failed") || strings.Contains(headerTopRow(syncTestModelFrom(m)), "clone failed") {
+		t.Errorf("review start errors should be an inline notice: notice %q", m.review.reviewNotice)
 	}
 
 	bragModel, _ := bragTestModel(t, wednesday())
 	startBragRun = func(string, brag.Period, bool) error { return errors.New("claude missing") }
-	bragModel.bragPeriod, bragModel.bragConfirmReturn, bragModel.mode = brag.WeekOf(wednesday()).Previous(), ViewBragList, ViewBragConfirm
-	bragModel = press(t, bragModel, runes("y"))
-	if bragModel.bragNotice != "claude missing" || strings.Contains(headerTopRow(syncTestModelFrom(bragModel)), "claude missing") {
-		t.Errorf("brag start errors should be an inline notice: notice %q", bragModel.bragNotice)
+	bragModel.brag.bragPeriod, bragModel.modeStack, bragModel.mode = brag.WeekOf(wednesday()).Previous(), []ViewMode{ViewBragList}, ViewBragConfirm
+	bragModel = pressSettled(t, bragModel, runes("y"))
+	if bragModel.brag.bragNotice != "claude missing" || strings.Contains(headerTopRow(syncTestModelFrom(bragModel)), "claude missing") {
+		t.Errorf("brag start errors should be an inline notice: notice %q", bragModel.brag.bragNotice)
 	}
 }
 

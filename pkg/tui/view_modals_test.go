@@ -12,16 +12,16 @@ import (
 func TestDeleteConfirmTextsForJobsAndNoteCounts(t *testing.T) {
 	m := syncTestModel(t)
 	m.mode = ViewDeleteConfirm
-	m.jobToExecute = "nightly"
+	m.jobs.jobToExecute = "nightly"
 	if view := stripANSI(m.View()); !strings.Contains(view, "EXECUTE JOB") || !strings.Contains(view, "Are you sure you want to run 'nightly'?") {
 		t.Fatalf("execute confirm:\n%s", view)
 	}
-	m.jobToExecute = ""
-	m.deleteTargetNotes = []*model.Note{{Summary: "a"}, {Summary: "b"}}
+	m.jobs.jobToExecute = ""
+	m.notesUI.deleteTargetNotes = []*model.Note{{Summary: "a"}, {Summary: "b"}}
 	if view := stripANSI(m.View()); !strings.Contains(view, "permanently delete these 2 selected notes?") {
 		t.Fatalf("multi delete confirm:\n%s", view)
 	}
-	m.deleteTargetNotes = nil
+	m.notesUI.deleteTargetNotes = nil
 	if view := stripANSI(m.View()); !strings.Contains(view, "No notes selected for deletion.") {
 		t.Fatalf("empty delete confirm:\n%s", view)
 	}
@@ -49,7 +49,7 @@ func TestPreviewHeaderForARepoRow(t *testing.T) {
 func TestPreviewHeaderForAReReviewAndItsNotice(t *testing.T) {
 	m := reReviewModel(t, nil)
 	m.git.ghPendingPRs[0].Kind = sourcecontrol.ReReviewKind
-	m.reviewNotice = "Review started in the background"
+	m.review.reviewNotice = "Review started in the background"
 	view := previewHeader(t, m)
 	if !strings.Contains(view, "RE-REVIEW: ") || !strings.Contains(view, "Review started in the background") {
 		t.Fatalf("preview:\n%s", view)
@@ -58,12 +58,12 @@ func TestPreviewHeaderForAReReviewAndItsNotice(t *testing.T) {
 
 func TestPreviewHeaderForBragJobs(t *testing.T) {
 	m, _ := bragTestModel(t, wednesday())
-	m.bragRuns = []brag.Run{{Meta: brag.RunMeta{ID: "2026-W40"}, Status: brag.RunFailed}}
+	m.brag.bragRuns = []brag.Run{{Meta: brag.RunMeta{ID: "2026-W40"}, Status: brag.RunFailed}}
 	selectNavKind(t, &m, KindBragRun)
 	if view := previewHeader(t, m); !strings.Contains(view, "BRAG JOB: 2026-W40") || !strings.Contains(view, "FAILED") || !strings.Contains(view, "#brag") {
 		t.Fatalf("preview:\n%s", view)
 	}
-	m.bragRuns[0].Status = brag.RunRunning
+	m.brag.bragRuns[0].Status = brag.RunRunning
 	if view := previewHeader(t, m); !strings.Contains(view, "RUNNING") {
 		t.Fatalf("running preview:\n%s", view)
 	}
@@ -72,22 +72,22 @@ func TestPreviewHeaderForBragJobs(t *testing.T) {
 func TestPreviewHeaderForJobDryRunStates(t *testing.T) {
 	tempDigestRoot(t)
 	m, _, _ := jobTestModel(t)
-	m.dryRunsInFlight = map[string]bool{"nightly": true}
+	m.jobs.dryRunsInFlight = map[string]bool{"nightly": true}
 	if view := previewHeader(t, m); !strings.Contains(view, "DRY RUNNING") {
 		t.Fatalf("in flight:\n%s", view)
 	}
-	m.dryRunsInFlight = nil
-	m.previewJobLogFinished = true
+	m.jobs.dryRunsInFlight = nil
+	m.jobs.previewJobLogFinished = true
 	if view := previewHeader(t, m); !strings.Contains(view, "FINISHED") {
 		t.Fatalf("finished:\n%s", view)
 	}
-	m.previewJobLogFinished = false
-	m.jobDryRunHasRun = map[string]bool{"nightly": true}
-	m.jobDryRunExitCodes = map[string]int{"nightly": 0}
+	m.jobs.previewJobLogFinished = false
+	m.jobs.jobDryRunHasRun = map[string]bool{"nightly": true}
+	m.jobs.jobDryRunExitCodes = map[string]int{"nightly": 0}
 	if view := previewHeader(t, m); !strings.Contains(view, "SUCCESS") {
 		t.Fatalf("success:\n%s", view)
 	}
-	m.jobDryRunExitCodes["nightly"] = 2
+	m.jobs.jobDryRunExitCodes["nightly"] = 2
 	if view := previewHeader(t, m); !strings.Contains(view, "NEED ACT") {
 		t.Fatalf("needs action:\n%s", view)
 	}

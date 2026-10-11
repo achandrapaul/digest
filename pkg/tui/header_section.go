@@ -21,7 +21,7 @@ func (m Model) progressText() string {
 	if m.appStateKnown {
 		facts.Streak = m.appState.CurrentStreak(time.Now(), m.cfg.IsWorkDay)
 	}
-	facts.ClosedThisWeek += m.closedThisWeekElsewhere
+	facts.ClosedThisWeek += m.notesUI.closedThisWeekElsewhere
 	var parts []string
 	if facts.Streak > 0 {
 		parts = append(parts, yellowBadgeStyle.Render(fmt.Sprintf("🔥 %d-day streak", facts.Streak)))

@@ -12,29 +12,6 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-func TestAutoSyncTickStartsASyncAndSchedulesTheNext(t *testing.T) {
-	m := syncTestModel(t)
-	m.cfg.GitAutoSyncInterval = 600
-	m.git.loadingGit = false
-	generation := m.git.fetchGeneration
-	next, cmd := m.Update(autoSyncTickMsg(time.Now()))
-	m = next.(Model)
-	t.Cleanup(m.cancelGitSync)
-	if cmd == nil || !m.git.loadingGit || m.git.fetchGeneration != generation+1 || !syncRunning(m) {
-		t.Errorf("cmd=%v loading=%v generation=%d->%d", cmd != nil, m.git.loadingGit, generation, m.git.fetchGeneration)
-	}
-}
-
-func TestAutoSyncTickIsIgnoredWhenTurnedOff(t *testing.T) {
-	m := syncTestModel(t)
-	m.cfg.GitAutoSyncInterval = 0
-	generation := m.git.fetchGeneration
-	next, cmd := m.Update(autoSyncTickMsg(time.Now()))
-	if cmd != nil || next.(Model).git.fetchGeneration != generation {
-		t.Errorf("cmd=%v generation=%d->%d", cmd != nil, generation, next.(Model).git.fetchGeneration)
-	}
-}
-
 func TestNarrowTerminalSaysItIsTooSmall(t *testing.T) {
 	m := gitStripTestModel(t)
 	for _, width := range []int{0, 1, 20, 39} {
@@ -115,8 +92,8 @@ func TestPendingSortHintFollowsTheSortAndScope(t *testing.T) {
 
 func TestJobIconTurnsToACheckAfterACleanDryRun(t *testing.T) {
 	m := selectionTestModel(t)
-	m.jobDryRunHasRun = map[string]bool{"janitor": true, "repo sync": true}
-	m.jobDryRunExitCodes = map[string]int{"janitor": 0, "repo sync": 2}
+	m.jobs.jobDryRunHasRun = map[string]bool{"janitor": true, "repo sync": true}
+	m.jobs.jobDryRunExitCodes = map[string]int{"janitor": 0, "repo sync": 2}
 	m.contentVersion++
 	rowFor := func(name string) string {
 		for _, line := range plainLines(m.renderDashboardBody()) {

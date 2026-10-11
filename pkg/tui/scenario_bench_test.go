@@ -434,7 +434,7 @@ func BenchmarkScenarioScreenBrag(b *testing.B) {
 		next, _ := m.showBragView(period)
 		m = next.(Model)
 		if m.mode != ViewBragView {
-			b.Fatalf("brag view did not open, mode %v (%s)", m.mode, m.bragNotice)
+			b.Fatalf("brag view did not open, mode %v (%s)", m.mode, m.brag.bragNotice)
 		}
 		benchScreen(b, m)
 	})

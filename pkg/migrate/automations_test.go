@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/achandrapaul/digest/pkg/appstate"
 	"github.com/achandrapaul/digest/pkg/config"
 )
 
@@ -96,5 +97,39 @@ func TestMigrateLeavesAConfigWithoutAutomationsAlone(t *testing.T) {
 	}
 	if content, _ := os.ReadFile(configPath); string(content) != noAutomations {
 		t.Errorf("built-in defaults already apply, so nothing should be written:\n%s", content)
+	}
+}
+
+func TestMigrateAddsGoogleCalendarOnlyOnce(t *testing.T) {
+	f := newFixture(t)
+	options, configPath := f.withConfig(t, untypedAutomationsConfig)
+	if _, err := Run(options); err != nil {
+		t.Fatal(err)
+	}
+	if state, _, err := appstate.Load(f.root); err != nil || !state.CalendarOffered {
+		t.Fatalf("app state should record the calendar was offered: %+v %v", state, err)
+	}
+	withoutCalendar := "digest_root: ~/digest\nautomations:\n  - name: jira\n    automation_type: ticket\n    draft_prompt: d\n    create_prompt: c\n"
+	if err := os.WriteFile(configPath, []byte(withoutCalendar), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	f.output.Reset()
+	if _, err := Run(options); err != nil {
+		t.Fatal(err)
+	}
+	if content, _ := os.ReadFile(configPath); string(content) != withoutCalendar || strings.Contains(f.output.String(), "google calendar") {
+		t.Errorf("a deleted calendar should stay deleted, output %q:\n%s", f.output.String(), content)
+	}
+}
+
+func TestMigrateRecordsACalendarYouAlreadyHave(t *testing.T) {
+	f := newFixture(t)
+	withCalendar := "digest_root: ~/digest\nautomations:\n  - name: google calendar\n    automation_type: event\n    draft_prompt: d\n    create_prompt: c\n"
+	options, _ := f.withConfig(t, withCalendar)
+	if _, err := Run(options); err != nil {
+		t.Fatal(err)
+	}
+	if state, _, err := appstate.Load(f.root); err != nil || !state.CalendarOffered {
+		t.Errorf("state = %+v, err %v", state, err)
 	}
 }

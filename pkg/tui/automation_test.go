@@ -71,7 +71,7 @@ func withDraft(t *testing.T, m Model, status automation.RunStatus, phase automat
 	if err := automation.SaveDraft(m.cfg.AutomationDir(), "note-1", testDraft); err != nil {
 		t.Fatal(err)
 	}
-	m.automationRuns = map[string]automation.Run{"note-1": {Meta: automation.RunMeta{NoteID: "note-1", Automation: "jira", Phase: phase}, Status: status, HasDraft: true}}
+	m.automation.automationRuns = map[string]automation.Run{"note-1": {Meta: automation.RunMeta{NoteID: "note-1", Automation: "jira", Phase: phase}, Status: status, HasDraft: true}}
 	return m
 }
 
@@ -134,9 +134,9 @@ func chooseMenuAutomation(t *testing.T, m Model, name string) Model {
 	if m.mode != ViewActionMenu {
 		t.Fatalf(". did not open the actions menu, mode = %v", m.mode)
 	}
-	for m.actionMenuItems[m.actionMenuSelected].name != name {
-		if m.actionMenuSelected == len(m.actionMenuItems)-1 {
-			t.Fatalf("%s missing from menu %+v", name, m.actionMenuItems)
+	for m.notesUI.actionMenuItems[m.notesUI.actionMenuSelected].name != name {
+		if m.notesUI.actionMenuSelected == len(m.notesUI.actionMenuItems)-1 {
+			t.Fatalf("%s missing from menu %+v", name, m.notesUI.actionMenuItems)
 		}
 		m = press(t, m, runes("j"))
 	}
@@ -155,7 +155,7 @@ func TestPreviewActionsConfirmThenStartTheDraft(t *testing.T) {
 		t.Fatalf("esc did not cancel: mode = %v started = %+v", m.mode, *started)
 	}
 	m = chooseMenuAutomation(t, m, "jira")
-	m = press(t, m, runes("y"))
+	m = pressSettled(t, m, runes("y"))
 	if len(*started) != 1 || (*started)[0] != (startedAutomation{m.cfg.AutomationDir(), "note-1", "jira", automation.PhaseDraft}) {
 		t.Fatalf("started = %+v", *started)
 	}
@@ -222,7 +222,7 @@ func TestDraftTabRConfirmsThenRunsTheAutomation(t *testing.T) {
 	if m.mode != ViewAutomationConfirm || len(*started) != 0 {
 		t.Fatalf("mode = %v started = %+v", m.mode, *started)
 	}
-	m = press(t, m, tea.KeyMsg{Type: tea.KeyEnter})
+	m = pressSettled(t, m, tea.KeyMsg{Type: tea.KeyEnter})
 	if len(*started) != 1 || (*started)[0].phase != automation.PhaseCreate {
 		t.Fatalf("started = %+v", *started)
 	}
@@ -297,12 +297,12 @@ func TestEnterEditsTheDraft(t *testing.T) {
 	}
 	assertEditorAtTop(t, "automation", m, strings.SplitN(m.editor.Value(), "\n", 2)[0])
 	m.editor.SetValue("project: PROJ\n")
-	m = press(t, m, tea.KeyMsg{Type: tea.KeyCtrlO})
-	if m.mode != ViewAutomationEdit || !strings.Contains(m.automationNotice, "summary") {
-		t.Fatalf("invalid draft accepted: mode = %v notice = %q", m.mode, m.automationNotice)
+	m = pressSettled(t, m, tea.KeyMsg{Type: tea.KeyCtrlO})
+	if m.mode != ViewAutomationEdit || !strings.Contains(m.automation.automationNotice, "summary") {
+		t.Fatalf("invalid draft accepted: mode = %v notice = %q", m.mode, m.automation.automationNotice)
 	}
 	m.editor.SetValue("project: PROJ\nsummary: Deploys break on Mondays\n")
-	m = press(t, m, tea.KeyMsg{Type: tea.KeyCtrlO})
+	m = pressSettled(t, m, tea.KeyMsg{Type: tea.KeyCtrlO})
 	if m.mode != ViewPreview || m.previewTab != previewTabDraft {
 		t.Fatalf("mode = %v tab = %v", m.mode, m.previewTab)
 	}
@@ -360,7 +360,7 @@ func TestFailedRunCanBeRunAgain(t *testing.T) {
 		t.Fatal(err)
 	}
 	meta := automation.RunMeta{NoteID: "note-1", Automation: "jira", Phase: automation.PhaseCreate}
-	m.automationRuns = map[string]automation.Run{"note-1": {Meta: meta, Status: automation.RunRunning, HasDraft: true}}
+	m.automation.automationRuns = map[string]automation.Run{"note-1": {Meta: meta, Status: automation.RunRunning, HasDraft: true}}
 	next, _ := m.handleReviewPoll(reviewPollSnapshot{automationRuns: map[string]automation.Run{"note-1": {Meta: meta, Status: automation.RunFailed, HasDraft: true}}})
 	m = next.(Model)
 	if m.mode == ViewError || !strings.Contains(latestMessageText(m), "claude exploded") {
@@ -372,7 +372,7 @@ func TestFailedRunCanBeRunAgain(t *testing.T) {
 	}
 	m = openDraftTab(t, m)
 	m = press(t, m, runes("r"))
-	m = press(t, m, runes("y"))
+	m = pressSettled(t, m, runes("y"))
 	if len(*started) != 1 || (*started)[0].phase != automation.PhaseCreate {
 		t.Errorf("retry started = %+v", *started)
 	}
@@ -382,7 +382,7 @@ func TestNeedsReauthShowsTheHint(t *testing.T) {
 	m, _ := automationTestModel(t)
 	m.cfg.Automations[0].ReauthHint = "store a fresh token"
 	meta := automation.RunMeta{NoteID: "note-1", Automation: "jira", Phase: automation.PhaseCreate}
-	m.automationRuns = map[string]automation.Run{"note-1": {Meta: meta, Status: automation.RunRunning, HasDraft: true}}
+	m.automation.automationRuns = map[string]automation.Run{"note-1": {Meta: meta, Status: automation.RunRunning, HasDraft: true}}
 	next, _ := m.handleReviewPoll(reviewPollSnapshot{automationRuns: map[string]automation.Run{"note-1": {Meta: meta, Status: automation.RunNeedsReauth, HasDraft: true}}})
 	m = next.(Model)
 	if m.mode == ViewError || !strings.Contains(latestMessageText(m), "store a fresh token") {
@@ -396,13 +396,13 @@ func TestSucceededRunReloadsNotesAndTagsTheKind(t *testing.T) {
 		t.Fatal(err)
 	}
 	meta := automation.RunMeta{NoteID: "note-1", Automation: "jira", Phase: automation.PhaseCreate}
-	m.automationRuns = map[string]automation.Run{"note-1": {Meta: meta, Status: automation.RunRunning, HasDraft: true}}
+	m.automation.automationRuns = map[string]automation.Run{"note-1": {Meta: meta, Status: automation.RunRunning, HasDraft: true}}
 	next, cmd := m.handleReviewPoll(reviewPollSnapshot{automationRuns: map[string]automation.Run{"note-1": {Meta: meta, Status: automation.RunCreated}}})
 	m = next.(Model)
 	if _, err := os.Stat(automation.StateDir(m.cfg.AutomationDir(), "note-1")); !os.IsNotExist(err) {
 		t.Errorf("state kept after success: %v", err)
 	}
-	if _, tracked := m.automationRuns["note-1"]; tracked {
+	if _, tracked := m.automation.automationRuns["note-1"]; tracked {
 		t.Error("finished run still tracked")
 	}
 	reloads := false
@@ -437,8 +437,8 @@ func TestDraftsSurviveARestart(t *testing.T) {
 		t.Fatal(err)
 	}
 	restarted := NewModel(m.cfg, nil)
-	if run, tracked := restarted.automationRuns["note-1"]; !tracked || !run.HasDraft {
-		t.Errorf("draft not loaded at startup: %+v", restarted.automationRuns)
+	if run, tracked := restarted.automation.automationRuns["note-1"]; !tracked || !run.HasDraft {
+		t.Errorf("draft not loaded at startup: %+v", restarted.automation.automationRuns)
 	}
 }
 
@@ -503,7 +503,7 @@ func TestRunningAutomationShowsInJobs(t *testing.T) {
 	if rowLine < 0 || rowLine < jobsLine {
 		t.Fatalf("jobs = %d row = %d:\n%s", jobsLine, rowLine, strings.Join(lines, "\n"))
 	}
-	m.automationRuns["note-1"] = automation.Run{Meta: m.automationRuns["note-1"].Meta, Status: automation.RunDraftReady, HasDraft: true}
+	m.automation.automationRuns["note-1"] = automation.Run{Meta: m.automation.automationRuns["note-1"].Meta, Status: automation.RunDraftReady, HasDraft: true}
 	m.contentVersion++
 	for _, item := range m.allNavItems() {
 		if item.Kind == KindAutomationRun {
@@ -547,8 +547,8 @@ func TestDStopsTheAutomationJob(t *testing.T) {
 		if len(stopped) != 1 || stopped[0] != "note-1" {
 			t.Fatalf("preview %v stopped = %v", fromPreview, stopped)
 		}
-		if m.automationRuns["note-1"].Status != automation.RunFailed || m.mode == ViewError {
-			t.Errorf("preview %v run = %+v mode = %v", fromPreview, m.automationRuns["note-1"], m.mode)
+		if m.automation.automationRuns["note-1"].Status != automation.RunFailed || m.mode == ViewError {
+			t.Errorf("preview %v run = %+v mode = %v", fromPreview, m.automation.automationRuns["note-1"], m.mode)
 		}
 		if key, _ := m.selectedNavKey(); fromPreview && (m.mode != ViewPreview || key != automationNavKeyPrefix+"note-1" || !strings.Contains(stripANSI(m.View()), "FAILED")) {
 			t.Errorf("the preview should stay on the failed run, mode = %v selected = %q", m.mode, key)
@@ -574,7 +574,7 @@ func TestTypingEditsTheDraft(t *testing.T) {
 	if m.mode != ViewAutomationEdit || m.editor.Value() != "summary: Flaky deploys\nlabels: [ops]" {
 		t.Fatalf("mode = %v editor = %q", m.mode, m.editor.Value())
 	}
-	m = press(t, m, tea.KeyMsg{Type: tea.KeyCtrlO})
+	m = pressSettled(t, m, tea.KeyMsg{Type: tea.KeyCtrlO})
 	if saved, _ := automation.LoadDraft(m.cfg.AutomationDir(), "note-1"); saved != "summary: Flaky deploys\nlabels: [ops]" {
 		t.Errorf("saved draft = %q", saved)
 	}
@@ -583,7 +583,7 @@ func TestTypingEditsTheDraft(t *testing.T) {
 func failedJobsModel(t *testing.T, status automation.RunStatus) Model {
 	t.Helper()
 	m := runningJobsModel(t)
-	m.automationRuns["note-1"] = automation.Run{Meta: m.automationRuns["note-1"].Meta, Status: status, HasDraft: true}
+	m.automation.automationRuns["note-1"] = automation.Run{Meta: m.automation.automationRuns["note-1"].Meta, Status: status, HasDraft: true}
 	m.contentVersion++
 	return m
 }
@@ -629,8 +629,8 @@ func TestDDismissesAFailedAutomationRun(t *testing.T) {
 		if m.mode == ViewDeleteConfirm || m.mode == ViewError || len(stopped) != 0 {
 			t.Fatalf("preview %v: dismiss should not ask or stop, mode = %v stopped = %v", fromPreview, m.mode, stopped)
 		}
-		if _, tracked := m.automationRuns["note-1"]; tracked {
-			t.Errorf("preview %v: run still tracked %+v", fromPreview, m.automationRuns["note-1"])
+		if _, tracked := m.automation.automationRuns["note-1"]; tracked {
+			t.Errorf("preview %v: run still tracked %+v", fromPreview, m.automation.automationRuns["note-1"])
 		}
 		if _, err := os.Stat(automation.StateDir(m.cfg.AutomationDir(), "note-1")); !os.IsNotExist(err) {
 			t.Errorf("preview %v: dismiss left the automation state, err = %v", fromPreview, err)

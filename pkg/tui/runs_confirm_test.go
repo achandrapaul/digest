@@ -59,11 +59,11 @@ func TestRunWhileTheDryRunIsInFlightStopsItAfterConfirm(t *testing.T) {
 		if m.mode != ViewDeleteConfirm || !strings.Contains(confirmView(m), "Dry run in progress. Stop it and run the job?") || len(*executed) != 0 || len(*stopped) != 0 {
 			t.Fatalf("%s: mode = %v executed = %v stopped = %v view:\n%s", start.name, m.mode, *executed, *stopped, confirmView(m))
 		}
-		m = press(t, m, runes("y"))
+		m = pressSettled(t, m, runes("y"))
 		if len(*stopped) != 1 || (*stopped)[0] != "nightly" || len(*executed) != 1 || (*executed)[0] != "nightly" {
 			t.Errorf("%s: stopped = %v executed = %v", start.name, *stopped, *executed)
 		}
-		if m.dryRunsInFlight["nightly"] {
+		if m.jobs.dryRunsInFlight["nightly"] {
 			t.Errorf("%s: the dry run still shows as in flight", start.name)
 		}
 	}
@@ -80,7 +80,7 @@ func TestDOnAStaleRunningJobClearsItsPIDAfterConfirm(t *testing.T) {
 		if fromPreview {
 			m = press(t, m, tea.KeyMsg{Type: tea.KeyEnter})
 		}
-		m.runningJobPIDs = map[string]int{"nightly": pid}
+		m.jobs.runningJobPIDs = map[string]int{"nightly": pid}
 		m.contentVersion++
 		m = press(t, m, runes("d"))
 		if m.mode != ViewDeleteConfirm || !strings.Contains(confirmView(m), "no longer running") {
@@ -126,12 +126,17 @@ func TestCopyWithNothingToCopySaysNothing(t *testing.T) {
 func TestRunJobSpawnErrorShowsInTheConfirmAndPreview(t *testing.T) {
 	for _, fromPreview := range []bool{false, true} {
 		m, _, _ := jobTestModel(t)
-		executeJobBackground = func(cfg *config.Config, jobName string) error { return errors.New("sh: not found") }
+		startJobProcess = func(launch jobLaunch) error {
+			if launch.dryRun {
+				return nil
+			}
+			return errors.New("sh: not found")
+		}
 		if fromPreview {
 			m = press(t, m, tea.KeyMsg{Type: tea.KeyEnter})
 		}
 		m = press(t, m, runes("r"))
-		m = press(t, m, runes("y"))
+		m = pressSettled(t, m, runes("y"))
 		if m.mode != ViewDeleteConfirm || !strings.Contains(confirmView(m), "sh: not found") {
 			t.Fatalf("preview %v: the confirm should show the error, mode = %v view:\n%s", fromPreview, m.mode, confirmView(m))
 		}
@@ -181,8 +186,8 @@ func TestStoppingABragStopsEveryRunningBragAndKeepsThemAsFailed(t *testing.T) {
 		if len(*stopped) != 2 {
 			t.Errorf("preview %v: stopped = %v, want both brag runs", fromPreview, *stopped)
 		}
-		if len(m.bragRuns) != 2 || m.bragRuns[0].Status != brag.RunFailed || m.bragRuns[1].Status != brag.RunFailed {
-			t.Errorf("preview %v: runs = %+v, want both listed as failed", fromPreview, m.bragRuns)
+		if len(m.brag.bragRuns) != 2 || m.brag.bragRuns[0].Status != brag.RunFailed || m.brag.bragRuns[1].Status != brag.RunFailed {
+			t.Errorf("preview %v: runs = %+v, want both listed as failed", fromPreview, m.brag.bragRuns)
 		}
 		if key, _ := m.selectedNavKey(); m.mode != startMode || key != "brag:2026-W40" {
 			t.Errorf("preview %v: mode = %v selected = %q", fromPreview, m.mode, key)
@@ -246,7 +251,7 @@ func retryAfterConfirm(t *testing.T, m Model, fromPreview bool) Model {
 	if m.mode != ViewDeleteConfirm || !strings.Contains(confirmView(m), "Run again?") {
 		t.Fatalf("preview %v: r should ask first, mode = %v view:\n%s", fromPreview, m.mode, confirmView(m))
 	}
-	m = press(t, m, runes("y"))
+	m = pressSettled(t, m, runes("y"))
 	if m.mode != startMode {
 		t.Errorf("preview %v: returned to %v", fromPreview, m.mode)
 	}
@@ -276,11 +281,11 @@ func TestPreviewNextOntoARunningJobFollowsItsLog(t *testing.T) {
 	markJobRunning(t, &m, "weekly")
 	selectNavItem(t, &m, "job:nightly")
 	m = press(t, m, tea.KeyMsg{Type: tea.KeyEnter})
-	m.jobLogRunning, m.jobLogStamp = false, ""
+	m.jobs.jobLogRunning, m.jobs.jobLogStamp = false, ""
 	next, cmd := m.Update(runes("n"))
 	m = next.(Model)
-	if key, _ := m.selectedNavKey(); key != "job:weekly" || !m.jobLogRunning || m.jobLogStamp == "" || cmd == nil {
-		t.Errorf("selected = %q logRunning = %v stamp = %q cmd = %v", key, m.jobLogRunning, m.jobLogStamp, cmd != nil)
+	if key, _ := m.selectedNavKey(); key != "job:weekly" || !m.jobs.jobLogRunning || m.jobs.jobLogStamp == "" || cmd == nil {
+		t.Errorf("selected = %q logRunning = %v stamp = %q cmd = %v", key, m.jobs.jobLogRunning, m.jobs.jobLogStamp, cmd != nil)
 	}
 }
 
@@ -365,7 +370,7 @@ func TestDraftTabDeletesTheDraftOnlyAfterConfirm(t *testing.T) {
 func TestDraftTabCopyWithoutADraftCopiesNothing(t *testing.T) {
 	copied := captureClipboard(t)
 	m, _ := automationTestModel(t)
-	m.automationRuns = map[string]automation.Run{"note-1": {Meta: automation.RunMeta{NoteID: "note-1", Automation: "jira", Phase: automation.PhaseDraft}, Status: automation.RunFailed}}
+	m.automation.automationRuns = map[string]automation.Run{"note-1": {Meta: automation.RunMeta{NoteID: "note-1", Automation: "jira", Phase: automation.PhaseDraft}, Status: automation.RunFailed}}
 	m = openDraftTab(t, m)
 	m.messages = nil
 	m = press(t, m, tea.KeyMsg{Type: tea.KeyCtrlY})
@@ -381,7 +386,7 @@ func TestRejectBoxCopiesItsText(t *testing.T) {
 	if len(*copied) != 0 {
 		t.Errorf("an empty reject box copied %q", *copied)
 	}
-	m.rejectInput.SetValue("please add tests")
+	m.review.rejectInput.SetValue("please add tests")
 	m = press(t, m, tea.KeyMsg{Type: tea.KeyCtrlY})
 	if len(*copied) != 1 || (*copied)[0] != "please add tests" || m.mode != ViewRejectComment {
 		t.Errorf("copied %q mode %v", *copied, m.mode)
@@ -447,7 +452,7 @@ func TestAutomationStartFailureShowsInTheHeaderAndPreviewUntilASuccess(t *testin
 	m = openDraftTab(t, m)
 	startAutomation = func(root, noteID, name string, phase automation.Phase) error { return errors.New("claude not found") }
 	m = press(t, m, runes("r"))
-	m = press(t, m, runes("y"))
+	m = pressSettled(t, m, runes("y"))
 	if m.mode != ViewPreview || !strings.Contains(confirmView(m), "claude not found") {
 		t.Errorf("the preview should show the failure, mode = %v view:\n%s", m.mode, confirmView(m))
 	}
@@ -459,7 +464,7 @@ func TestAutomationStartFailureShowsInTheHeaderAndPreviewUntilASuccess(t *testin
 		return nil
 	}
 	m = press(t, m, runes("r"))
-	m = press(t, m, runes("y"))
+	m = pressSettled(t, m, runes("y"))
 	if len(*started) != 1 || strings.Contains(confirmView(m), "claude not found") || strings.Contains(headerTopRow(m), "claude not found") {
 		t.Errorf("a successful start should clear the failure, started = %+v header = %q", *started, headerTopRow(m))
 	}
@@ -470,12 +475,12 @@ func TestAutomationDraftSaveFailureShowsInTheHeaderUntilASave(t *testing.T) {
 	m = openDraftTab(t, withDraft(t, m, automation.RunDraftReady, automation.PhaseDraft))
 	m = press(t, m, tea.KeyMsg{Type: tea.KeyEnter})
 	m.editor.SetValue("summary: [unterminated")
-	m = press(t, m, tea.KeyMsg{Type: tea.KeyCtrlO})
-	if m.mode != ViewAutomationEdit || m.automationNotice == "" || !strings.Contains(headerTopRow(m), "automation error") {
-		t.Fatalf("mode = %v notice = %q header = %q", m.mode, m.automationNotice, headerTopRow(m))
+	m = pressSettled(t, m, tea.KeyMsg{Type: tea.KeyCtrlO})
+	if m.mode != ViewAutomationEdit || m.automation.automationNotice == "" || !strings.Contains(headerTopRow(m), "automation error") {
+		t.Fatalf("mode = %v notice = %q header = %q", m.mode, m.automation.automationNotice, headerTopRow(m))
 	}
 	m.editor.SetValue(testDraft)
-	m = press(t, m, tea.KeyMsg{Type: tea.KeyCtrlO})
+	m = pressSettled(t, m, tea.KeyMsg{Type: tea.KeyCtrlO})
 	if m.mode != ViewPreview || strings.Contains(headerTopRow(m), "automation error") || m.previewNotice != "" {
 		t.Errorf("a save should clear the failure, mode = %v header = %q notice = %q", m.mode, headerTopRow(m), m.previewNotice)
 	}
@@ -496,15 +501,15 @@ func TestUnreadableBragOffersAFreshBrag(t *testing.T) {
 		t.Errorf("an unreadable brag should not offer a view, label = %q", label)
 	}
 	m = press(t, m, tea.KeyMsg{Type: tea.KeyEnter})
-	if m.mode != ViewBragConfirm || m.bragRegenerate || !strings.Contains(m.bragNotice, "missing frontmatter") {
-		t.Fatalf("mode = %v regenerate = %v notice = %q", m.mode, m.bragRegenerate, m.bragNotice)
+	if m.mode != ViewBragConfirm || m.brag.bragRegenerate || !strings.Contains(m.brag.bragNotice, "missing frontmatter") {
+		t.Fatalf("mode = %v regenerate = %v notice = %q", m.mode, m.brag.bragRegenerate, m.brag.bragNotice)
 	}
 	m = press(t, m, tea.KeyMsg{Type: tea.KeyEsc})
 	if m.mode != ViewBragList || !strings.Contains(stripANSI(m.View()), "missing frontmatter") {
 		t.Fatalf("the list should keep the load error, mode = %v", m.mode)
 	}
 	m = press(t, m, tea.KeyMsg{Type: tea.KeyEnter})
-	m = press(t, m, runes("y"))
+	m = pressSettled(t, m, runes("y"))
 	if len(*started) != 1 || (*started)[0] != (startedBrag{week40.ID(), false}) {
 		t.Errorf("started = %+v", *started)
 	}
@@ -513,8 +518,8 @@ func TestUnreadableBragOffersAFreshBrag(t *testing.T) {
 	}
 	m.refreshBragRuns()
 	m = press(t, m, tea.KeyMsg{Type: tea.KeyEnter})
-	if m.mode != ViewBragView || m.bragNotice != "" {
-		t.Errorf("a readable brag should open, mode = %v notice = %q", m.mode, m.bragNotice)
+	if m.mode != ViewBragView || m.brag.bragNotice != "" {
+		t.Errorf("a readable brag should open, mode = %v notice = %q", m.mode, m.brag.bragNotice)
 	}
 }
 
@@ -524,7 +529,7 @@ func TestBOpensTheBragListOnTheUnbraggedWeekWithoutRefreshing(t *testing.T) {
 	if notice := m.unbraggedWeekNotice(); notice == "" {
 		t.Fatal("expected the unbragged week notice")
 	}
-	m.bragSelected = 0
+	m.brag.bragSelected = 0
 	next, cmd := m.Update(runes("b"))
 	m = next.(Model)
 	row, ok := m.selectedBragRow()

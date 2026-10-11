@@ -28,16 +28,16 @@ func TestDOnANoteAsksToArchiveIt(t *testing.T) {
 	m := noteSelectedModel(t)
 	m.notes[0].FilePath = "/notes/n1.md"
 	m = press(t, m, runes("d"))
-	if m.mode != ViewDeleteConfirm || len(m.deleteTargetNotes) != 1 || m.deleteTargetNotes[0].ID != "n1" || m.deleteReturnMode != ViewDashboard {
-		t.Errorf("mode=%v targets=%v return=%v", m.mode, m.deleteTargetNotes, m.deleteReturnMode)
+	if m.mode != ViewDeleteConfirm || len(m.notesUI.deleteTargetNotes) != 1 || m.notesUI.deleteTargetNotes[0].ID != "n1" || m.returnMode() != ViewDashboard {
+		t.Errorf("mode=%v targets=%v return=%v", m.mode, m.notesUI.deleteTargetNotes, m.returnMode())
 	}
 }
 
 func TestDOnAnUnsavedNoteAsksThenDropsIt(t *testing.T) {
 	m := noteSelectedModel(t)
 	m = press(t, m, runes("d"))
-	if m.mode != ViewDeleteConfirm || len(m.deleteTargetNotes) != 1 || !strings.Contains(stripANSI(m.View()), "This note doesn't exist. Delete?") {
-		t.Fatalf("mode=%v targets=%v", m.mode, m.deleteTargetNotes)
+	if m.mode != ViewDeleteConfirm || len(m.notesUI.deleteTargetNotes) != 1 || !strings.Contains(stripANSI(m.View()), "This note doesn't exist. Delete?") {
+		t.Fatalf("mode=%v targets=%v", m.mode, m.notesUI.deleteTargetNotes)
 	}
 	if cancelled := press(t, m, runes("n")); cancelled.mode != ViewDashboard || len(cancelled.notes) != 1 {
 		t.Errorf("n should keep the note: mode=%v notes=%d", cancelled.mode, len(cancelled.notes))
@@ -55,7 +55,7 @@ func TestClearingANoteInlineAsksToDeleteIt(t *testing.T) {
 	selectNote(t, &m, "n1")
 	clearInline := func(m Model) Model {
 		m = press(t, m, runes("i"))
-		m.inlineInput.SetValue("  ")
+		m.notesUI.inlineInput.SetValue("  ")
 		return press(t, m, tea.KeyMsg{Type: tea.KeyEnter})
 	}
 	asked := clearInline(m)
@@ -182,8 +182,8 @@ func TestANewNoteIsDatedTheViewedDay(t *testing.T) {
 	m = press(t, m, runes("p"))
 	viewedDay := m.currentDate
 	m = press(t, m, runes("a"))
-	if m.mode != ViewEdit || m.currentNote == nil || !isSameDay(m.currentNote.Created, viewedDay) {
-		t.Fatalf("mode=%v note=%+v viewed=%v", m.mode, m.currentNote, viewedDay)
+	if m.mode != ViewEdit || m.notesUI.currentNote == nil || !isSameDay(m.notesUI.currentNote.Created, viewedDay) {
+		t.Fatalf("mode=%v note=%+v viewed=%v", m.mode, m.notesUI.currentNote, viewedDay)
 	}
 	m = typeText(t, m, "Dated note")
 	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlO})
@@ -224,7 +224,7 @@ func TestSavingAnEmptyNewNoteShowsAnErrorInTheEditor(t *testing.T) {
 	m.editor.SetValue("  \n ")
 	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlO})
 	m = next.(Model)
-	if m.mode != ViewEdit || cmd != nil || len(m.notes) != 0 || m.awaitingNewNoteSave {
+	if m.mode != ViewEdit || cmd != nil || len(m.notes) != 0 || m.notesUI.awaitingNewNoteSave {
 		t.Fatalf("mode=%v cmd=%v notes=%d", m.mode, cmd != nil, len(m.notes))
 	}
 	if !strings.Contains(stripANSI(m.View()), "note is empty") {
@@ -241,7 +241,7 @@ func TestSavingAnEmptiedExistingNoteShowsAnErrorAndKeepsTheNote(t *testing.T) {
 	if m.mode != ViewEdit {
 		t.Fatalf("enter should open the editor, mode=%v", m.mode)
 	}
-	edited := m.currentNote
+	edited := m.notesUI.currentNote
 	m.editor.SetValue(" \n\t")
 	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlO})
 	m = next.(Model)

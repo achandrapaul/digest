@@ -243,7 +243,7 @@ func TestAIToolTypeOnlyAcceptsClaude(t *testing.T) {
 
 func TestDefaultTemplateMatchesDefaultConfig(t *testing.T) {
 	cfg := DefaultConfig()
-	if cfg.AIToolType != "claude" || cfg.SelectionDefault != SelectionNotesToday || !cfg.GitEnabled() || cfg.Root() == "" || cfg.PRsPerRepo() != DefaultPRQuantityPerRepo || cfg.GitAutoSyncInterval != 600 || len(cfg.Jobs) != 3 {
+	if cfg.AIToolType != "claude" || cfg.SelectionDefault != SelectionNotesToday || !cfg.GitEnabled() || cfg.Root() == "" || cfg.PRsPerRepo() != DefaultPRQuantityPerRepo || len(cfg.Jobs) != 3 {
 		t.Errorf("default config = %+v", cfg)
 	}
 	if cfg.BragPrompt(PromptWeek) != DefaultWeekBragPrompt || !strings.Contains(cfg.ReviewCommandTemplate(), "/review-toolkit:review {url} --emit findings-json") {
@@ -445,18 +445,15 @@ func TestMissingKeysUseBuiltInDefaults(t *testing.T) {
 	if len(cfg.Jobs) != 3 || cfg.Jobs[0].Name != "branch-reaper" || cfg.Jobs[1].Name != "janitor" || cfg.Jobs[1].Command != "digest janitor" {
 		t.Errorf("jobs = %+v", cfg.Jobs)
 	}
-	if cfg.GitAutoSyncInterval != 600 {
-		t.Errorf("interval = %d, want 600", cfg.GitAutoSyncInterval)
-	}
 	if cfg.DigestNotifications.Morning != "09:30" || cfg.DigestNotifications.Evening != "18:00" {
 		t.Errorf("summaries = %+v", cfg.DigestNotifications)
 	}
 	var explicit Config
-	raw := "jobs: []\ngit_auto_sync_interval: 120\ndigest_notifications:\n  morning: \"\"\n  evening: \"19:00\"\n"
+	raw := "jobs: []\ndigest_notifications:\n  morning: \"\"\n  evening: \"19:00\"\n"
 	if err := yaml.Unmarshal([]byte(raw), &explicit); err != nil {
 		t.Fatal(err)
 	}
-	if len(explicit.Jobs) != 3 || explicit.GitAutoSyncInterval != 120 || explicit.DigestNotifications.Morning != "" || explicit.DigestNotifications.Evening != "19:00" {
+	if len(explicit.Jobs) != 3 || explicit.DigestNotifications.Morning != "" || explicit.DigestNotifications.Evening != "19:00" {
 		t.Errorf("explicit values should be kept: %+v", explicit)
 	}
 	if defaults := DefaultConfig(); len(defaults.GitRepositoryRoots) != 0 {

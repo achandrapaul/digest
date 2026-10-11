@@ -140,7 +140,8 @@ func printUsage(out io.Writer) {
 		"  automation     Draft or create a note's ticket (--note <id> --name <automation> --phase draft|create)",
 		"  notify-due     Send due @notify reminders (run every minute by launchd)",
 		"  migrate        Rename note files by status and give older and PR notes timestamp ids (quit the TUI first)",
-		"  install        Install missing tools, notifications and a shortcut, asking before each",
+		"  bootstrap      Set digest up in one go: install, doctor, init (keeps an existing config.yaml) and setup; a failed step is retried once",
+		"  install        Install missing tools and notifications, then ask before adding a keyboard shortcut",
 		"  install notifications    Install the launchd agent that runs notify-due every minute",
 		"  uninstall notifications  Remove that launchd agent",
 		"  doctor         Check that every tool digest needs is installed",
@@ -211,7 +212,7 @@ func withoutDryRun(args []string) []string {
 
 func dryRunUnsupported(command string, args []string) (string, bool) {
 	switch command {
-	case "pr-review", "brag", "automation", "notify-due", "init":
+	case "pr-review", "brag", "automation", "notify-due", "init", "bootstrap":
 		return command, true
 	case "install", "uninstall":
 		words := []string{command}
@@ -446,6 +447,10 @@ func main() {
 			fmt.Fprintf(os.Stderr, "Error running setup: %v\n", err)
 			os.Exit(1)
 		}
+
+	case "bootstrap":
+		parseCommandFlags(newCommandFlags("bootstrap"), subArgs)
+		exitForJob("bootstrap", false, runStages(bootstrapStages(parsed.configPath, cfg, configErr), os.Stdout))
 
 	case "init":
 		fs := newCommandFlags("init")

@@ -113,16 +113,16 @@ func TestAbortConfirmSendsTermThenKillsAfterThreeSecondsAndLogs(t *testing.T) {
 	m.refreshJobStates()
 	m = openPreviewOn(t, m, "job:janitor")
 	m = press(t, m, runes("d"))
-	if m.mode != ViewDeleteConfirm || m.jobToAbort != "janitor" {
-		t.Fatalf("d on a running job: mode %v abort %q", m.mode, m.jobToAbort)
+	if m.mode != ViewDeleteConfirm || m.jobs.jobToAbort != "janitor" {
+		t.Fatalf("d on a running job: mode %v abort %q", m.mode, m.jobs.jobToAbort)
 	}
 	if !strings.Contains(stripANSI(m.View()), "abort running job 'janitor'") {
 		t.Errorf("confirm should name the job")
 	}
 	next, cmd := m.Update(runes("y"))
 	m = next.(Model)
-	if m.mode != ViewPreview || m.jobToAbort != "" || cmd == nil {
-		t.Fatalf("y: mode %v abort %q cmd %v", m.mode, m.jobToAbort, cmd != nil)
+	if m.mode != ViewPreview || m.jobs.jobToAbort != "" || cmd == nil {
+		t.Fatalf("y: mode %v abort %q cmd %v", m.mode, m.jobs.jobToAbort, cmd != nil)
 	}
 	started := time.Now()
 	msg := cmd()
@@ -220,8 +220,8 @@ func TestAbortConfirmNOrEscKeepsTheJobRunning(t *testing.T) {
 		m = press(t, m, runes("d"))
 		next, cmd := m.Update(key)
 		m = next.(Model)
-		if cmd != nil || m.jobToAbort != "" || m.mode != ViewPreview || !isJobRunning("janitor") {
-			t.Errorf("%s: mode %v abort %q running %v", name, m.mode, m.jobToAbort, isJobRunning("janitor"))
+		if cmd != nil || m.jobs.jobToAbort != "" || m.mode != ViewPreview || !isJobRunning("janitor") {
+			t.Errorf("%s: mode %v abort %q running %v", name, m.mode, m.jobs.jobToAbort, isJobRunning("janitor"))
 		}
 	}
 }

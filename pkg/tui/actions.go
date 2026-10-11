@@ -48,7 +48,7 @@ func (m Model) noteActions(n *model.Note) []noteAction {
 	if !noteIsActive(n) {
 		return nil
 	}
-	_, reminding := m.notifyEntries[n.ID]
+	_, reminding := m.notesUI.notifyEntries[n.ID]
 	var actions []noteAction
 	if !reminding {
 		actions = append(actions, noteAction{name: actionNameNotify})
@@ -77,26 +77,25 @@ func (m Model) openActionMenu(tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if !found {
 		return m, nil
 	}
-	m.actionMenuNoteID = note.ID
-	m.actionMenuItems = m.noteActions(note)
-	m.actionMenuSelected = 0
-	m.actionMenuReturnMode = m.mode
-	m.mode = ViewActionMenu
+	m.notesUI.actionMenuNoteID = note.ID
+	m.notesUI.actionMenuItems = m.noteActions(note)
+	m.notesUI.actionMenuSelected = 0
+	m.pushMode(ViewActionMenu)
 	return m, nil
 }
 
 func (m Model) actionMenuDown(tea.KeyMsg) (tea.Model, tea.Cmd) {
-	m.actionMenuSelected = min(m.actionMenuSelected+1, max(len(m.actionMenuItems)-1, 0))
+	m.notesUI.actionMenuSelected = min(m.notesUI.actionMenuSelected+1, max(len(m.notesUI.actionMenuItems)-1, 0))
 	return m, nil
 }
 
 func (m Model) actionMenuUp(tea.KeyMsg) (tea.Model, tea.Cmd) {
-	m.actionMenuSelected = max(m.actionMenuSelected-1, 0)
+	m.notesUI.actionMenuSelected = max(m.notesUI.actionMenuSelected-1, 0)
 	return m, nil
 }
 
 func (m Model) closeActionMenu(tea.KeyMsg) (tea.Model, tea.Cmd) {
-	m.mode = m.actionMenuReturnMode
+	m.mode = m.popMode()
 	if m.mode == ViewPreview {
 		m.updatePreviewViewport()
 	}
@@ -104,30 +103,30 @@ func (m Model) closeActionMenu(tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) chooseAction(tea.KeyMsg) (tea.Model, tea.Cmd) {
-	if m.actionMenuSelected >= len(m.actionMenuItems) {
+	if m.notesUI.actionMenuSelected >= len(m.notesUI.actionMenuItems) {
 		return m, nil
 	}
-	chosen := m.actionMenuItems[m.actionMenuSelected]
+	chosen := m.notesUI.actionMenuItems[m.notesUI.actionMenuSelected]
 	if chosen.name == actionNameNotifyOff {
 		return m.removeReminder()
 	}
 	switch {
 	case !chosen.automation:
-		m.notifyNotice = ""
-		m.notifyInput.SetValue(m.notifyEntries[m.actionMenuNoteID].Interval)
-		m.notifyInput.CursorEnd()
-		m.notifyInput.Focus()
+		m.notesUI.notifyNotice = ""
+		m.notesUI.notifyInput.SetValue(m.notesUI.notifyEntries[m.notesUI.actionMenuNoteID].Interval)
+		m.notesUI.notifyInput.CursorEnd()
+		m.notesUI.notifyInput.Focus()
 		m.mode = ViewNotifyInput
 	default:
-		m = m.askAutomationConfirm(m.actionMenuNoteID, chosen.name, automation.PhaseDraft)
-		m.automationReturnMode = m.actionMenuReturnMode
+		m.mode = m.popMode()
+		m = m.askAutomationConfirm(m.notesUI.actionMenuNoteID, chosen.name, automation.PhaseDraft)
 	}
 	return m, nil
 }
 
 func (m *Model) leaveNotifyInput() {
-	m.notifyInput.Blur()
-	m.mode = m.actionMenuReturnMode
+	m.notesUI.notifyInput.Blur()
+	m.mode = m.popMode()
 	if m.mode == ViewPreview {
 		m.updatePreviewViewport()
 	}
@@ -136,14 +135,14 @@ func (m *Model) leaveNotifyInput() {
 const messageSourceNotify = "notify"
 
 func (m Model) confirmNotify(tea.KeyMsg) (tea.Model, tea.Cmd) {
-	interval, err := notify.ParseInterval(m.notifyInput.Value())
+	interval, err := notify.ParseInterval(m.notesUI.notifyInput.Value())
 	if err != nil {
-		m.notifyNotice = err.Error()
+		m.notesUI.notifyNotice = err.Error()
 		return m, nil
 	}
-	note := m.noteByID(m.actionMenuNoteID)
+	note := m.noteByID(m.notesUI.actionMenuNoteID)
 	if note == nil {
-		m.notifyInput.Blur()
+		m.notesUI.notifyInput.Blur()
 		m.mode = ViewDashboard
 		m.postMessage(messageSourceNotify, messageError, "note no longer exists")
 		return m, nil
@@ -152,7 +151,7 @@ func (m Model) confirmNotify(tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if entry.OpenURL == "" {
 		entry.Terminal = os.Getenv("__CFBundleIdentifier")
 	}
-	m.notifyNotice = ""
+	m.notesUI.notifyNotice = ""
 	root := m.cfg.Root()
 	return m, func() tea.Msg {
 		if err := notify.Save(root, entry); err != nil {
@@ -169,10 +168,10 @@ type reminderSavedMsg struct {
 }
 
 func (m Model) applyReminderSaved(msg reminderSavedMsg) (tea.Model, tea.Cmd) {
-	inputOpen := m.mode == ViewNotifyInput && m.actionMenuNoteID == msg.noteID
+	inputOpen := m.mode == ViewNotifyInput && m.notesUI.actionMenuNoteID == msg.noteID
 	if msg.err != nil {
 		if inputOpen {
-			m.notifyNotice = msg.err.Error()
+			m.notesUI.notifyNotice = msg.err.Error()
 		} else {
 			m.showError("NOTIFY ERROR", msg.err)
 		}
@@ -185,7 +184,7 @@ func (m Model) applyReminderSaved(msg reminderSavedMsg) (tea.Model, tea.Cmd) {
 		m.showError("NOTIFY ERROR", msg.listed.err)
 		return m, nil
 	}
-	m.notifyEntries = msg.listed.entries
+	m.notesUI.notifyEntries = msg.listed.entries
 	if inputOpen {
 		m.leaveNotifyInput()
 	}
@@ -193,10 +192,10 @@ func (m Model) applyReminderSaved(msg reminderSavedMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) removeReminder() (tea.Model, tea.Cmd) {
-	noteID, root := m.actionMenuNoteID, m.cfg.Root()
-	entries := maps.Clone(m.notifyEntries)
+	noteID, root := m.notesUI.actionMenuNoteID, m.cfg.Root()
+	entries := maps.Clone(m.notesUI.notifyEntries)
 	delete(entries, noteID)
-	m.notifyEntries = entries
+	m.notesUI.notifyEntries = entries
 	m.leaveNotifyInput()
 	return m, func() tea.Msg {
 		if err := notify.Remove(root, noteID); err != nil {
@@ -276,7 +275,7 @@ func refreshNotifyCmd(root string, notes []*model.Note) tea.Cmd {
 }
 
 func (m Model) notifyTag(n *model.Note) string {
-	entry, found := m.notifyEntries[n.ID]
+	entry, found := m.notesUI.notifyEntries[n.ID]
 	if !found || !noteIsActive(n) {
 		return ""
 	}
@@ -285,13 +284,13 @@ func (m Model) notifyTag(n *model.Note) string {
 
 func (m Model) renderActionDropdown() string {
 	labelWidth := 0
-	for _, action := range m.actionMenuItems {
+	for _, action := range m.notesUI.actionMenuItems {
 		labelWidth = max(labelWidth, lipgloss.Width("@"+action.name))
 	}
 	var rows []string
-	for index, action := range m.actionMenuItems {
+	for index, action := range m.notesUI.actionMenuItems {
 		label := fmt.Sprintf("%-*s", labelWidth, "@"+action.name)
-		if index == m.actionMenuSelected {
+		if index == m.notesUI.actionMenuSelected {
 			rows = append(rows, hintKeyStyle.Render("› "+label))
 		} else {
 			rows = append(rows, hintTextStyle.Render("  "+label))

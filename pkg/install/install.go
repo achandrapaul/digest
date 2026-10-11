@@ -30,12 +30,10 @@ func (installer *Installer) Run() error {
 	if err := installer.InstallDependencies(); err != nil {
 		return err
 	}
-	if installer.Confirm("Install the notifications launchd agent?") {
-		if err := installer.InstallNotifications(); err != nil {
-			return err
-		}
-		fmt.Fprintln(installer.Out, "✓ notifications installed")
+	if err := installer.InstallNotifications(); err != nil {
+		return err
 	}
+	fmt.Fprintln(installer.Out, "✓ notifications installed")
 	return installer.InstallShortcut()
 }
 
@@ -55,9 +53,7 @@ func (installer *Installer) InstallDependencies() error {
 			formulas[index] = formula
 		}
 	}
-	if !installer.Confirm("Install them with brew install " + strings.Join(formulas, " ") + "?") {
-		return nil
-	}
+	fmt.Fprintln(installer.Out, "Installing with brew install "+strings.Join(formulas, " "))
 	return installer.RunCommand("brew", append([]string{"install"}, formulas...)...)
 }
 

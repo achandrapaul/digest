@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/achandrapaul/digest/pkg/appstate"
+	"github.com/achandrapaul/digest/pkg/automation"
 	"github.com/achandrapaul/digest/pkg/model"
 	"github.com/achandrapaul/digest/pkg/notify"
 	"github.com/achandrapaul/digest/pkg/store"
@@ -308,5 +309,54 @@ func TestMigrateKeepsFirstNoteCreatedWithoutNotes(t *testing.T) {
 	}
 	if got, _, _ := appstate.Load(f.root); !reflect.DeepEqual(got, stored) {
 		t.Errorf("with no notes the stored state should stay: %+v", got)
+	}
+}
+
+func TestMigrateKeepsTheReminderAndAutomationStateWithAReIDedNoteAcrossAFailedSave(t *testing.T) {
+	f := newFixture(t)
+	const ulid = "01M3P3RDCCFE87NP9MRHHGRVKS"
+	created := time.Date(2026, 10, 6, 9, 0, 0, 0, time.Local)
+	notePath := f.writeNote(t, "2026/10/"+ulid+".md", "id: "+ulid+"\ncreated: "+created.Format(time.RFC3339Nano)+"\nstatus: active\nsummary: ulid one\n", "")
+	if err := notify.Save(f.root, notify.Entry{NoteID: ulid, Summary: "ulid one", Interval: "1h"}); err != nil {
+		t.Fatal(err)
+	}
+	options := f.options()
+	oldStateDir := automation.StateDir(options.AutomationDir, ulid)
+	if err := os.MkdirAll(oldStateDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(oldStateDir, "draft.md"), []byte("draft"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	newID := store.NoteID(created)
+	noteDir := filepath.Dir(notePath)
+	if err := os.Chmod(noteDir, 0o500); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chmod(noteDir, 0o700) })
+	if _, err := Run(options); err == nil {
+		t.Fatal("the save should fail while the folder is read-only")
+	}
+	if err := os.Chmod(noteDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Run(options); err != nil {
+		t.Fatal(err)
+	}
+	byKey, _ := f.notesByRef(t)
+	if note := byKey["ulid one"]; note == nil || note.ID != newID {
+		t.Fatalf("note = %+v, want id %s", note, newID)
+	}
+	if entry, found := notify.Load(f.root, newID); !found || entry.NoteID != newID {
+		t.Errorf("reminder should follow the note to %s: %+v %v", newID, entry, found)
+	}
+	if _, found := notify.Load(f.root, ulid); found {
+		t.Error("the old reminder should be gone")
+	}
+	if draft, err := os.ReadFile(filepath.Join(automation.StateDir(options.AutomationDir, newID), "draft.md")); err != nil || string(draft) != "draft" {
+		t.Errorf("automation state should move to the new id: %q %v", draft, err)
+	}
+	if _, err := os.Stat(oldStateDir); !os.IsNotExist(err) {
+		t.Errorf("old automation state should be gone: %v", err)
 	}
 }

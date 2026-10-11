@@ -69,16 +69,16 @@ func jobTestModel(t *testing.T) (Model, *[]string, *[]string) {
 	m.cfg.ShowKeyHints = true
 	m.cfg.Jobs = []config.JobSpec{{Name: "nightly", Command: "true", DryRunCommand: "true"}}
 	var executed, dryRun []string
-	previousExecute, previousDryRun := executeJobBackground, startDryRunBackground
-	executeJobBackground = func(cfg *config.Config, jobName string) error {
-		executed = append(executed, jobName)
+	previousStart := startJobProcess
+	startJobProcess = func(launch jobLaunch) error {
+		if launch.dryRun {
+			dryRun = append(dryRun, launch.spec.Name)
+		} else {
+			executed = append(executed, launch.spec.Name)
+		}
 		return nil
 	}
-	startDryRunBackground = func(spec config.JobSpec) error {
-		dryRun = append(dryRun, spec.Name)
-		return nil
-	}
-	t.Cleanup(func() { executeJobBackground, startDryRunBackground = previousExecute, previousDryRun })
+	t.Cleanup(func() { startJobProcess = previousStart })
 	m.contentVersion++
 	selectNavItem(t, &m, "job:nightly")
 	return m, &executed, &dryRun
@@ -90,7 +90,7 @@ func markJobRunning(t *testing.T, m *Model, jobName string) {
 	if err := os.WriteFile(filepath.Join(getLogsDir(), jobName+".pid"), []byte(strconv.Itoa(pid)), 0644); err != nil {
 		t.Fatal(err)
 	}
-	m.runningJobPIDs = map[string]int{jobName: pid}
+	m.jobs.runningJobPIDs = map[string]int{jobName: pid}
 	m.contentVersion++
 }
 
@@ -145,10 +145,10 @@ func TestROnJobRunsItAfterConfirmFromRowAndPreview(t *testing.T) {
 			startMode = ViewPreview
 		}
 		m = press(t, m, runes("r"))
-		if m.mode != ViewDeleteConfirm || m.jobToExecute != "nightly" || len(*executed) != 0 {
+		if m.mode != ViewDeleteConfirm || m.jobs.jobToExecute != "nightly" || len(*executed) != 0 {
 			t.Fatalf("preview %v: r should ask first, mode = %v executed = %v", fromPreview, m.mode, *executed)
 		}
-		m = press(t, m, runes("y"))
+		m = pressSettled(t, m, runes("y"))
 		if len(*executed) != 1 || (*executed)[0] != "nightly" || len(*dryRun) != 0 {
 			t.Errorf("preview %v: executed = %v dryRun = %v", fromPreview, *executed, *dryRun)
 		}
@@ -162,7 +162,7 @@ func TestEnterInJobPreviewStillRuns(t *testing.T) {
 	m, executed, _ := jobTestModel(t)
 	m = press(t, m, tea.KeyMsg{Type: tea.KeyEnter})
 	m = press(t, m, tea.KeyMsg{Type: tea.KeyEnter})
-	m = press(t, m, runes("y"))
+	m = pressSettled(t, m, runes("y"))
 	if len(*executed) != 1 || m.mode != ViewPreview {
 		t.Errorf("executed = %v mode = %v", *executed, m.mode)
 	}
@@ -181,7 +181,7 @@ func TestDOnIdleJobDryRunsOnlyThatJob(t *testing.T) {
 		if m.mode != ViewDeleteConfirm || len(*dryRun) != 0 {
 			t.Fatalf("preview %v: d should ask before the dry run, mode = %v dryRun = %v", fromPreview, m.mode, *dryRun)
 		}
-		m = press(t, m, runes("y"))
+		m = pressSettled(t, m, runes("y"))
 		if len(*dryRun) != 1 || (*dryRun)[0] != "nightly" || len(*executed) != 0 || m.mode == ViewDeleteConfirm {
 			t.Errorf("preview %v: dryRun = %v executed = %v mode = %v", fromPreview, *dryRun, *executed, m.mode)
 		}
@@ -209,8 +209,8 @@ func TestDOnRunningJobAsksBeforeStopping(t *testing.T) {
 	m, _, _ := jobTestModel(t)
 	markJobRunning(t, &m, "nightly")
 	m = press(t, m, runes("d"))
-	if m.mode != ViewDeleteConfirm || m.jobToAbort != "nightly" {
-		t.Errorf("mode = %v abort = %q", m.mode, m.jobToAbort)
+	if m.mode != ViewDeleteConfirm || m.jobs.jobToAbort != "nightly" {
+		t.Errorf("mode = %v abort = %q", m.mode, m.jobs.jobToAbort)
 	}
 }
 
@@ -280,7 +280,7 @@ func TestPRRowOffersStopLabel(t *testing.T) {
 	if hint := hintText(m); !strings.Contains(hint, "(d)reject") {
 		t.Errorf("idle PR hint = %q", hint)
 	}
-	markRunning(t, m, m.currentPRItem().PR.Ref)
+	m = markRunningCached(t, m, m.currentPRItem().PR.Ref)
 	if hint := hintText(m); !strings.Contains(hint, "(d)stop") {
 		t.Errorf("reviewing PR hint = %q", hint)
 	}
@@ -343,8 +343,8 @@ func TestMyPRRowHintsOpen(t *testing.T) {
 func TestEnterOnJobRowOpensThePreviewWithoutRunning(t *testing.T) {
 	m, executed, dryRun := jobTestModel(t)
 	m = press(t, m, tea.KeyMsg{Type: tea.KeyEnter})
-	if m.mode != ViewPreview || len(*executed) != 0 || len(*dryRun) != 0 || m.jobToExecute != "" {
-		t.Errorf("enter on the row: mode = %v executed = %v dryRun = %v jobToExecute = %q", m.mode, *executed, *dryRun, m.jobToExecute)
+	if m.mode != ViewPreview || len(*executed) != 0 || len(*dryRun) != 0 || m.jobs.jobToExecute != "" {
+		t.Errorf("enter on the row: mode = %v executed = %v dryRun = %v jobToExecute = %q", m.mode, *executed, *dryRun, m.jobs.jobToExecute)
 	}
 }
 
@@ -389,6 +389,6 @@ func markDryRunInFlight(t *testing.T, m *Model, jobName string) {
 	if err := os.WriteFile(dryRunFilePath(jobName, "pid"), []byte(strconv.Itoa(os.Getpid())), 0644); err != nil {
 		t.Fatal(err)
 	}
-	m.dryRunsInFlight = map[string]bool{jobName: true}
+	m.jobs.dryRunsInFlight = map[string]bool{jobName: true}
 	m.contentVersion++
 }

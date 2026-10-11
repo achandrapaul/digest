@@ -14,11 +14,11 @@ import (
 func TestArchiveGroupsNotesByDayAndClampsTheSelection(t *testing.T) {
 	m := openArchiveModel(t)
 	now := time.Now()
-	m.browsedNotes = append(m.browsedNotes, &model.Note{Summary: "archived last week", Status: model.StatusArchived, Source: model.SourceManual, Created: now.AddDate(0, 0, -9), Updated: now.AddDate(0, 0, -8)})
-	m.archivedSelected = -3
+	m.notesUI.browsedNotes = append(m.notesUI.browsedNotes, &model.Note{Summary: "archived last week", Status: model.StatusArchived, Source: model.SourceManual, Created: now.AddDate(0, 0, -9), Updated: now.AddDate(0, 0, -8)})
+	m.notesUI.archivedSelected = -3
 	m.refreshArchivedViewport()
-	if m.archivedSelected != 0 {
-		t.Fatalf("selected = %d", m.archivedSelected)
+	if m.notesUI.archivedSelected != 0 {
+		t.Fatalf("selected = %d", m.notesUI.archivedSelected)
 	}
 	content := stripANSI(m.renderArchivedContent(100, 0))
 	if !strings.Contains(content, now.AddDate(0, 0, -8).Format("Monday 02 Jan 2006")) || !strings.Contains(content, "\n\n") {
@@ -31,8 +31,8 @@ func TestArchiveOnATinyTerminalKeepsAMinimumHeight(t *testing.T) {
 	m.height = 8
 	next, _ := m.openArchive(tea.KeyMsg{})
 	m = next.(Model)
-	if m.archivedViewport.Height != 4 {
-		t.Fatalf("height = %d", m.archivedViewport.Height)
+	if m.notesUI.archivedViewport.Height != 4 {
+		t.Fatalf("height = %d", m.notesUI.archivedViewport.Height)
 	}
 	if view := stripANSI(m.renderArchivedModal(80)); !strings.Contains(view, "ARCHIVED NOTES") {
 		t.Fatalf("view:\n%s", view)
@@ -41,9 +41,9 @@ func TestArchiveOnATinyTerminalKeepsAMinimumHeight(t *testing.T) {
 
 func TestArchiveSelectionStartsAMapWhenMissing(t *testing.T) {
 	m := openArchiveModel(t)
-	m.archivedSelectedMap = nil
+	m.notesUI.archivedSelectedMap = nil
 	next, _ := m.toggleArchiveSelection(tea.KeyMsg{})
-	if !next.(Model).archivedSelectedMap[0] {
+	if !next.(Model).notesUI.archivedSelectedMap[0] {
 		t.Fatal("the first note should be selected")
 	}
 }
@@ -52,15 +52,15 @@ func TestBrowsedNotesRefreshTheSearchPreviewAndBragList(t *testing.T) {
 	m := typeQuery(t, searchTestModel(t), "flaky")
 	m.showSearchPreviewAt(0)
 	next, _ := m.Update(browsedNotesMsg{notes: nil})
-	if got := next.(Model); got.browsedNotes == nil || len(got.browsedNotes) != 0 {
-		t.Fatalf("browsed = %v", got.browsedNotes)
+	if got := next.(Model); got.notesUI.browsedNotes == nil || len(got.notesUI.browsedNotes) != 0 {
+		t.Fatalf("browsed = %v", got.notesUI.browsedNotes)
 	}
 	bragModel, _ := bragTestModel(t, wednesday())
 	bragModel = press(t, bragModel, runes("b"))
-	bragModel.bragSelected = 999
+	bragModel.brag.bragSelected = 999
 	next, _ = bragModel.Update(browsedNotesMsg{notes: []*model.Note{}})
-	if got := next.(Model); got.bragSelected != len(got.bragRows())-1 {
-		t.Fatalf("selected = %d of %d", got.bragSelected, len(got.bragRows()))
+	if got := next.(Model); got.brag.bragSelected != len(got.bragRows())-1 {
+		t.Fatalf("selected = %d of %d", got.brag.bragSelected, len(got.bragRows()))
 	}
 	_ = brag.Week{}
 }
@@ -70,7 +70,7 @@ func TestUnusableStoreResultsOnlyReportTheError(t *testing.T) {
 	failure := errors.New("disk gone")
 	for _, msg := range []tea.Msg{notesReloadedMsg{err: failure}, closedThisWeekMsg{count: 5, err: failure}} {
 		next, cmd := m.Update(msg)
-		if cmd != nil || next.(Model).closedThisWeekElsewhere == 5 {
+		if cmd != nil || next.(Model).notesUI.closedThisWeekElsewhere == 5 {
 			t.Fatalf("%T should only report the error", msg)
 		}
 	}
@@ -104,11 +104,11 @@ func TestBackgroundSaveErrorsShowAsMessages(t *testing.T) {
 func TestLoadedNotesReselectTheRequestedNoteAndRefreshOpenViews(t *testing.T) {
 	m := noteSaveModel(t, dashboardNotes(time.Now())...)
 	target := m.notes[len(m.notes)-1]
-	m.selectAfterReload = target.ID
+	m.notesUI.selectAfterReload = target.ID
 	m.mode = ViewArchived
 	next, _ := m.Update(loadNotesMsg{notes: m.notes})
 	got := next.(Model)
-	if item, _ := got.selectedNavItem(); item.Note != target || got.selectAfterReload != "" {
+	if item, _ := got.selectedNavItem(); item.Note != target || got.notesUI.selectAfterReload != "" {
 		t.Fatalf("selected %+v", item.Note)
 	}
 	search := typeQuery(t, searchTestModel(t), "flaky")
@@ -120,13 +120,13 @@ func TestLoadedNotesReselectTheRequestedNoteAndRefreshOpenViews(t *testing.T) {
 
 func TestChangedNotesRefreshOpenViewsAndMergeBrowsedCopies(t *testing.T) {
 	m := openArchiveModel(t)
-	browsed := m.browsedNotes[0]
+	browsed := m.notesUI.browsedNotes[0]
 	changed := *browsed
 	changed.Summary = "renamed in the background"
 	next, _ := m.Update(notesChangedMsg{notes: []model.Note{changed}})
 	got := next.(Model)
-	if got.browsedNotes[0].Summary != "renamed in the background" {
-		t.Fatalf("browsed = %q", got.browsedNotes[0].Summary)
+	if got.notesUI.browsedNotes[0].Summary != "renamed in the background" {
+		t.Fatalf("browsed = %q", got.notesUI.browsedNotes[0].Summary)
 	}
 	for _, note := range got.notes {
 		if note.Status == model.StatusArchived {
@@ -153,7 +153,7 @@ func TestNoteActionsOnNonNoteRowsDoNothing(t *testing.T) {
 			t.Fatalf("%s should do nothing on a repo row", name)
 		}
 	}
-	m.currentNote = nil
+	m.notesUI.currentNote = nil
 	next, cmd := m.saveInlineEdit(tea.KeyMsg{})
 	if next.(Model).mode != ViewDashboard || cmd == nil {
 		t.Fatal("saving without a note should reload the notes")

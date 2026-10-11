@@ -42,20 +42,27 @@ func markRunning(t *testing.T, m Model, ref review.PRRef) {
 	}
 }
 
+func markRunningCached(t *testing.T, m Model, ref review.PRRef) Model {
+	t.Helper()
+	markRunning(t, m, ref)
+	m.refreshLocalReviews()
+	return m
+}
+
 func TestROnDetailsTabAsksBeforeStarting(t *testing.T) {
 	started, _ := stubReviewControl(t)
 	m := reviewTestModel(t)
 	m.previewTab = previewTabDetails
 	m = press(t, m, runes("r"))
-	if m.mode != ViewReviewRunConfirm || m.reviewRunAction != "start" || len(*started) != 0 {
-		t.Fatalf("mode=%v action=%q started=%v", m.mode, m.reviewRunAction, *started)
+	if m.mode != ViewReviewRunConfirm || m.review.reviewRunAction != "start" || len(*started) != 0 {
+		t.Fatalf("mode=%v action=%q started=%v", m.mode, m.review.reviewRunAction, *started)
 	}
 	m = press(t, m, tea.KeyMsg{Type: tea.KeyEsc})
 	if m.mode != ViewPreview || len(*started) != 0 {
 		t.Fatalf("esc: mode=%v started=%v", m.mode, *started)
 	}
 	m = press(t, m, runes("r"))
-	m = press(t, m, tea.KeyMsg{Type: tea.KeyEnter})
+	m = pressSettled(t, m, tea.KeyMsg{Type: tea.KeyEnter})
 	if m.mode != ViewPreview || len(*started) != 1 {
 		t.Fatalf("confirm: mode=%v started=%v", m.mode, *started)
 	}
@@ -69,10 +76,10 @@ func TestDStopsRunningReviewOtherwiseRejects(t *testing.T) {
 		t.Fatalf("idle d: mode=%v, want reject comment", idle.mode)
 	}
 	item := m.currentPRItem()
-	markRunning(t, m, item.PR.Ref)
+	m = markRunningCached(t, m, item.PR.Ref)
 	m = press(t, m, runes("d"))
-	if m.mode != ViewReviewRunConfirm || m.reviewRunAction != "stop" {
-		t.Fatalf("running d: mode=%v action=%q", m.mode, m.reviewRunAction)
+	if m.mode != ViewReviewRunConfirm || m.review.reviewRunAction != "stop" {
+		t.Fatalf("running d: mode=%v action=%q", m.mode, m.review.reviewRunAction)
 	}
 	m = press(t, m, runes("y"))
 	if len(*stopped) != 1 || (*stopped)[0] != item.PR.Ref.URL || m.mode != ViewPreview {
@@ -104,7 +111,7 @@ func TestDOnRunningReviewRowStopsIt(t *testing.T) {
 
 func TestPreviewHeaderShowsReviewPID(t *testing.T) {
 	m := reviewTestModel(t)
-	markRunning(t, m, m.currentPRItem().PR.Ref)
+	m = markRunningCached(t, m, m.currentPRItem().PR.Ref)
 	want := fmt.Sprintf("PID %d", os.Getpid())
 	if !strings.Contains(m.View(), want) {
 		t.Errorf("PR preview missing %q", want)
@@ -132,7 +139,7 @@ func TestReviewFooterLabelsD(t *testing.T) {
 	if labelFor() != "reject" {
 		t.Errorf("idle d label = %q", labelFor())
 	}
-	markRunning(t, m, item.PR.Ref)
+	m = markRunningCached(t, m, item.PR.Ref)
 	if labelFor() != "stop" {
 		t.Errorf("running d label = %q", labelFor())
 	}
@@ -197,10 +204,10 @@ func TestReviewPollRerendersPreviewOnlyWhenThisPRChanged(t *testing.T) {
 
 func TestRunStatePollLeavesUnrelatedPreviewAlone(t *testing.T) {
 	m := reviewTestModel(t)
-	m.dryRunsInFlight = map[string]bool{"janitor": true}
+	m.jobs.dryRunsInFlight = map[string]bool{"janitor": true}
 	m.previewViewport = viewport.New(80, 20)
 	m.previewViewport.SetContent("sentinel")
-	next, _ := m.Update(runStatePollTickMsg{})
+	next, _ := m.Update(m.loadRunStatePoll())
 	m = next.(Model)
 	if !strings.Contains(m.previewViewport.View(), "sentinel") {
 		t.Errorf("a busy job should not rebuild a PR preview every poll")
@@ -217,12 +224,12 @@ func TestCloneReadyDoesNotRunTmuxOnTheUILoop(t *testing.T) {
 	}
 	t.Cleanup(func() { openInNvim = previous })
 	next, _ := m.handleCloneReady(reviewCloneReadyMsg{dir: t.TempDir(), ref: m.currentPRItem().PR.Ref})
-	if opened != 0 || next.(Model).reviewNotice != "Opened clone in a new tmux window" {
-		t.Errorf("opened %d notice %q", opened, next.(Model).reviewNotice)
+	if opened != 0 || next.(Model).review.reviewNotice != "Opened clone in a new tmux window" {
+		t.Errorf("opened %d notice %q", opened, next.(Model).review.reviewNotice)
 	}
 	next, _ = m.handleCloneReady(reviewCloneReadyMsg{dir: t.TempDir(), ref: m.currentPRItem().PR.Ref, openErr: errors.New("tmux new-window: no server")})
-	if next.(Model).reviewNotice != "tmux new-window: no server" {
-		t.Errorf("notice %q", next.(Model).reviewNotice)
+	if next.(Model).review.reviewNotice != "tmux new-window: no server" {
+		t.Errorf("notice %q", next.(Model).review.reviewNotice)
 	}
 }
 
@@ -263,7 +270,7 @@ func TestReviewPollFillsInPRsListedSinceItStarted(t *testing.T) {
 	stateDir := review.StateDir(m.reviewRoot(), m.currentPRItem().PR.Ref)
 	next, _ := m.handleReviewPoll(reviewPollSnapshot{localReviews: map[string]localReviewState{}})
 	m = next.(Model)
-	if _, cached := m.localReviews[stateDir]; !cached {
+	if _, cached := m.review.localReviews[stateDir]; !cached {
 		t.Errorf("a listed PR missing from the poll snapshot should be read again")
 	}
 }

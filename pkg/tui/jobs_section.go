@@ -26,11 +26,24 @@ type JobDraft struct {
 	DryRunInFlight bool
 }
 
-type jobLogTickMsg struct{}
+type jobLogTickMsg struct {
+	jobName      string
+	states       jobStates
+	stamp        string
+	output       jobOutput
+	outputLoaded bool
+}
 
 const jobLogTailLines = 400
 
-type runStatePollTickMsg struct{}
+type runStatePollTickMsg struct {
+	states jobStates
+}
+
+type jobPreviewLoadedMsg struct {
+	jobName string
+	output  jobOutput
+}
 
 type jobAbortedMsg struct {
 	jobName string
@@ -46,9 +59,9 @@ func (m Model) getJobDrafts() []*JobDraft {
 	for _, j := range m.cfg.JobList() {
 		exitCode := 1
 		hasRun := false
-		if m.jobDryRunHasRun != nil && m.jobDryRunHasRun[j.Name] {
+		if m.jobs.jobDryRunHasRun != nil && m.jobs.jobDryRunHasRun[j.Name] {
 			hasRun = true
-			exitCode = m.jobDryRunExitCodes[j.Name]
+			exitCode = m.jobs.jobDryRunExitCodes[j.Name]
 		}
 
 		drafts = append(drafts, &JobDraft{
@@ -57,104 +70,81 @@ func (m Model) getJobDrafts() []*JobDraft {
 			Command:        j.Command,
 			ExitCode:       exitCode,
 			HasRunDryRun:   hasRun,
-			DryRunInFlight: m.dryRunsInFlight[j.Name],
+			DryRunInFlight: m.jobs.dryRunsInFlight[j.Name],
 		})
 	}
 	return drafts
 }
 
-func tickRunStatePollCmd() tea.Cmd {
-	return tea.Tick(time.Second, func(t time.Time) tea.Msg {
-		return runStatePollTickMsg{}
+func (m Model) tickRunStatePollCmd() tea.Cmd {
+	query := m.jobStatesQuery(true)
+	return tea.Tick(time.Second, func(time.Time) tea.Msg {
+		return runStatePollTickMsg{states: query.load()}
 	})
 }
 
 func (m *Model) ensureRunStatePoll() tea.Cmd {
-	if m.runStatePolling {
+	if m.jobs.runStatePolling {
 		return nil
 	}
-	m.runStatePolling = true
-	return tickRunStatePollCmd()
+	m.jobs.runStatePolling = true
+	return m.tickRunStatePollCmd()
 }
 
-func (m *Model) refreshJobStates() {
-	runningPIDs := make(map[string]int)
-	inFlight := make(map[string]bool)
-	if m.cfg != nil {
-		for _, j := range m.cfg.JobList() {
-			if pid, running := runningJobPID(j.Name); running {
-				runningPIDs[j.Name] = pid
-			}
-			if isDryRunInFlight(j.Name) {
-				inFlight[j.Name] = true
-			}
-		}
-	}
-	m.runningJobPIDs, m.dryRunsInFlight = runningPIDs, inFlight
-}
-
-func (m *Model) refreshDryRunResults() {
-	m.refreshJobStates()
-	if m.cfg == nil {
-		return
-	}
-	if m.jobDryRunOutputs == nil {
-		m.jobDryRunOutputs = make(map[string]string)
-		m.jobDryRunExitCodes = make(map[string]int)
-		m.jobDryRunHasRun = make(map[string]bool)
-	}
-	if m.dryRunLogStamps == nil {
-		m.dryRunLogStamps = make(map[string]string)
-	}
-	for _, j := range m.cfg.JobList() {
-		if m.dryRunsInFlight[j.Name] {
-			continue
-		}
-		stamp := dryRunStamp(j.Name)
-		if previous, seen := m.dryRunLogStamps[j.Name]; seen && previous == stamp {
-			continue
-		}
-		m.dryRunLogStamps[j.Name] = stamp
-		output, exitCode, ok := loadDryRunResult(j.Name)
-		if !ok {
-			delete(m.jobDryRunOutputs, j.Name)
-			delete(m.jobDryRunExitCodes, j.Name)
-			delete(m.jobDryRunHasRun, j.Name)
-			continue
-		}
-		m.jobDryRunOutputs[j.Name] = output
-		m.jobDryRunExitCodes[j.Name] = exitCode
-		m.jobDryRunHasRun[j.Name] = true
-	}
-}
-
-func tickJobLogCmd() tea.Cmd {
-	return tea.Tick(200*time.Millisecond, func(t time.Time) tea.Msg {
-		return jobLogTickMsg{}
+func (m Model) tickJobLogCmd() tea.Cmd {
+	jobName := m.previewedRunningJob()
+	query, knownStamp, dryRunOutput := m.jobStatesQuery(false), m.jobs.jobLogStamp, m.jobDryRunOutputFor(jobName)
+	return tea.Tick(200*time.Millisecond, func(time.Time) tea.Msg {
+		return loadJobLogTick(jobName, query, knownStamp, dryRunOutput)
 	})
 }
 
-func (m *Model) ensureJobLogRefresh() tea.Cmd {
-	if m.jobLogRunning {
-		return nil
+func loadJobLogTick(jobName string, query jobStatesQuery, knownStamp, dryRunOutput string) jobLogTickMsg {
+	if jobName == "" {
+		return jobLogTickMsg{}
 	}
-	m.jobLogRunning = true
-	return tickJobLogCmd()
+	msg := jobLogTickMsg{jobName: jobName, states: query.load()}
+	msg.stamp = jobLogStampFor(jobName, msg.states.runningPIDs[jobName] > 0)
+	if msg.stamp != knownStamp {
+		msg.output, msg.outputLoaded = loadJobOutput(jobName, dryRunOutput), true
+	}
+	return msg
 }
 
-func (m Model) handleJobLogTick() (tea.Model, tea.Cmd) {
+func loadJobPreviewCmd(jobName, dryRunOutput string) tea.Cmd {
+	return func() tea.Msg {
+		return jobPreviewLoadedMsg{jobName: jobName, output: loadJobOutput(jobName, dryRunOutput)}
+	}
+}
+
+func (m *Model) ensureJobLogRefresh() tea.Cmd {
+	if m.jobs.jobLogRunning {
+		return nil
+	}
+	m.jobs.jobLogRunning = true
+	return m.tickJobLogCmd()
+}
+
+func (m Model) handleJobLogTick(msg jobLogTickMsg) (tea.Model, tea.Cmd) {
 	jobName := m.previewedRunningJob()
 	if jobName == "" {
-		m.jobLogRunning = false
+		m.jobs.jobLogRunning = false
 		return m, nil
 	}
-	m.refreshJobStates()
+	if msg.jobName != jobName {
+		return m, m.tickJobLogCmd()
+	}
+	m.applyJobStates(msg.states)
 	running := m.jobRunning(jobName)
-	if stamp := jobLogStampFor(jobName, running); stamp != m.jobLogStamp {
-		m.jobLogStamp = stamp
+	if msg.stamp != m.jobs.jobLogStamp {
+		m.jobs.jobLogStamp = msg.stamp
 		wasAtBottom := m.previewViewport.AtBottom()
 		previousOffset := m.previewViewport.YOffset
-		m.updatePreviewViewport()
+		if msg.outputLoaded {
+			m.showJobPreview(msg.output)
+		} else {
+			m.updatePreviewViewport()
+		}
 		if wasAtBottom {
 			m.previewViewport.GotoBottom()
 		} else {
@@ -162,10 +152,10 @@ func (m Model) handleJobLogTick() (tea.Model, tea.Cmd) {
 		}
 	}
 	if !running {
-		m.jobLogRunning = false
+		m.jobs.jobLogRunning = false
 		return m, nil
 	}
-	return m, tickJobLogCmd()
+	return m, m.tickJobLogCmd()
 }
 
 func (m Model) runSelectedJob(tea.KeyMsg) (tea.Model, tea.Cmd) {
@@ -181,18 +171,18 @@ func (m Model) runSelectedJob(tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if item.Kind != KindJobDraft || item.Draft == nil || isJobRunning(item.Draft.Name) {
 		return m, nil
 	}
-	m.jobToExecute = item.Draft.Name
-	m.jobRunStopsDryRun = isDryRunInFlight(item.Draft.Name)
-	m.jobConfirmError = ""
+	m.jobs.jobToExecute = item.Draft.Name
+	m.jobs.jobRunStopsDryRun = isDryRunInFlight(item.Draft.Name)
+	m.jobs.jobConfirmError = ""
 	return m.beginStopConfirm(), nil
 }
 
 func (m Model) dryRunSelectedJob(tea.KeyMsg) (tea.Model, tea.Cmd) {
 	item, found := m.selectedNavItem()
-	if !found || item.Kind != KindJobDraft || item.Draft == nil || isJobRunning(item.Draft.Name) || !jobHasDryRun(item.Draft.DryRunCommand) || m.dryRunsInFlight[item.Draft.Name] {
+	if !found || item.Kind != KindJobDraft || item.Draft == nil || isJobRunning(item.Draft.Name) || !jobHasDryRun(item.Draft.DryRunCommand) || m.jobs.dryRunsInFlight[item.Draft.Name] {
 		return m, nil
 	}
-	m.jobDryRunToStart = item.Draft.Name
+	m.jobs.jobDryRunToStart = item.Draft.Name
 	return m.beginStopConfirm(), nil
 }
 
@@ -201,28 +191,15 @@ func (m Model) stopSelectedItem(tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if !found {
 		return m, nil
 	}
+	if run := backgroundRunFor(item); run != nil {
+		return run.Stop(m)
+	}
 	switch {
-	case item.Kind == KindReviewRun && item.ReviewRun != nil && review.Status(review.StateDir(m.reviewRoot(), item.ReviewRun.Meta.Ref)) == review.RunRunning:
-		return m.beginReviewRunConfirm(reviewActionStop, item.ReviewRun.Meta.Ref)
-	case item.Kind == KindReviewRun && item.ReviewRun != nil:
-		return m.dismissReviewRun(item.ReviewRun.Meta.Ref)
-	case item.Kind == KindBragRun && item.BragRun != nil && brag.IsRunning(m.bragRoot(), item.BragRun.Meta.ID):
-		run := *item.BragRun
-		m.bragRunToStop = &run
-		return m.beginStopConfirm(), nil
-	case item.Kind == KindBragRun && item.BragRun != nil:
-		return m.stopOrDismissBragRun(item.BragRun)
-	case item.Kind == KindAutomationRun && item.AutomationRun != nil && m.automationJobRunning(item.AutomationRun):
-		run := *item.AutomationRun
-		m.automationRunToStop = &run
-		return m.beginStopConfirm(), nil
-	case item.Kind == KindAutomationRun && item.AutomationRun != nil:
-		return m.dismissAutomationRun(item.AutomationRun)
 	case item.Kind == KindJobDraft && item.Draft != nil && isJobRunning(item.Draft.Name):
-		m.jobToAbort = item.Draft.Name
+		m.jobs.jobToAbort = item.Draft.Name
 		return m.beginStopConfirm(), nil
 	case item.Kind == KindJobDraft && item.Draft != nil && m.jobRunning(item.Draft.Name):
-		m.staleJobToClear = item.Draft.Name
+		m.jobs.staleJobToClear = item.Draft.Name
 		return m.beginStopConfirm(), nil
 	}
 	return m, nil
@@ -293,20 +270,45 @@ func renderJobStyleRow(icon, label, rightBlock string, selected bool, width int)
 func (jobsSection) ApplyMessage(m Model, msg tea.Msg) (tea.Model, tea.Cmd, bool) {
 	switch msg := msg.(type) {
 	case jobLogTickMsg:
-		return messageHandled(m.handleJobLogTick())
+		return messageHandled(m.handleJobLogTick(msg))
+
+	case jobPreviewLoadedMsg:
+		if m.mode == ViewPreview && m.previewedJobState().name == msg.jobName {
+			m.showJobPreview(msg.output)
+		}
+		return messageHandled(m, nil)
+
+	case jobLaunchedMsg:
+		return messageHandled(m.applyJobLaunch(msg))
+
+	case reviewStartedMsg:
+		return messageHandled(m.applyReviewStarted(msg))
+
+	case bragStartedMsg:
+		return messageHandled(m.applyBragStarted(msg))
+
+	case bragEditSavedMsg:
+		return messageHandled(m.applyBragEditSaved(msg))
+
+	case automationStartedMsg:
+		return messageHandled(m.applyAutomationStarted(msg))
+
+	case automationDraftSavedMsg:
+		return messageHandled(m.applyAutomationDraftSaved(msg))
 
 	case runStatePollTickMsg:
 		previousJobState := m.previewedJobState()
-		m.refreshDryRunResults()
+		m.applyJobStates(msg.states)
 		stillBusy := m.isAnyDryRunInFlight() || m.isAnyJobRunning()
-		if m.mode == ViewPreview && !m.jobLogRunning && m.previewedJobState() != previousJobState {
-			m.updatePreviewViewport()
+		var previewCmd tea.Cmd
+		if current := m.previewedJobState(); m.mode == ViewPreview && !m.jobs.jobLogRunning && current != previousJobState {
+			previewCmd = loadJobPreviewCmd(current.name, m.jobDryRunOutputFor(current.name))
 		}
 		if stillBusy {
-			return messageHandled(m, tickRunStatePollCmd())
+			return messageHandled(m, tea.Batch(previewCmd, m.tickRunStatePollCmd()))
 		}
-		m.runStatePolling = false
-		return messageHandled(m, nil)
+		m.jobs.runStatePolling = false
+		return messageHandled(m, previewCmd)
 
 	case jobAbortedMsg:
 		m.refreshJobStates()
@@ -346,10 +348,10 @@ func (jobsSection) Render(m Model, builder *dashboardBuilder, data dashboardData
 	for _, draft := range data.drafts {
 		builder.emitRow(func(selected bool) string { return m.renderDraftRow(draft, selected, builder.innerWidth) })
 	}
-	for _, run := range m.reviewRuns {
+	for _, run := range m.review.reviewRuns {
 		builder.emitRow(func(selected bool) string { return m.renderReviewRunRow(run, selected, builder.innerWidth) })
 	}
-	for _, run := range m.bragRuns {
+	for _, run := range m.brag.bragRuns {
 		builder.emitRow(func(selected bool) string { return m.renderBragRunRow(run, selected, builder.innerWidth) })
 	}
 	for _, run := range data.automationRuns {
@@ -361,11 +363,11 @@ func (jobsSection) appendNavItems(m Model, items []NavItem, data dashboardData) 
 	for _, d := range data.drafts {
 		items = append(items, NavItem{Kind: KindJobDraft, Draft: d})
 	}
-	for i := range m.reviewRuns {
-		items = append(items, NavItem{Kind: KindReviewRun, ReviewRun: &m.reviewRuns[i]})
+	for i := range m.review.reviewRuns {
+		items = append(items, NavItem{Kind: KindReviewRun, ReviewRun: &m.review.reviewRuns[i]})
 	}
-	for i := range m.bragRuns {
-		items = append(items, NavItem{Kind: KindBragRun, BragRun: &m.bragRuns[i]})
+	for i := range m.brag.bragRuns {
+		items = append(items, NavItem{Kind: KindBragRun, BragRun: &m.brag.bragRuns[i]})
 	}
 	for i := range data.automationRuns {
 		items = append(items, NavItem{Kind: KindAutomationRun, AutomationRun: &data.automationRuns[i]})
@@ -394,21 +396,21 @@ func (m Model) dismissReviewRun(ref review.PRRef) (tea.Model, tea.Cmd) {
 
 func (m Model) jobConfirmPrompt() (title, prompt string, found bool) {
 	switch {
-	case m.jobToAbort != "":
-		return deleteTitleStyle.Render(" ABORT JOB "), fmt.Sprintf("Are you sure you want to abort running job '%s'?", m.jobToAbort), true
-	case m.jobToExecute != "" && m.jobRunStopsDryRun:
-		prompt = fmt.Sprintf("Dry run in progress. Stop it and run the job?\n\nThe dry run of '%s' is killed first.", m.jobToExecute)
+	case m.jobs.jobToAbort != "":
+		return deleteTitleStyle.Render(" ABORT JOB "), fmt.Sprintf("Are you sure you want to abort running job '%s'?", m.jobs.jobToAbort), true
+	case m.jobs.jobToExecute != "" && m.jobs.jobRunStopsDryRun:
+		prompt = fmt.Sprintf("Dry run in progress. Stop it and run the job?\n\nThe dry run of '%s' is killed first.", m.jobs.jobToExecute)
 		return modalTitleStyle.Render(" EXECUTE JOB "), m.withJobConfirmError(prompt), true
-	case m.jobToExecute != "":
-		return modalTitleStyle.Render(" EXECUTE JOB "), m.withJobConfirmError(fmt.Sprintf("Are you sure you want to run '%s'?", m.jobToExecute)), true
-	case m.jobDryRunToStart != "":
-		return modalTitleStyle.Render(" DRY RUN "), fmt.Sprintf("Dry run '%s'?", m.jobDryRunToStart), true
-	case m.staleJobToClear != "":
-		return deleteTitleStyle.Render(" STALE JOB "), fmt.Sprintf("'%s' is no longer running.\n\nClear its stale state?", m.staleJobToClear), true
+	case m.jobs.jobToExecute != "":
+		return modalTitleStyle.Render(" EXECUTE JOB "), m.withJobConfirmError(fmt.Sprintf("Are you sure you want to run '%s'?", m.jobs.jobToExecute)), true
+	case m.jobs.jobDryRunToStart != "":
+		return modalTitleStyle.Render(" DRY RUN "), fmt.Sprintf("Dry run '%s'?", m.jobs.jobDryRunToStart), true
+	case m.jobs.staleJobToClear != "":
+		return deleteTitleStyle.Render(" STALE JOB "), fmt.Sprintf("'%s' is no longer running.\n\nClear its stale state?", m.jobs.staleJobToClear), true
 	case m.runToRetry != nil:
 		return modalTitleStyle.Render(" RETRY JOB "), fmt.Sprintf("Run again?\n\n%s", m.runLabel(*m.runToRetry)), true
 	case m.draftToDelete != "":
-		return deleteTitleStyle.Render(" DELETE DRAFT "), fmt.Sprintf("Delete the %s draft for this note?", m.automationRuns[m.draftToDelete].Meta.Automation), true
+		return deleteTitleStyle.Render(" DELETE DRAFT "), fmt.Sprintf("Delete the %s draft for this note?", m.automation.automationRuns[m.draftToDelete].Meta.Automation), true
 	case m.discardingEdit:
 		return deleteTitleStyle.Render(" DISCARD "), "Discard changes?", true
 	}
@@ -419,20 +421,15 @@ func (m Model) jobConfirmPrompt() (title, prompt string, found bool) {
 }
 
 func (m Model) withJobConfirmError(prompt string) string {
-	if m.jobConfirmError == "" {
+	if m.jobs.jobConfirmError == "" {
 		return prompt
 	}
-	return prompt + "\n\n" + stateStyle(review.StateFailed).Render(m.jobConfirmError)
+	return prompt + "\n\n" + stateStyle(review.StateFailed).Render(m.jobs.jobConfirmError)
 }
 
 func (m Model) runLabel(item NavItem) string {
-	switch {
-	case item.ReviewRun != nil:
-		return "review " + reviewRunLabel(*item.ReviewRun)
-	case item.BragRun != nil:
-		return bragRunLabel(*item.BragRun)
-	case item.AutomationRun != nil:
-		return m.automationJobLabel(*item.AutomationRun)
+	if run := backgroundRunFor(item); run != nil {
+		return run.Label(m)
 	}
 	return ""
 }
@@ -442,22 +439,22 @@ func (m Model) confirmJobPrompt() (tea.Model, tea.Cmd, bool) {
 	case m.discardingEdit:
 		next, cmd := m.confirmDiscardEdit()
 		return next, cmd, true
-	case m.jobToAbort != "":
-		jobName := m.jobToAbort
-		m.jobToAbort = ""
+	case m.jobs.jobToAbort != "":
+		jobName := m.jobs.jobToAbort
+		m.jobs.jobToAbort = ""
 		m.returnFromJobConfirm()
 		return m, abortJobCmd(jobName), true
-	case m.jobToExecute != "":
+	case m.jobs.jobToExecute != "":
 		next, cmd := m.confirmRunJob()
 		return next, cmd, true
-	case m.jobDryRunToStart != "":
-		jobName := m.jobDryRunToStart
-		m.jobDryRunToStart = ""
+	case m.jobs.jobDryRunToStart != "":
+		jobName := m.jobs.jobDryRunToStart
+		m.jobs.jobDryRunToStart = ""
 		m.returnFromJobConfirm()
 		return m, m.startJobDryRunCmd(jobName), true
-	case m.staleJobToClear != "":
-		jobName := m.staleJobToClear
-		m.staleJobToClear = ""
+	case m.jobs.staleJobToClear != "":
+		jobName := m.jobs.staleJobToClear
+		m.jobs.staleJobToClear = ""
 		clearStaleJobPID(jobName)
 		m.refreshJobStates()
 		m.returnFromJobConfirm()
@@ -471,7 +468,7 @@ func (m Model) confirmJobPrompt() (tea.Model, tea.Cmd, bool) {
 	case m.draftToDelete != "":
 		noteID := m.draftToDelete
 		m.draftToDelete = ""
-		m.mode = m.deleteReturnMode
+		m.mode = m.popMode()
 		next, cmd := m.deleteDraft(noteID)
 		return next, cmd, true
 	case m.bragRunToStop != nil || m.automationRunToStop != nil:
@@ -482,41 +479,63 @@ func (m Model) confirmJobPrompt() (tea.Model, tea.Cmd, bool) {
 }
 
 func (m *Model) returnFromJobConfirm() {
-	m.mode = m.deleteReturnMode
+	m.mode = m.popMode()
 	if m.mode == ViewPreview {
 		m.updatePreviewViewport()
 	}
 }
 
 func (m Model) confirmRunJob() (tea.Model, tea.Cmd) {
-	jobName := m.jobToExecute
-	if m.jobRunStopsDryRun {
-		if err := stopJobDryRun(jobName); err != nil {
-			return m.failJobConfirm(err), nil
+	jobName := m.jobs.jobToExecute
+	if !m.beginLaunch(jobLaunchKey(jobName, false)) {
+		return m, nil
+	}
+	return m, launchJobCmd(jobLaunch{cfg: m.cfg, spec: findJobSpec(m.cfg, jobName), stopDryRunFirst: m.jobs.jobRunStopsDryRun, states: m.jobStatesQuery(m.jobs.jobRunStopsDryRun)})
+}
+
+func (m Model) applyJobLaunch(msg jobLaunchedMsg) (tea.Model, tea.Cmd) {
+	jobName := msg.launch.spec.Name
+	m.finishLaunch(jobLaunchKey(jobName, msg.launch.dryRun))
+	m.applyJobStates(msg.states)
+	if msg.launch.dryRun {
+		if m.mode == ViewPreview {
+			m.updatePreviewViewport()
 		}
-		m.jobRunStopsDryRun = false
-		m.refreshDryRunResults()
+		if msg.err != nil {
+			m.showError("JOB ERROR", msg.err)
+			return m, nil
+		}
+		return m, tea.Batch(m.ensureRunStatePoll(), m.ensureSyncPulse())
 	}
-	if err := executeJobBackground(m.cfg, jobName); err != nil {
-		return m.failJobConfirm(err), nil
+	confirming := m.mode == ViewDeleteConfirm && m.jobs.jobToExecute == jobName
+	if msg.dryRunStopped && confirming {
+		m.jobs.jobRunStopsDryRun = false
 	}
-	m.jobToExecute, m.jobConfirmError = "", ""
-	if m.deleteReturnMode == ViewPreview {
+	if msg.err != nil {
+		if !confirming {
+			m.showError("JOB ERROR", msg.err)
+			return m, nil
+		}
+		return m.failJobConfirm(msg.err), nil
+	}
+	if !confirming {
+		return m, tea.Batch(m.ensureSyncPulse(), m.ensureRunStatePoll())
+	}
+	m.jobs.jobToExecute, m.jobs.jobConfirmError = "", ""
+	if m.returnMode() == ViewPreview {
 		m.previewNotice = ""
 	}
 	m.returnFromJobConfirm()
-	m.refreshJobStates()
 	return m, tea.Batch(m.ensureJobLogRefresh(), m.ensureSyncPulse(), m.ensureRunStatePoll())
 }
 
 func (m Model) failJobConfirm(err error) Model {
 	m.showError("JOB ERROR", err)
 	m.screenError = ""
-	m.jobConfirmError = err.Error()
-	if m.deleteReturnMode == ViewPreview {
+	m.jobs.jobConfirmError = err.Error()
+	if m.returnMode() == ViewPreview {
 		m.previewNotice = "JOB ERROR: " + err.Error()
 	}
-	m.refreshJobStates()
 	return m
 }
 
@@ -528,32 +547,13 @@ func clearStaleJobPID(jobName string) {
 }
 
 func (m Model) retryRun(item NavItem) (tea.Model, tea.Cmd) {
-	switch {
-	case item.ReviewRun != nil:
-		meta := item.ReviewRun.Meta
-		if err := startBackground(review.QueuedPR{Ref: meta.Ref, Title: meta.Title, HeadSHA: meta.HeadSHA}, m.reviewRoot()); err != nil {
-			m.showError("REVIEW ERROR", err)
-			return m, nil
-		}
-		m.refreshReviewRuns()
-	case item.BragRun != nil:
-		period, err := brag.ParsePeriod(item.BragRun.Meta.ID, bragClock().Location())
-		if err == nil {
-			err = startBragRun(m.bragRoot(), period, item.BragRun.Meta.Regenerate)
-		}
-		if err != nil {
-			m.showError("BRAG ERROR", err)
-			return m, nil
-		}
-		m.refreshBragRuns()
-	case item.AutomationRun != nil:
-		meta := item.AutomationRun.Meta
-		m.automationNoteID, m.automationName, m.automationPhase, m.automationReturnMode = meta.NoteID, meta.Automation, meta.Phase, m.mode
-		next, cmd := m.confirmAutomation(tea.KeyMsg{})
-		return next, cmd
-	default:
-		return m, nil
+	if run := backgroundRunFor(item); run != nil {
+		return run.Retry(m)
 	}
+	return m, nil
+}
+
+func (m Model) afterRetry() (tea.Model, tea.Cmd) {
 	if m.mode == ViewPreview {
 		m.updatePreviewViewport()
 	}
@@ -572,7 +572,7 @@ func (m Model) landPreviewOnSelection() (tea.Model, tea.Cmd) {
 	m.mode = ViewPreview
 	cmds := []tea.Cmd{m.changesSinceReviewCmd(m.currentPRItem())}
 	if found && item.Kind == KindJobDraft && item.Draft != nil && m.jobRunning(item.Draft.Name) {
-		m.jobLogStamp = jobLogStampFor(item.Draft.Name, true)
+		m.jobs.jobLogStamp = jobLogStampFor(item.Draft.Name, true)
 		cmds = append(cmds, m.ensureJobLogRefresh())
 	}
 	return m, tea.Batch(cmds...)
