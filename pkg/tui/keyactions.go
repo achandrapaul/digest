@@ -23,17 +23,12 @@ func (m *Model) clampScreenSelection() {
 		}
 	case ViewGitDetails:
 		gitItems := m.filteredGitItems()
-		if m.git.gitPopupSelected >= len(gitItems) && len(gitItems) > 0 {
-			m.git.gitPopupSelected = len(gitItems) - 1
+		if len(gitItems) > 0 {
+			m.git.gitPopupCursor.Clamp(len(gitItems))
 		}
 	case ViewArchived:
 		archivedNotes := m.getArchivedNotes()
-		if m.notesUI.archivedSelected >= len(archivedNotes) && len(archivedNotes) > 0 {
-			m.notesUI.archivedSelected = len(archivedNotes) - 1
-		}
-		if m.notesUI.archivedSelected < 0 {
-			m.notesUI.archivedSelected = 0
-		}
+		m.notesUI.archivedCursor.Clamp(len(archivedNotes))
 	}
 }
 
@@ -61,7 +56,7 @@ func (m Model) forwardUnboundKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		previousQuery := m.searchInput.Value()
 		*m.searchInput, cmd = m.searchInput.Update(msg)
 		if m.searchInput.Value() != previousQuery {
-			m.searchSelected, m.searchScroll = 0, 0
+			m.searchCursor = listCursor{}
 			m.searchNotice = ""
 		}
 		return m, cmd
@@ -314,7 +309,7 @@ func (m Model) copyPreviewItem(tea.KeyMsg) (tea.Model, tea.Cmd) {
 	} else if item.Note != nil {
 		textToCopy = fmt.Sprintf("%s\n\n%s", item.Note.Summary, item.Note.Body)
 	} else if item.Draft != nil {
-		textToCopy, _ = latestJobOutput(item.Draft.Name, m.jobDryRunOutputFor(item.Draft.Name))
+		textToCopy, _ = jobRuntime().LatestOutput(item.Draft.Name, m.jobDryRunOutputFor(item.Draft.Name))
 	} else if item.PendingGitPR != nil {
 		_, findings := m.loadFindings(item.PendingGitPR)
 		textToCopy = reviewCopyText(item.PendingGitPR, findings)
@@ -439,6 +434,12 @@ func (m Model) searchHalfPageDown(tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) dismissError(tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if m.quitOnErrorDismiss {
+		if m.cancelSession != nil {
+			m.cancelSession()
+		}
+		return m, tea.Quit
+	}
 	m.mode = m.popMode()
 	m.errorTitle = ""
 	m.errorLines = nil

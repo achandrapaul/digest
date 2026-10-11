@@ -546,6 +546,9 @@ func bragEditBindings() []keyBinding {
 }
 
 func (m Model) errorBindings() []keyBinding {
+	if m.quitOnErrorDismiss {
+		return []keyBinding{newKeyBinding(actionDismissError, []string{"enter", "esc"}, "enter|esc", "quit")}
+	}
 	bindings := []keyBinding{newKeyBinding(actionDismissError, []string{"esc"}, "esc", "dismiss")}
 	switch {
 	case m.errorTitle != messageLogTitle:

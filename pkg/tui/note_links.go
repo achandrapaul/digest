@@ -46,19 +46,19 @@ func (m Model) openNoteLinks(tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.openLink(links[0])
 	default:
 		m.notesUI.linkMenuItems = links
-		m.notesUI.linkMenuSelected = 0
+		m.notesUI.linkMenuCursor.selected = 0
 		m.pushMode(ViewLinkMenu)
 	}
 	return m, nil
 }
 
 func (m Model) linkMenuDown(tea.KeyMsg) (tea.Model, tea.Cmd) {
-	m.notesUI.linkMenuSelected = min(m.notesUI.linkMenuSelected+1, max(len(m.notesUI.linkMenuItems)-1, 0))
+	m.notesUI.linkMenuCursor.Move(1, len(m.notesUI.linkMenuItems))
 	return m, nil
 }
 
 func (m Model) linkMenuUp(tea.KeyMsg) (tea.Model, tea.Cmd) {
-	m.notesUI.linkMenuSelected = max(m.notesUI.linkMenuSelected-1, 0)
+	m.notesUI.linkMenuCursor.Move(-1, len(m.notesUI.linkMenuItems))
 	return m, nil
 }
 
@@ -72,8 +72,8 @@ func (m Model) closeLinkMenu(tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) chooseLink(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	if m.notesUI.linkMenuSelected < len(m.notesUI.linkMenuItems) {
-		m.openLink(m.notesUI.linkMenuItems[m.notesUI.linkMenuSelected])
+	if m.notesUI.linkMenuCursor.selected < len(m.notesUI.linkMenuItems) {
+		m.openLink(m.notesUI.linkMenuItems[m.notesUI.linkMenuCursor.selected])
 	}
 	return m.closeLinkMenu(msg)
 }
@@ -83,7 +83,7 @@ func (m Model) renderLinkDropdown() string {
 	var rows []string
 	for index, link := range m.notesUI.linkMenuItems {
 		label := ansi.Truncate(link, maxLinkWidth, "…")
-		if index == m.notesUI.linkMenuSelected {
+		if index == m.notesUI.linkMenuCursor.selected {
 			rows = append(rows, hintKeyStyle.Render("› "+label))
 		} else {
 			rows = append(rows, hintTextStyle.Render("  "+label))

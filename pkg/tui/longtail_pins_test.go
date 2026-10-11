@@ -16,7 +16,7 @@ import (
 
 func TestChooseActionPastTheMenuDoesNothing(t *testing.T) {
 	m := syncTestModel(t)
-	m.notesUI.actionMenuItems, m.notesUI.actionMenuSelected, m.mode = nil, 3, ViewActionMenu
+	m.notesUI.actionMenuItems, m.notesUI.actionMenuCursor.selected, m.mode = nil, 3, ViewActionMenu
 	if next, cmd := m.chooseAction(tea.KeyMsg{}); cmd != nil || next.(Model).mode != ViewActionMenu {
 		t.Fatal("an out of range choice should do nothing")
 	}

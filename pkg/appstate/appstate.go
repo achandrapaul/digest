@@ -1,6 +1,8 @@
 package appstate
 
 import (
+	"encoding/json"
+	"errors"
 	"path/filepath"
 	"time"
 
@@ -23,6 +25,18 @@ type State struct {
 	CalendarOffered  bool      `json:"calendar_offered,omitempty"`
 }
 
+func (s State) MarshalJSON() ([]byte, error) {
+	type plainState State
+	encoded := struct {
+		FirstNoteCreated *time.Time `json:"first_note_created"`
+		plainState
+	}{plainState: plainState(s)}
+	if !s.FirstNoteCreated.IsZero() {
+		encoded.FirstNoteCreated = &s.FirstNoteCreated
+	}
+	return json.Marshal(encoded)
+}
+
 func Path(root string) string {
 	return filepath.Join(root, fileName)
 }
@@ -34,6 +48,12 @@ func Load(root string) (State, bool, error) {
 		return State{}, false, err
 	}
 	return state, found, nil
+}
+
+func IsCorrupt(err error) bool {
+	var syntaxErr *json.SyntaxError
+	var typeErr *json.UnmarshalTypeError
+	return errors.As(err, &syntaxErr) || errors.As(err, &typeErr)
 }
 
 func Save(root string, state State) error {
@@ -74,19 +94,28 @@ func (s State) MarkDone(now time.Time, isWorkDay func(time.Weekday) bool) (State
 	return s, true
 }
 
-func (s State) NoteCreated(created time.Time) (State, bool) {
-	if created.IsZero() || (!s.FirstNoteCreated.IsZero() && !created.Before(s.FirstNoteCreated)) {
+func (s State) NoteCreated(note *model.Note) (State, bool) {
+	if !s.FirstNoteCreated.IsZero() || note == nil || note.Source != model.SourceManual || note.Created.IsZero() {
 		return s, false
 	}
-	s.FirstNoteCreated = created
+	s.FirstNoteCreated = note.Created
 	return s, true
+}
+
+func FirstManualNoteCreated(notes []*model.Note) time.Time {
+	var first time.Time
+	for _, note := range notes {
+		if note.Source == model.SourceManual && !note.Created.IsZero() && (first.IsZero() || note.Created.Before(first)) {
+			first = note.Created
+		}
+	}
+	return first
 }
 
 func FromNotes(notes []*model.Note, now time.Time, isWorkDay func(time.Weekday) bool) State {
 	var state State
 	today := dayOf(now)
 	for _, note := range notes {
-		state, _ = state.NoteCreated(note.Created)
 		if note.Status != model.StatusDone || note.Updated.IsZero() || !isWorkDay(note.Updated.Weekday()) {
 			continue
 		}

@@ -6,11 +6,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os/exec"
 	"slices"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/achandrapaul/digest/pkg/system"
 )
 
 const (
@@ -39,8 +40,7 @@ var runGraphQL = func(ctx context.Context, host, query string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	cmd := exec.CommandContext(ctx, "gh", "api", "graphql", "--hostname", host, "--input", "-")
-	cmd.WaitDelay = commandWaitDelay
+	cmd := system.GHCommand(ctx, "api", "graphql", "--hostname", host, "--input", "-")
 	cmd.Stdin = bytes.NewReader(body)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr

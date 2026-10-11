@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -405,6 +406,26 @@ func (s *NoteStore) List() ([]*model.Note, error) {
 		return nil
 	})
 	return collector.notes, errors.Join(err, collector.skippedErr())
+}
+
+func (s *NoteStore) HasNotes() bool {
+	if s.rootErr != nil || !system.Exists(s.Root) {
+		return false
+	}
+	found := false
+	_ = system.Walk(s.Root, func(path string, d os.DirEntry, err error) error {
+		switch {
+		case err != nil:
+			return nil
+		case d.IsDir() && path != s.Root && strings.HasPrefix(d.Name(), "."):
+			return filepath.SkipDir
+		case !d.IsDir() && strings.HasSuffix(d.Name(), noteExtension):
+			found = true
+			return fs.SkipAll
+		}
+		return nil
+	})
+	return found
 }
 
 func (s *NoteStore) FindByID(idPrefix string) (*model.Note, error) {

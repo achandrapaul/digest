@@ -97,8 +97,8 @@ func TestActionMenuJAndKMoveWithinTheItems(t *testing.T) {
 		want int
 	}{{"j", 1}, {"j", 1}, {"k", 0}, {"k", 0}} {
 		m, _ = pressKey(t, m, step.key)
-		if m.notesUI.actionMenuSelected != step.want {
-			t.Errorf("after %s: selected=%d, want %d", step.key, m.notesUI.actionMenuSelected, step.want)
+		if m.notesUI.actionMenuCursor.selected != step.want {
+			t.Errorf("after %s: selected=%d, want %d", step.key, m.notesUI.actionMenuCursor.selected, step.want)
 		}
 	}
 }
@@ -139,8 +139,8 @@ func TestLinkMenuJAndKClampToTheLinks(t *testing.T) {
 		want int
 	}{{"j", 1}, {"j", 1}, {"k", 0}, {"k", 0}} {
 		m = press(t, m, runes(step.key))
-		if m.notesUI.linkMenuSelected != step.want {
-			t.Errorf("after %s: selected=%d, want %d", step.key, m.notesUI.linkMenuSelected, step.want)
+		if m.notesUI.linkMenuCursor.selected != step.want {
+			t.Errorf("after %s: selected=%d, want %d", step.key, m.notesUI.linkMenuCursor.selected, step.want)
 		}
 	}
 }

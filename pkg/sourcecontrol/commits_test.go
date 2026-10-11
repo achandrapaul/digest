@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/achandrapaul/digest/pkg/config"
+	"github.com/achandrapaul/digest/pkg/system"
 )
 
 func TestDefaultCommitsCommandListsTodaysCommits(t *testing.T) {
@@ -110,9 +111,9 @@ func TestCommitsForSeveralDaysDiscoverReposOnceAndCapConcurrentGit(t *testing.T)
 }
 
 func TestShellCommandTimeoutHoldsWhenAChildKeepsTheOutputOpen(t *testing.T) {
-	original := commandWaitDelay
-	commandWaitDelay = 200 * time.Millisecond
-	t.Cleanup(func() { commandWaitDelay = original })
+	original := system.CommandWaitDelay
+	system.CommandWaitDelay = 200 * time.Millisecond
+	t.Cleanup(func() { system.CommandWaitDelay = original })
 	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 	defer cancel()
 	started := time.Now()

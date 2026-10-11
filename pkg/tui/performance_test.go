@@ -62,8 +62,8 @@ func TestSyncPulseRunsAsOneLoop(t *testing.T) {
 func jobPreviewModel(t *testing.T) Model {
 	t.Helper()
 	m := selectionTestModel(t)
-	writeLivePID(t, filepath.Join(getLogsDir(), "janitor.pid"))
-	if err := os.WriteFile(filepath.Join(getLogsDir(), "janitor.log"), []byte(strings.Repeat("line\n", 300)), 0644); err != nil {
+	writeLivePID(t, filepath.Join(jobRuntime().LogsDir, "janitor.pid"))
+	if err := os.WriteFile(filepath.Join(jobRuntime().LogsDir, "janitor.log"), []byte(strings.Repeat("line\n", 300)), 0644); err != nil {
 		t.Fatal(err)
 	}
 	m.refreshJobStates()
@@ -86,7 +86,7 @@ func TestJobLogRefreshRunsOnceKeepsScrollAndStopsWhenTheJobEnds(t *testing.T) {
 	if m.previewViewport.YOffset != 5 {
 		t.Errorf("an unchanged log should keep the scroll, offset=%d", m.previewViewport.YOffset)
 	}
-	if err := os.Remove(filepath.Join(getLogsDir(), "janitor.pid")); err != nil {
+	if err := os.Remove(filepath.Join(jobRuntime().LogsDir, "janitor.pid")); err != nil {
 		t.Fatal(err)
 	}
 	next, cmd = m.Update(m.loadJobLogTick())
@@ -97,7 +97,7 @@ func TestJobLogRefreshRunsOnceKeepsScrollAndStopsWhenTheJobEnds(t *testing.T) {
 
 func TestJobLogShowsAPlainTextTail(t *testing.T) {
 	m := jobPreviewModel(t)
-	if err := os.WriteFile(filepath.Join(getLogsDir(), "janitor.log"), []byte("first line\n"+strings.Repeat("filler\n", jobLogTailLines+50)+"last line\n"), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(jobRuntime().LogsDir, "janitor.log"), []byte("first line\n"+strings.Repeat("filler\n", jobLogTailLines+50)+"last line\n"), 0644); err != nil {
 		t.Fatal(err)
 	}
 	m.mode = ViewPreview
@@ -144,7 +144,7 @@ func TestRedrawsUseCachedRunStates(t *testing.T) {
 	m.width, m.height = 160, 50
 	m.refreshReviewRuns()
 	markRunning(t, m, m.git.ghPendingPRs[0].PR.Ref)
-	writeLivePID(t, filepath.Join(getLogsDir(), "janitor.pid"))
+	writeLivePID(t, filepath.Join(jobRuntime().LogsDir, "janitor.pid"))
 	if strings.Contains(m.View(), "reviewing...") {
 		t.Error("a redraw should not read review state from disk")
 	}

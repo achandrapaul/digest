@@ -3,6 +3,7 @@ package tui
 import (
 	"slices"
 
+	"github.com/achandrapaul/digest/pkg/jobs"
 	"github.com/achandrapaul/digest/pkg/model"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -26,7 +27,7 @@ func (m Model) itemBindings(item NavItem, onDashboard bool) []keyBinding {
 		bindings := []keyBinding{
 			newKeyBinding(actionRunSelectedJob, []string{"r"}, runKeyLabel, "run"),
 		}
-		if jobHasDryRun(item.Draft.DryRunCommand) {
+		if jobs.HasDryRun(item.Draft.DryRunCommand) {
 			bindings = append(bindings, newKeyBinding(actionDryRunSelectedJob, []string{"d"}, "d", "dry run").shownWhen(!item.Draft.DryRunInFlight))
 		}
 		return bindings

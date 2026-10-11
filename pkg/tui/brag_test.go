@@ -49,7 +49,7 @@ func selectBragRow(t *testing.T, m Model, title string) Model {
 	t.Helper()
 	for index, row := range m.bragRows() {
 		if row.title() == title {
-			m.brag.bragSelected = index
+			m.brag.bragCursor.selected = index
 			return m
 		}
 	}

@@ -96,9 +96,7 @@ func TestMigrateLocksNotesAndWritesTheAppState(t *testing.T) {
 	if _, err := Run(options); err != nil {
 		t.Fatal(err)
 	}
-	recomputed := edited
-	recomputed.FirstNoteCreated = firstCreated
-	if kept, _, _ := appstate.Load(f.root); !kept.FirstNoteCreated.Equal(firstCreated) || kept.Streak != recomputed.Streak || kept.LastDoneDay != recomputed.LastDoneDay {
-		t.Errorf("an existing state file should keep its fields and get first_note_created from the notes: %+v", kept)
+	if kept, _, _ := appstate.Load(f.root); !kept.FirstNoteCreated.Equal(edited.FirstNoteCreated) || kept.Streak != edited.Streak || kept.LastDoneDay != edited.LastDoneDay {
+		t.Errorf("an existing state file should keep all its fields, first_note_created included: %+v", kept)
 	}
 }

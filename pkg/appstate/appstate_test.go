@@ -93,8 +93,59 @@ func TestFromNotes(t *testing.T) {
 		{Status: model.StatusDone, Created: friday.AddDate(0, 0, -3), Updated: friday.AddDate(0, 0, -6)},
 	}
 	state := FromNotes(notes, friday, weekdaysOnly)
-	if !state.FirstNoteCreated.Equal(friday.AddDate(0, -2, 0)) || state.Streak != 2 || state.LastDoneDay != "2026-10-08" {
+	if !state.FirstNoteCreated.IsZero() || state.Streak != 2 || state.LastDoneDay != "2026-10-08" {
 		t.Errorf("state = %+v", state)
+	}
+}
+
+func TestZeroFirstNoteCreatedIsSavedAsNull(t *testing.T) {
+	root := t.TempDir()
+	if err := Save(root, State{}); err != nil {
+		t.Fatal(err)
+	}
+	data, _ := os.ReadFile(Path(root))
+	if !strings.Contains(string(data), `"first_note_created": null`) {
+		t.Errorf("an empty first note date should be null: %s", data)
+	}
+	loaded, found, err := Load(root)
+	if err != nil || !found || !loaded.FirstNoteCreated.IsZero() || loaded.Streak != 0 {
+		t.Errorf("loaded = %+v, %v, %v", loaded, found, err)
+	}
+}
+
+func TestNoteCreatedSetsTheDateOnceForAManualNote(t *testing.T) {
+	first := friday.AddDate(0, -1, 0)
+	for _, source := range []model.Source{model.SourceMyPR, model.SourcePRReview, ""} {
+		if _, changed := (State{}).NoteCreated(&model.Note{Source: source, Created: first}); changed {
+			t.Errorf("a %q note should never set the first note date", source)
+		}
+	}
+	if _, changed := (State{}).NoteCreated(&model.Note{Source: model.SourceManual}); changed {
+		t.Error("a note without a created time should not set the date")
+	}
+	state, changed := State{Streak: 3}.NoteCreated(&model.Note{Source: model.SourceManual, Created: first})
+	if !changed || !state.FirstNoteCreated.Equal(first) || state.Streak != 3 {
+		t.Fatalf("the first manual note should set the date: %+v, %v", state, changed)
+	}
+	if again, changed := state.NoteCreated(&model.Note{Source: model.SourceManual, Created: first.AddDate(-1, 0, 0)}); changed || !again.FirstNoteCreated.Equal(first) {
+		t.Errorf("an existing first note date should never move: %+v, %v", again, changed)
+	}
+}
+
+func TestFirstManualNoteCreatedIgnoresOtherSources(t *testing.T) {
+	earliestManual := friday.AddDate(0, -2, 0)
+	notes := []*model.Note{
+		{Source: model.SourceMyPR, Created: friday.AddDate(-1, 0, 0)},
+		{Source: model.SourcePRReview, Created: friday.AddDate(-1, 0, 0)},
+		{Source: model.SourceManual, Created: friday},
+		{Source: model.SourceManual, Created: earliestManual},
+		{Source: model.SourceManual},
+	}
+	if got := FirstManualNoteCreated(notes); !got.Equal(earliestManual) {
+		t.Errorf("first manual note = %v, want %v", got, earliestManual)
+	}
+	if got := FirstManualNoteCreated(notes[:2]); !got.IsZero() {
+		t.Errorf("no manual notes should give no date: %v", got)
 	}
 }
 

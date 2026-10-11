@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/achandrapaul/digest/pkg/config"
+	"github.com/achandrapaul/digest/pkg/jobs"
 	"github.com/achandrapaul/digest/pkg/model"
 	"github.com/achandrapaul/digest/pkg/review"
 	tea "github.com/charmbracelet/bubbletea"
@@ -42,7 +43,7 @@ func (m Model) renderDashboardBody() string {
 }
 
 func runJobProcess(cfg *config.Config, jobName string) error {
-	return realStartJobProcess(jobLaunch{cfg: cfg, spec: findJobSpec(cfg, jobName)})
+	return realStartJobProcess(jobLaunch{cfg: cfg, spec: jobs.FindSpec(cfg, jobName)})
 }
 
 func dryRunJobProcess(spec config.JobSpec) error {

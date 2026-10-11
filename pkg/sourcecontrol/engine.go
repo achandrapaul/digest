@@ -24,18 +24,12 @@ type Engine struct {
 	scopes     map[string][]string
 }
 
-var (
-	listGHHosts   = review.GHHosts
-	runPRSearches = review.RunPRSearches
-	fetchPRStates = review.FetchPRStates
-)
-
 func NewEngine(cfg *config.Config) *Engine {
 	return &Engine{cfg: cfg}
 }
 
 func (e *Engine) ghHosts(ctx context.Context) ([]string, error) {
-	e.hostsOnce.Do(func() { e.hosts, e.hostsErr = listGHHosts(ctx) })
+	e.hostsOnce.Do(func() { e.hosts, e.hostsErr = prSource.Hosts(ctx) })
 	return e.hosts, e.hostsErr
 }
 
@@ -115,7 +109,7 @@ func (e *Engine) search(ctx context.Context, kinds []searchKind) searchOutcome {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			results[index], requestErrs[index] = runPRSearches(ctx, current.host, current.searches)
+			results[index], requestErrs[index] = prSource.Search(ctx, current.host, current.searches)
 		}()
 	}
 	wg.Wait()
@@ -290,7 +284,7 @@ func (e *Engine) FetchMyPRs(ctx context.Context, known []review.PRRef) MyPRsResu
 	if len(gone) == 0 {
 		return result
 	}
-	states, err := fetchPRStates(fetchCtx, gone)
+	states, err := prSource.States(fetchCtx, gone)
 	result.Err = errors.Join(result.Err, err)
 	for url, state := range states {
 		if state == "MERGED" || state == "CLOSED" {

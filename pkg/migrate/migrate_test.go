@@ -255,46 +255,89 @@ func TestMigrateDryRunChangesNothingAndReportsEverything(t *testing.T) {
 	}
 }
 
-func TestMigrateRecomputesFirstNoteCreatedInAnExistingAppState(t *testing.T) {
-	f := newFixture(t)
-	earliest := time.Date(2026, 9, 1, 9, 0, 0, 0, time.Local)
+func writeSourcedNotes(t *testing.T, f *fixture) (time.Time, time.Time) {
+	t.Helper()
+	olderPR := time.Date(2025, 8, 8, 14, 4, 0, 0, time.Local)
+	earliestManual := time.Date(2026, 9, 1, 9, 0, 0, 0, time.Local)
 	later := time.Date(2026, 10, 6, 9, 0, 0, 0, time.Local)
-	for summary, note := range map[string]struct {
+	for _, note := range []struct {
 		created time.Time
 		status  string
-	}{"archived first": {earliest, "archived"}, "active later": {later, "active"}} {
+		source  string
+	}{{olderPR, "done", "my-pr"}, {olderPR.Add(time.Hour), "active", "pr-review"}, {earliestManual, "archived", "manual"}, {later, "active", "manual"}} {
 		noteID := store.NoteID(note.created)
-		f.writeNote(t, note.created.Format("2006/01/")+noteID+".md", "id: "+noteID+"\ncreated: "+note.created.Format(time.RFC3339Nano)+"\nupdated: "+note.created.Format(time.RFC3339Nano)+"\nstatus: "+note.status+"\nsource: manual\nsummary: "+summary+"\n", "")
+		name := store.FileName(&model.Note{ID: noteID, Status: model.Status(note.status), Updated: note.created})
+		f.writeNote(t, note.created.Format("2006/01/")+name, "id: "+noteID+"\ncreated: "+note.created.Format(time.RFC3339Nano)+"\nupdated: "+note.created.Format(time.RFC3339Nano)+"\nstatus: "+note.status+"\nsource: "+note.source+"\nsummary: "+note.source+" note\n", "")
 	}
+	return earliestManual, later
+}
+
+func TestMigrateKeepsAnExistingFirstNoteCreated(t *testing.T) {
+	f := newFixture(t)
+	_, later := writeSourcedNotes(t, f)
 	stored := appstate.State{FirstNoteCreated: later.AddDate(1, 0, 0), Streak: 9, LastDoneDay: "2026-10-09", ActionMenuOrder: []string{"notify", "jira"}}
 	if err := appstate.Save(f.root, stored); err != nil {
 		t.Fatal(err)
 	}
+	dryRun := f.options()
+	dryRun.DryRun = true
+	for _, options := range []Options{dryRun, f.options()} {
+		if _, err := Run(options); err != nil {
+			t.Fatal(err)
+		}
+		if got, _, _ := appstate.Load(f.root); !reflect.DeepEqual(got, stored) {
+			t.Errorf("an existing first_note_created should never be touched: %+v", got)
+		}
+	}
+	if strings.Contains(f.output.String(), "first_note_created") {
+		t.Errorf("migrate should not plan a first_note_created change:\n%s", f.output.String())
+	}
+}
 
+func TestMigrateFillsANullFirstNoteCreatedFromManualNotes(t *testing.T) {
+	f := newFixture(t)
+	earliestManual, _ := writeSourcedNotes(t, f)
+	stored := appstate.State{Streak: 9, LastDoneDay: "2026-10-09", ActionMenuOrder: []string{"notify", "jira"}}
+	if err := appstate.Save(f.root, stored); err != nil {
+		t.Fatal(err)
+	}
 	dryRun := f.options()
 	dryRun.DryRun = true
 	if _, err := Run(dryRun); err != nil {
 		t.Fatal(err)
 	}
-	if want := "would set first_note_created to " + earliest.Format(time.RFC3339); !strings.Contains(f.output.String(), want) {
+	if want := "would set first_note_created to " + earliestManual.Format(time.RFC3339); !strings.Contains(f.output.String(), want) {
 		t.Errorf("dry run output missing %q:\n%s", want, f.output.String())
 	}
-	unchanged, _, _ := appstate.Load(f.root)
-	if !unchanged.FirstNoteCreated.Equal(stored.FirstNoteCreated) {
-		t.Errorf("a dry run should not touch first_note_created: %v", unchanged.FirstNoteCreated)
-	}
-	unchanged.FirstNoteCreated = stored.FirstNoteCreated
-	if !reflect.DeepEqual(unchanged, stored) {
+	if unchanged, _, _ := appstate.Load(f.root); !reflect.DeepEqual(unchanged, stored) {
 		t.Errorf("a dry run should not touch the app state: %+v", unchanged)
 	}
-
 	if _, err := Run(f.options()); err != nil {
 		t.Fatal(err)
 	}
 	want := stored
-	want.FirstNoteCreated = earliest
-	if got, _, _ := appstate.Load(f.root); !got.FirstNoteCreated.Equal(earliest) || got.Streak != want.Streak || got.LastDoneDay != want.LastDoneDay || !reflect.DeepEqual(got.ActionMenuOrder, want.ActionMenuOrder) {
+	want.FirstNoteCreated = earliestManual
+	if got, _, _ := appstate.Load(f.root); !got.FirstNoteCreated.Equal(earliestManual) || got.Streak != want.Streak || got.LastDoneDay != want.LastDoneDay || !reflect.DeepEqual(got.ActionMenuOrder, want.ActionMenuOrder) {
 		t.Errorf("app state = %+v, want %+v", got, want)
+	}
+}
+
+func TestMigrateCreatesAMissingOrCorruptStateFromManualNotes(t *testing.T) {
+	for _, existing := range []string{"", "{not json"} {
+		f := newFixture(t)
+		earliestManual, _ := writeSourcedNotes(t, f)
+		if existing != "" {
+			if err := os.WriteFile(appstate.Path(f.root), []byte(existing), 0o600); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if _, err := Run(f.options()); err != nil {
+			t.Fatalf("existing %q: %v", existing, err)
+		}
+		got, found, err := appstate.Load(f.root)
+		if err != nil || !found || !got.FirstNoteCreated.Equal(earliestManual) {
+			t.Errorf("existing %q: state = %+v, %v, %v; want first_note_created %v from manual notes only", existing, got, found, err, earliestManual)
+		}
 	}
 }
 

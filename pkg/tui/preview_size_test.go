@@ -38,7 +38,7 @@ func gitDetailsModel(t *testing.T, itemCount int) Model {
 	}
 	m.git.gitPopupRepo = repo
 	m.git.gitPopupTab = 0
-	m.git.gitPopupSelected = 0
+	m.git.gitPopupCursor.selected = 0
 	m.mode = ViewGitDetails
 	return m
 }

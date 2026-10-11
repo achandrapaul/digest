@@ -10,13 +10,12 @@ import (
 	"path/filepath"
 	"sort"
 	"strconv"
-	"strings"
-	"syscall"
 	"time"
 
 	"github.com/achandrapaul/digest/pkg/config"
 	"github.com/achandrapaul/digest/pkg/model"
 	"github.com/achandrapaul/digest/pkg/system"
+	"github.com/achandrapaul/digest/pkg/system/process"
 )
 
 const (
@@ -55,43 +54,17 @@ func StateDir(root, id string) string {
 	return filepath.Join(root, stateDirName, id)
 }
 
-func processAlive(pid int) bool {
-	if pid <= 0 {
-		return false
-	}
-	proc, err := os.FindProcess(pid)
-	if err != nil {
-		return false
-	}
-	return proc.Signal(syscall.Signal(0)) == nil
-}
-
-func readInt(path string) (int, bool) {
-	data, err := system.Read(path)
-	if err != nil {
-		return 0, false
-	}
-	value, err := strconv.Atoi(strings.TrimSpace(string(data)))
-	return value, err == nil
-}
-
 func runningPID(root, id string) (int, bool) {
 	pidPath := filepath.Join(StateDir(root, id), runPIDFile)
-	pid, ok := readInt(pidPath)
+	pid, ok := process.ReadInt(pidPath)
 	if !ok {
 		return 0, false
 	}
-	if !processAlive(pid) {
+	if !process.PIDAlive(pid) {
 		_ = system.Remove(pidPath)
 		return 0, false
 	}
 	return pid, true
-}
-
-func clearExitedPID(pidPath string) {
-	if pid, ok := readInt(pidPath); ok && !processAlive(pid) {
-		_ = system.Remove(pidPath)
-	}
 }
 
 func recordUnreportedExit(dir string, state *os.ProcessState) {
@@ -104,23 +77,6 @@ func recordUnreportedExit(dir string, state *os.ProcessState) {
 
 var stopGracePeriod = 3 * time.Second
 
-func terminateGroup(target int) error {
-	if err := syscall.Kill(target, syscall.SIGTERM); err != nil {
-		return err
-	}
-	deadline := time.Now().Add(stopGracePeriod)
-	go func() {
-		for time.Now().Before(deadline) {
-			if syscall.Kill(target, 0) != nil {
-				return
-			}
-			time.Sleep(50 * time.Millisecond)
-		}
-		_ = syscall.Kill(target, syscall.SIGKILL)
-	}()
-	return nil
-}
-
 func IsRunning(root, id string) bool {
 	_, running := runningPID(root, id)
 	return running
@@ -131,7 +87,7 @@ func Status(root, id string) RunStatus {
 		return RunRunning
 	}
 	exitPath := filepath.Join(StateDir(root, id), runExitFile)
-	exitCode, ok := readInt(exitPath)
+	exitCode, ok := process.ReadInt(exitPath)
 	if !ok {
 		if system.Exists(exitPath) {
 			return RunFailed
@@ -167,33 +123,22 @@ func StartBackground(root string, period Period, regenerate bool) error {
 	if err != nil {
 		return fmt.Errorf("locate digest binary: %w", err)
 	}
-	logFile, err := system.OpenLog(filepath.Join(dir, RunLogFile))
-	if err != nil {
-		return err
-	}
-	defer logFile.Close()
 	regenerateFlag := "--regenerate=false"
 	if regenerate {
 		regenerateFlag = "--regenerate"
 	}
 	pidPath := filepath.Join(dir, runPIDFile)
-	cmd := exec.Command(executable, "brag", "--"+string(period.Kind()), id, regenerateFlag)
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
-	cmd.Stdout, cmd.Stderr = logFile, logFile
-	cmd.Dir = root
-	if err := cmd.Start(); err != nil {
-		return err
-	}
-	pidErr := system.Write(pidPath, []byte(strconv.Itoa(cmd.Process.Pid)))
-	go func() {
-		_ = cmd.Wait()
-		recordUnreportedExit(dir, cmd.ProcessState)
-		clearExitedPID(pidPath)
-	}()
-	if pidErr != nil {
-		return fmt.Errorf("brag started but its pid file could not be written: %w", pidErr)
-	}
-	return nil
+	return process.SpawnDetached(process.DetachSpec{
+		Label:   "brag",
+		Args:    []string{executable, "brag", "--" + string(period.Kind()), id, regenerateFlag},
+		Dir:     root,
+		LogPath: filepath.Join(dir, RunLogFile),
+		PIDPath: pidPath,
+		OnExit: func(cmd *exec.Cmd) {
+			recordUnreportedExit(dir, cmd.ProcessState)
+			process.ClearExited(pidPath)
+		},
+	})
 }
 
 func ListRuns(root string) []Run {
@@ -230,11 +175,7 @@ func ListRuns(root string) []Run {
 func Stop(root, id string) error {
 	dir := StateDir(root, id)
 	if pid, running := runningPID(root, id); running {
-		target := pid
-		if groupID, err := syscall.Getpgid(pid); err == nil && groupID != syscall.Getpgrp() {
-			target = -groupID
-		}
-		if err := terminateGroup(target); err != nil {
+		if err := process.TerminateGroup(pid, stopGracePeriod); err != nil {
 			return fmt.Errorf("stop brag %s: %w", id, err)
 		}
 	}
@@ -257,7 +198,7 @@ func claimRun(root, id string) (func(runErr error), error) {
 		return nil, err
 	}
 	pidPath := filepath.Join(dir, runPIDFile)
-	if pid, ok := readInt(pidPath); ok && processAlive(pid) && pid != os.Getpid() {
+	if pid, ok := process.ReadInt(pidPath); ok && process.PIDAlive(pid) && pid != os.Getpid() {
 		return nil, ErrBragRunning
 	}
 	_ = system.Remove(filepath.Join(dir, runExitFile))

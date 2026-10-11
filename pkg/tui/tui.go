@@ -14,12 +14,14 @@ import (
 	"github.com/achandrapaul/digest/pkg/automation"
 	"github.com/achandrapaul/digest/pkg/brag"
 	"github.com/achandrapaul/digest/pkg/config"
+	"github.com/achandrapaul/digest/pkg/jobs"
 	"github.com/achandrapaul/digest/pkg/model"
 	"github.com/achandrapaul/digest/pkg/review"
-	"github.com/achandrapaul/digest/pkg/running"
 	"github.com/achandrapaul/digest/pkg/sourcecontrol"
 	"github.com/achandrapaul/digest/pkg/store"
 	"github.com/achandrapaul/digest/pkg/system"
+	"github.com/achandrapaul/digest/pkg/system/clipboard"
+	"github.com/achandrapaul/digest/pkg/system/process"
 	"github.com/achandrapaul/digest/pkg/tui/textarea"
 
 	"github.com/charmbracelet/bubbles/cursor"
@@ -124,20 +126,11 @@ var openURL = func(url string) error {
 	if url == "" {
 		return nil
 	}
-	var cmd string
-	var args []string
-	switch runtime.GOOS {
-	case "darwin":
-		cmd = "open"
-		args = []string{url}
-	case "windows":
-		cmd = "cmd"
-		args = []string{"/c", "start", url}
-	default:
-		cmd = "xdg-open"
-		args = []string{url}
+	opener := "xdg-open"
+	if runtime.GOOS == "darwin" {
+		opener = "open"
 	}
-	_, err := startReaped(exec.Command(cmd, args...))
+	_, err := startReaped(exec.Command(opener, url))
 	return err
 }
 
@@ -167,30 +160,7 @@ func startReaped(cmd *exec.Cmd) (<-chan error, error) {
 	return exited, nil
 }
 
-var copyToClipboard = func(text string) error {
-	if text == "" {
-		return nil
-	}
-	var cmd *exec.Cmd
-	switch runtime.GOOS {
-	case "darwin":
-		cmd = exec.Command("pbcopy")
-	case "windows":
-		cmd = exec.Command("cmd", "/c", "clip")
-	default:
-		if _, err := exec.LookPath("wl-copy"); err == nil {
-			cmd = exec.Command("wl-copy")
-		} else if _, err := exec.LookPath("xclip"); err == nil {
-			cmd = exec.Command("xclip", "-selection", "clipboard")
-		} else if _, err := exec.LookPath("xsel"); err == nil {
-			cmd = exec.Command("xsel", "--clipboard", "--input")
-		} else {
-			return fmt.Errorf("no clipboard utility found")
-		}
-	}
-	cmd.Stdin = strings.NewReader(text)
-	return cmd.Run()
-}
+var copyToClipboard = clipboard.Copy
 
 func daysAgo(from, to time.Time) int {
 	y1, m1, d1 := from.Local().Date()
@@ -270,8 +240,7 @@ type Model struct {
 	editor      *textarea.Model
 	searchInput *textinput.Model
 
-	searchSelected   int
-	searchScroll     int
+	searchCursor     listCursor
 	searchPreviewID  string
 	searchPreviewing bool
 	searchNotice     string
@@ -283,6 +252,7 @@ type Model struct {
 	messages             []appMessage
 	messageExpiryPending bool
 	errorLines           []string
+	quitOnErrorDismiss   bool
 	messageLogExpanded   bool
 	messageLogViewport   viewport.Model
 	screenError          string
@@ -400,7 +370,7 @@ func relockRootCmd(root string) tea.Cmd {
 }
 
 func (m Model) Init() tea.Cmd {
-	cmds := []tea.Cmd{m.startupNotesCmd(), m.rebuildAppStateCmd(), tickBannerWaveCmd(), m.loadCommitsCmd(), m.startupHintCmd(), relockRootCmd(m.cfg.Root())}
+	cmds := []tea.Cmd{m.startupNotesCmd(), tickBannerWaveCmd(), m.loadCommitsCmd(), m.startupHintCmd(), relockRootCmd(m.cfg.Root())}
 	if m.syncPulseRunning {
 		cmds = append(cmds, tickSyncPulseCmd())
 	}
@@ -535,7 +505,7 @@ func (m *Model) jobPreviewContent(draft *JobDraft, output jobOutput, width int) 
 		return runPreview{heading: fmt.Sprintf("# Job: %s (%s)", draft.Name, statusHeader), log: output.text}.render(width)
 	}
 	keyGuide := "(r) run"
-	if jobHasDryRun(draft.DryRunCommand) {
+	if jobs.HasDryRun(draft.DryRunCommand) {
 		keyGuide = "(d) dry-run " + keyGuide
 	}
 	return renderMarkdown(fmt.Sprintf("# Job: %s\n\nNo dry-run analysis or log output available.\n%s", draft.Name, keyGuide), width)
@@ -660,9 +630,6 @@ func (m Model) handleMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		refetchPreviousDay := gitSection{}.refreshPreviousDay(&m)
 		return notesSection{}.finishLoadedNotes(m, msg, refetchPreviousDay)
 
-	case appStateRebuiltMsg:
-		return m.applyRebuiltAppState(msg)
-
 	case tea.KeyMsg:
 		next, cmd := m.handleKey(msg)
 		updated, isModel := next.(Model)
@@ -702,7 +669,7 @@ func (m Model) openPreview(item NavItem) (tea.Model, tea.Cmd) {
 	if item.Kind == KindGitRepo && item.GitRepo != nil {
 		m.git.gitPopupRepo = item.GitRepo
 		m.git.gitPopupTab = 0
-		m.git.gitPopupSelected = 0
+		m.git.gitPopupCursor.selected = 0
 		m.mode = ViewGitDetails
 		return m, nil
 	}
@@ -718,7 +685,7 @@ func (m Model) openPreview(item NavItem) (tea.Model, tea.Cmd) {
 		return m, tea.Batch(cmds...)
 	}
 	if item.Kind == KindJobDraft && item.Draft != nil && m.jobRunning(item.Draft.Name) {
-		m.jobs.jobLogStamp = jobLogStampFor(item.Draft.Name, true)
+		m.jobs.jobLogStamp = jobRuntime().LogStamp(item.Draft.Name, true)
 		return m, m.ensureJobLogRefresh()
 	}
 	return m, nil
@@ -792,7 +759,8 @@ func Run(cfg *config.Config, startupErr error, configPath string, startInSetup b
 	if startInSetup {
 		model = model.startSetup(configPath)
 	}
-	release, err := running.Mark(cfg.TUIMarkerPath())
+	model.requireAppState()
+	release, err := process.Mark(cfg.TUIMarkerPath())
 	if err != nil {
 		return err
 	}

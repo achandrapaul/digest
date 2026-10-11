@@ -6,8 +6,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os/exec"
 	"strings"
+
+	"github.com/achandrapaul/digest/pkg/system"
 )
 
 type Event string
@@ -98,8 +99,7 @@ var postReview = func(ctx context.Context, ref PRRef, body []byte) error {
 	if ref.Host != "" {
 		args = append(args, "--hostname", ref.Host)
 	}
-	cmd := exec.CommandContext(ctx, "gh", args...)
-	cmd.WaitDelay = commandWaitDelay
+	cmd := system.GHCommand(ctx, args...)
 	cmd.Stdin = bytes.NewReader(body)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr

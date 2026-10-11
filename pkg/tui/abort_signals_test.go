@@ -65,8 +65,8 @@ func fileExists(path string) bool {
 
 func writeJobFiles(t *testing.T, jobName string, pid int) (string, string) {
 	t.Helper()
-	pidFile := filepath.Join(getLogsDir(), jobName+".pid")
-	logFile := filepath.Join(getLogsDir(), jobName+".log")
+	pidFile := filepath.Join(jobRuntime().LogsDir, jobName+".pid")
+	logFile := filepath.Join(jobRuntime().LogsDir, jobName+".log")
 	if err := os.WriteFile(pidFile, []byte(strconv.Itoa(pid)), 0644); err != nil {
 		t.Fatal(err)
 	}
@@ -142,8 +142,8 @@ func TestAbortConfirmSendsTermThenKillsAfterThreeSecondsAndLogs(t *testing.T) {
 	}
 	assertAbortLogged(t, logFile, pidFile)
 	m = update(m, aborted)
-	if m.mode != ViewPreview || isJobRunning("janitor") {
-		t.Errorf("after abort: mode %v running %v", m.mode, isJobRunning("janitor"))
+	if m.mode != ViewPreview || jobRuntime().IsRunning("janitor") {
+		t.Errorf("after abort: mode %v running %v", m.mode, jobRuntime().IsRunning("janitor"))
 	}
 }
 
@@ -190,14 +190,14 @@ func TestAbortWithoutAPidFileShowsAJobError(t *testing.T) {
 	if m.mode != ViewDashboard || !strings.Contains(latestMessageText(m), "failed to read pid file") || !strings.Contains(headerTopRow(m), "failed to read pid file") {
 		t.Errorf("mode %v message %q header %q", m.mode, latestMessageText(m), headerTopRow(m))
 	}
-	if fileExists(filepath.Join(getLogsDir(), "janitor.log")) {
+	if fileExists(filepath.Join(jobRuntime().LogsDir, "janitor.log")) {
 		t.Errorf("abort without a pid should not create a log")
 	}
 }
 
 func TestAbortWithAGarbledPidFileReportsIt(t *testing.T) {
 	selectionTestModel(t)
-	if err := os.WriteFile(filepath.Join(getLogsDir(), "janitor.pid"), []byte("not-a-pid"), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(jobRuntime().LogsDir, "janitor.pid"), []byte("not-a-pid"), 0644); err != nil {
 		t.Fatal(err)
 	}
 	aborted := abortJobCmd("janitor")().(jobAbortedMsg)
@@ -220,8 +220,8 @@ func TestAbortConfirmNOrEscKeepsTheJobRunning(t *testing.T) {
 		m = press(t, m, runes("d"))
 		next, cmd := m.Update(key)
 		m = next.(Model)
-		if cmd != nil || m.jobs.jobToAbort != "" || m.mode != ViewPreview || !isJobRunning("janitor") {
-			t.Errorf("%s: mode %v abort %q running %v", name, m.mode, m.jobs.jobToAbort, isJobRunning("janitor"))
+		if cmd != nil || m.jobs.jobToAbort != "" || m.mode != ViewPreview || !jobRuntime().IsRunning("janitor") {
+			t.Errorf("%s: mode %v abort %q running %v", name, m.mode, m.jobs.jobToAbort, jobRuntime().IsRunning("janitor"))
 		}
 	}
 }

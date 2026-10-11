@@ -4,22 +4,19 @@ import (
 	"errors"
 	"fmt"
 	"os/exec"
-	"strings"
 	"time"
+
+	"github.com/achandrapaul/digest/pkg/system"
 )
 
 var lookPath = exec.LookPath
-
-func shellQuote(text string) string {
-	return "'" + strings.ReplaceAll(text, "'", `'\''`) + "'"
-}
 
 func clickTarget(entry Entry, notification Notification) Notification {
 	switch {
 	case entry.OpenURL != "":
 		notification.OpenURL = entry.OpenURL
 	case entry.Terminal != "":
-		notification.Execute = "open -b " + shellQuote(entry.Terminal)
+		notification.Execute = "open -b " + system.ShellQuote(entry.Terminal)
 	}
 	return notification
 }

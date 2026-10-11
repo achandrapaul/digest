@@ -5,20 +5,17 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/achandrapaul/digest/pkg/config"
+	"github.com/achandrapaul/digest/pkg/system"
 )
 
 var maxConcurrentGitReads = max(runtime.NumCPU(), 2)
-
-var commandWaitDelay = 2 * time.Second
 
 var runCommitsCommand = executeShellCommand
 
@@ -27,15 +24,7 @@ var discoverRepoPaths = localRepoPaths
 var gitCommitsCommand = `git log -n 50 --author="$(git config user.email)" --since="{since}" --until="{until}" --pretty="format:%h|%s"`
 
 func executeShellCommand(ctx context.Context, dir string, cmdStr string) []byte {
-	var cmd *exec.Cmd
-	if runtime.GOOS == "windows" {
-		cmd = exec.CommandContext(ctx, "cmd", "/c", cmdStr)
-	} else {
-		cmd = exec.CommandContext(ctx, "sh", "-c", cmdStr)
-		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-		cmd.Cancel = func() error { return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL) }
-	}
-	cmd.WaitDelay = commandWaitDelay
+	cmd := system.ShellCommand(ctx, cmdStr)
 	cmd.Env = os.Environ()
 	if dir != "" {
 		cmd.Dir = dir

@@ -147,7 +147,7 @@ func TestReviewFooterLabelsD(t *testing.T) {
 
 func TestJobPreviewHeaderShowsPID(t *testing.T) {
 	m := selectionTestModel(t)
-	if err := os.WriteFile(filepath.Join(getLogsDir(), "janitor.pid"), []byte(strconv.Itoa(os.Getpid())), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(jobRuntime().LogsDir, "janitor.pid"), []byte(strconv.Itoa(os.Getpid())), 0644); err != nil {
 		t.Fatal(err)
 	}
 	selectNavItem(t, &m, "job:janitor")

@@ -57,10 +57,10 @@ func (m Model) jobStatesQuery(withDryRuns bool) jobStatesQuery {
 func (query jobStatesQuery) load() jobStates {
 	states := jobStates{runningPIDs: map[string]int{}, inFlight: map[string]bool{}, loaded: true}
 	for _, jobName := range query.jobNames {
-		if pid, running := runningJobPID(jobName); running {
+		if pid, running := jobRuntime().RunningPID(jobName); running {
 			states.runningPIDs[jobName] = pid
 		}
-		if isDryRunInFlight(jobName) {
+		if jobRuntime().DryRunInFlight(jobName) {
 			states.inFlight[jobName] = true
 		}
 	}
@@ -72,7 +72,7 @@ func (query jobStatesQuery) load() jobStates {
 		if states.inFlight[jobName] {
 			continue
 		}
-		stamp := dryRunStamp(jobName)
+		stamp := jobRuntime().DryRunStamp(jobName)
 		if previous, seen := query.knownStamps[jobName]; seen && previous == stamp {
 			continue
 		}
@@ -124,6 +124,6 @@ type jobOutput struct {
 }
 
 func loadJobOutput(jobName, dryRunOutput string) jobOutput {
-	text, isDryRun := latestJobOutput(jobName, dryRunOutput)
+	text, isDryRun := jobRuntime().LatestOutput(jobName, dryRunOutput)
 	return jobOutput{text: text, isDryRun: isDryRun}
 }

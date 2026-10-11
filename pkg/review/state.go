@@ -9,12 +9,10 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sort"
-	"strconv"
-	"strings"
-	"syscall"
 	"time"
 
 	"github.com/achandrapaul/digest/pkg/system"
+	"github.com/achandrapaul/digest/pkg/system/process"
 )
 
 const (
@@ -49,35 +47,15 @@ func StateDir(root string, ref PRRef) string {
 	return filepath.Join(root, stateDirName, ref.DirName())
 }
 
-func processAlive(pid int) bool {
-	if pid <= 0 {
-		return false
-	}
-	proc, err := os.FindProcess(pid)
-	if err != nil {
-		return false
-	}
-	return proc.Signal(syscall.Signal(0)) == nil
-}
-
-func readInt(path string) (int, bool) {
-	data, err := system.Read(path)
-	if err != nil {
-		return 0, false
-	}
-	value, err := strconv.Atoi(strings.TrimSpace(string(data)))
-	return value, err == nil
-}
-
 func Status(dir string) RunStatus {
 	pidPath := filepath.Join(dir, pidFile)
-	if pid, ok := readInt(pidPath); ok {
-		if processAlive(pid) {
+	if pid, ok := process.ReadInt(pidPath); ok {
+		if process.PIDAlive(pid) {
 			return RunRunning
 		}
 		_ = system.Remove(pidPath)
 	}
-	exitCode, ok := readInt(filepath.Join(dir, exitFile))
+	exitCode, ok := process.ReadInt(filepath.Join(dir, exitFile))
 	if !ok {
 		if system.Exists(filepath.Join(dir, exitFile)) {
 			return RunFailed
@@ -131,30 +109,7 @@ func ReadMeta(dir string) (Meta, error) {
 	return meta, err
 }
 
-func clearExitedPID(pidPath string) {
-	if pid, ok := readInt(pidPath); ok && !processAlive(pid) {
-		_ = system.Remove(pidPath)
-	}
-}
-
 var stopGracePeriod = 3 * time.Second
-
-func terminateGroup(target int) error {
-	if err := syscall.Kill(target, syscall.SIGTERM); err != nil {
-		return err
-	}
-	deadline := time.Now().Add(stopGracePeriod)
-	go func() {
-		for time.Now().Before(deadline) {
-			if syscall.Kill(target, 0) != nil {
-				return
-			}
-			time.Sleep(50 * time.Millisecond)
-		}
-		_ = syscall.Kill(target, syscall.SIGKILL)
-	}()
-	return nil
-}
 
 var ErrReviewRunning = errors.New("a review is already running for this PR")
 
@@ -177,28 +132,15 @@ func StartBackground(pr QueuedPR, root string) error {
 	if err != nil {
 		return fmt.Errorf("locate digest binary: %w", err)
 	}
-	logFile, err := system.OpenLog(filepath.Join(dir, LogFile))
-	if err != nil {
-		return err
-	}
-	defer logFile.Close()
 	pidPath := filepath.Join(dir, pidFile)
-	cmd := exec.Command(executable, "pr-review", "--url", pr.Ref.URL)
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
-	cmd.Stdout, cmd.Stderr = logFile, logFile
-	cmd.Dir = root
-	if err := cmd.Start(); err != nil {
-		return err
-	}
-	pidErr := system.Write(pidPath, []byte(strconv.Itoa(cmd.Process.Pid)))
-	go func() {
-		_ = cmd.Wait()
-		clearExitedPID(pidPath)
-	}()
-	if pidErr != nil {
-		return fmt.Errorf("review started but its pid file could not be written: %w", pidErr)
-	}
-	return nil
+	return process.SpawnDetached(process.DetachSpec{
+		Label:   "review",
+		Args:    []string{executable, "pr-review", "--url", pr.Ref.URL},
+		Dir:     root,
+		LogPath: filepath.Join(dir, LogFile),
+		PIDPath: pidPath,
+		OnExit:  func(*exec.Cmd) { process.ClearExited(pidPath) },
+	})
 }
 
 type ReviewRun struct {
@@ -243,8 +185,8 @@ func ListRuns(root string) []ReviewRun {
 }
 
 func RunningPID(dir string) (int, bool) {
-	pid, ok := readInt(filepath.Join(dir, pidFile))
-	if !ok || !processAlive(pid) {
+	pid, ok := process.ReadInt(filepath.Join(dir, pidFile))
+	if !ok || !process.PIDAlive(pid) {
 		return 0, false
 	}
 	return pid, true
@@ -254,11 +196,7 @@ func Stop(root string, ref PRRef) error {
 	dir := StateDir(root, ref)
 	pid, running := RunningPID(dir)
 	if running {
-		target := pid
-		if groupID, err := syscall.Getpgid(pid); err == nil && groupID != syscall.Getpgrp() {
-			target = -groupID
-		}
-		if err := terminateGroup(target); err != nil {
+		if err := process.TerminateGroup(pid, stopGracePeriod); err != nil {
 			return fmt.Errorf("stop review %s: %w", ref.DirName(), err)
 		}
 	}

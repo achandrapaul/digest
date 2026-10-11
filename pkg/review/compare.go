@@ -5,9 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os/exec"
 	"strings"
 	"time"
+
+	"github.com/achandrapaul/digest/pkg/system"
 )
 
 var ErrReviewedCommitGone = errors.New("reviewed commit is no longer in the PR history")
@@ -15,9 +16,7 @@ var ErrReviewedCommitGone = errors.New("reviewed commit is no longer in the PR h
 const compareJQ = `{commits: [.commits[] | {sha, message: .commit.message, author: (.author.login // .commit.author.name), date: .commit.author.date}], files: [(.files // [])[] | {filename, status, additions, deletions}]}`
 
 var runGHAPI = func(ctx context.Context, args ...string) ([]byte, error) {
-	cmd := exec.CommandContext(ctx, "gh", append([]string{"api"}, args...)...)
-	cmd.WaitDelay = commandWaitDelay
-	return cmd.CombinedOutput()
+	return system.GHCommand(ctx, append([]string{"api"}, args...)...).CombinedOutput()
 }
 
 type CompareCommit struct {

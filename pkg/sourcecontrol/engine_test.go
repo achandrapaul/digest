@@ -38,9 +38,9 @@ func stubEngineGitHub(t *testing.T, hosts []string, respond func(host string, se
 	t.Helper()
 	var recorded []recordedSearch
 	var recordMu sync.Mutex
-	originalHosts, originalSearches := listGHHosts, runPRSearches
-	listGHHosts = func(ctx context.Context) ([]string, error) { return hosts, nil }
-	runPRSearches = func(ctx context.Context, host string, searches []review.PRSearch) ([]review.SearchResult, error) {
+	fake := useFakePRSource(t)
+	fake.hosts = func(ctx context.Context) ([]string, error) { return hosts, nil }
+	fake.search = func(ctx context.Context, host string, searches []review.PRSearch) ([]review.SearchResult, error) {
 		recordMu.Lock()
 		defer recordMu.Unlock()
 		recorded = append(recorded, recordedSearch{host: host, searches: searches})
@@ -52,7 +52,6 @@ func stubEngineGitHub(t *testing.T, hosts []string, respond func(host string, se
 		}
 		return results, nil
 	}
-	t.Cleanup(func() { listGHHosts, runPRSearches = originalHosts, originalSearches })
 	return &recorded
 }
 
@@ -279,12 +278,10 @@ func TestFetchMyPRsLooksUpKnownPRsThatLeftTheOpenSearch(t *testing.T) {
 		return review.SearchResult{Refs: []review.PRRef{stillOpen.Ref}, PRs: []review.QueuedPR{stillOpen}}
 	})
 	var lookedUp []review.PRRef
-	original := fetchPRStates
-	fetchPRStates = func(ctx context.Context, refs []review.PRRef) (map[string]string, error) {
+	useFakePRSource(t).states = func(ctx context.Context, refs []review.PRRef) (map[string]string, error) {
 		lookedUp = refs
 		return map[string]string{prRefOn("git.example.com", 8).URL: "MERGED"}, nil
 	}
-	t.Cleanup(func() { fetchPRStates = original })
 	result := NewEngine(cfg).FetchMyPRs(context.Background(), []review.PRRef{stillOpen.Ref, prRefOn("git.example.com", 8)})
 	if len(lookedUp) != 1 || lookedUp[0].Number != 8 {
 		t.Errorf("looked up %+v, want only #8", lookedUp)
@@ -296,16 +293,13 @@ func TestFetchMyPRsLooksUpKnownPRsThatLeftTheOpenSearch(t *testing.T) {
 
 func TestFetchMyPRsSkipsClosedLookupWhenSearchFailed(t *testing.T) {
 	cfg := engineConfig(t, 0)
-	originalHosts := listGHHosts
-	listGHHosts = func(ctx context.Context) ([]string, error) { return nil, errors.New("offline") }
-	t.Cleanup(func() { listGHHosts = originalHosts })
+	fake := useFakePRSource(t)
+	fake.hosts = func(ctx context.Context) ([]string, error) { return nil, errors.New("offline") }
 	called := false
-	original := fetchPRStates
-	fetchPRStates = func(ctx context.Context, refs []review.PRRef) (map[string]string, error) {
+	fake.states = func(ctx context.Context, refs []review.PRRef) (map[string]string, error) {
 		called = true
 		return nil, nil
 	}
-	t.Cleanup(func() { fetchPRStates = original })
 	result := NewEngine(cfg).FetchMyPRs(context.Background(), []review.PRRef{prRefOn("git.example.com", 8)})
 	if result.Err == nil || called || len(result.Closed) != 0 {
 		t.Errorf("failed search must not mark known PRs closed: %+v called=%v", result, called)

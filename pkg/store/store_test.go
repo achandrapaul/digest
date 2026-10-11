@@ -106,3 +106,28 @@ func TestLoadByIDFindsANoteOutsideItsMonthFolder(t *testing.T) {
 		t.Fatalf("moved note: %+v, %v", loaded, err)
 	}
 }
+
+func TestHasNotesFindsAnyNoteFile(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "notes")
+	noteStore := New(root)
+	if noteStore.HasNotes() {
+		t.Error("a missing notes folder has no notes")
+	}
+	if err := os.MkdirAll(filepath.Join(root, "2026", "10", ".hidden"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"2026/10/readme.txt", "2026/10/.hidden/stray.md"} {
+		if err := os.WriteFile(filepath.Join(root, name), []byte("x"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if noteStore.HasNotes() {
+		t.Error("non-note files and hidden folders are not notes")
+	}
+	if err := noteStore.Save(&model.Note{Summary: "first", Status: model.StatusDone, Source: model.SourceManual, Created: time.Now()}); err != nil {
+		t.Fatal(err)
+	}
+	if !noteStore.HasNotes() {
+		t.Error("a saved note should be found")
+	}
+}

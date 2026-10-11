@@ -2,7 +2,6 @@ package tui
 
 import (
 	"os"
-	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -40,7 +39,7 @@ func appStateModel(t *testing.T, state *appstate.State, notes ...*model.Note) Mo
 func applyAllMessages(m Model, cmd tea.Cmd) Model {
 	for _, msg := range collectMsgs(cmd) {
 		switch msg.(type) {
-		case notesSavedMsg, appStateSavedMsg, loadNotesMsg, appStateRebuiltMsg:
+		case notesSavedMsg, appStateSavedMsg, loadNotesMsg:
 			next, followUp := m.Update(msg)
 			m = applyAllMessages(next.(Model), followUp)
 		}
@@ -94,51 +93,98 @@ func TestHeaderStreakComesFromTheStateFile(t *testing.T) {
 	}
 }
 
-func TestMissingStateIsRebuiltFromDiskAtStartup(t *testing.T) {
-	now := time.Now()
-	m := appStateModel(t, nil, dashboardNotes(now)...)
-	if _, found, _ := appstate.Load(m.cfg.Root()); found {
-		t.Fatal("no state file should exist yet")
+func assertStateModalQuits(t *testing.T, m Model, advice string) {
+	t.Helper()
+	m.requireAppState()
+	if m.mode != ViewError || !strings.Contains(plainText(m.View()), advice) {
+		t.Fatalf("mode %v, the state modal should advise %q:\n%s", m.mode, advice, plainText(m.View()))
 	}
-	m = applyAllMessages(m, m.rebuildAppStateCmd())
-	saved, found, err := appstate.Load(m.cfg.Root())
-	if err != nil || !found || !m.appStateKnown {
-		t.Fatalf("state should be rebuilt from every note on disk: %v, %v, known %v", found, err, m.appStateKnown)
-	}
-	if slices.Contains(loadedSummaries(m), "done long ago") {
-		t.Errorf("rebuilding the state should not keep every note: %q", loadedSummaries(m))
-	}
-	if want := noteBySummary(t, m, "active").Created; !saved.FirstNoteCreated.Equal(want) {
-		t.Errorf("first note created = %v, want %v", saved.FirstNoteCreated, want)
-	}
-	if saved.Streak != 1 {
-		t.Errorf("streak = %d, want 1 from yesterday's done note", saved.Streak)
+	for _, key := range []tea.KeyMsg{{Type: tea.KeyEsc}, {Type: tea.KeyEnter}} {
+		_, cmd := m.Update(key)
+		if cmd == nil {
+			t.Fatalf("%s should quit", key)
+		}
+		if _, quits := cmd().(tea.QuitMsg); !quits {
+			t.Errorf("%s should quit the app", key)
+		}
 	}
 }
 
-func TestCorruptStateShowsInTheHeaderThenIsOverwritten(t *testing.T) {
+func TestMissingStateWithNotesAdvisesMigrateThenQuits(t *testing.T) {
+	m := appStateModel(t, nil, dashboardNotes(time.Now())...)
+	m = applyAllMessages(m, m.Init())
+	if _, found, _ := appstate.Load(m.cfg.Root()); found {
+		t.Fatal("the TUI should never rebuild the state file")
+	}
+	assertStateModalQuits(t, m, "digest migrate")
+}
+
+func TestMissingStateWithoutNotesAdvisesBootstrapThenQuits(t *testing.T) {
+	assertStateModalQuits(t, appStateModel(t, nil), "digest bootstrap")
+}
+
+func TestCorruptStateAdvisesMigrateThenQuits(t *testing.T) {
+	m := appStateModel(t, nil, dashboardNotes(time.Now())...)
+	if err := os.WriteFile(appstate.Path(m.cfg.Root()), []byte("{not json"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	m = applyAllMessages(m, m.Init())
+	assertStateModalQuits(t, m, "digest migrate")
+	if data, _ := os.ReadFile(appstate.Path(m.cfg.Root())); string(data) != "{not json" {
+		t.Errorf("the TUI should not overwrite a corrupt state file: %s", data)
+	}
+}
+
+func TestAReadableStateNeedsNoModal(t *testing.T) {
+	m := appStateModel(t, &appstate.State{Streak: 1})
+	m.requireAppState()
+	if m.mode == ViewError {
+		t.Errorf("a readable state file should not show the modal: %s", plainText(m.View()))
+	}
+}
+
+func TestNewPRNotesNeverSetTheFirstNoteDate(t *testing.T) {
+	m := appStateModel(t, &appstate.State{})
+	old := time.Now().AddDate(-1, 0, 0)
+	m = applyAllMessages(m, m.saveNotesCmd(
+		&model.Note{Summary: "my pr", Status: model.StatusActive, Source: model.SourceMyPR, Created: old},
+		&model.Note{Summary: "review", Status: model.StatusActive, Source: model.SourcePRReview, Created: old},
+	))
+	if saved, _, _ := appstate.Load(m.cfg.Root()); !saved.FirstNoteCreated.IsZero() || !m.appState.FirstNoteCreated.IsZero() {
+		t.Errorf("PR notes should never set first_note_created: %v", saved.FirstNoteCreated)
+	}
+}
+
+func TestSavingAnExistingManualNoteNeverSetsTheFirstNoteDate(t *testing.T) {
 	now := time.Now()
-	showGit := false
-	cfg := &config.Config{DigestRoot: t.TempDir(), GreenOnly: true, ShowGit: &showGit, WorkDays: everyDay}
-	for _, note := range dashboardNotes(now) {
-		if err := store.New(cfg.NotesDir()).Save(note); err != nil {
-			t.Fatal(err)
-		}
+	m := appStateModel(t, &appstate.State{}, twoActiveNotes(now)...)
+	note := noteBySummary(t, m, "first")
+	note.Summary = "first, edited"
+	m = applyAllMessages(m, m.saveNotesCmd(note))
+	if saved, _, _ := appstate.Load(m.cfg.Root()); !saved.FirstNoteCreated.IsZero() {
+		t.Errorf("editing a note should never set first_note_created: %v", saved.FirstNoteCreated)
 	}
-	if err := os.MkdirAll(cfg.Root(), 0o755); err != nil {
-		t.Fatal(err)
+	stored := now.AddDate(0, -1, 0)
+	m = appStateModel(t, &appstate.State{FirstNoteCreated: stored}, twoActiveNotes(now)...)
+	older := noteBySummary(t, m, "first")
+	older.Created = stored.AddDate(-1, 0, 0)
+	m = applyAllMessages(m, m.saveNotesCmd(older))
+	if saved, _, _ := appstate.Load(m.cfg.Root()); !saved.FirstNoteCreated.Equal(stored) {
+		t.Errorf("first_note_created should never move: %v, want %v", saved.FirstNoteCreated, stored)
 	}
-	if err := os.WriteFile(appstate.Path(cfg.Root()), []byte("{not json"), 0o600); err != nil {
-		t.Fatal(err)
+}
+
+func TestTheFirstNewManualNoteSetsTheFirstNoteDate(t *testing.T) {
+	m := appStateModel(t, &appstate.State{Streak: 2})
+	created := time.Now().Add(-time.Minute)
+	m = applyAllMessages(m, m.saveNotesCmd(&model.Note{Summary: "hello", Status: model.StatusActive, Source: model.SourceManual, Created: created}))
+	saved, _, _ := appstate.Load(m.cfg.Root())
+	if !saved.FirstNoteCreated.Equal(created) || saved.Streak != 2 {
+		t.Fatalf("the first manual note should set first_note_created: %+v", saved)
 	}
-	m := NewModel(cfg, nil)
-	m.width, m.height = 120, 50
-	if header := stripANSI(headerSection{}.Render(m)); !strings.Contains(header, "state") {
-		t.Errorf("a corrupt state file should show in the header: %q", header)
-	}
-	m = applyAllMessages(m, m.rebuildAppStateCmd())
-	if saved, found, err := appstate.Load(m.cfg.Root()); err != nil || !found || saved.Streak != 1 {
-		t.Errorf("the corrupt state should be overwritten from the notes: %+v %v %v", saved, found, err)
+	m = applyAllMessages(m, m.saveNotesCmd(&model.Note{Summary: "older", Status: model.StatusActive, Source: model.SourceManual, Created: created.AddDate(-1, 0, 0)}))
+	if saved, _, _ := appstate.Load(m.cfg.Root()); !saved.FirstNoteCreated.Equal(created) {
+		t.Errorf("a later manual note should not move first_note_created: %v", saved.FirstNoteCreated)
 	}
 }
 

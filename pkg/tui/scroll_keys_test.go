@@ -117,9 +117,9 @@ func TestArchiveScrollKeys(t *testing.T) {
 	}
 	for _, name := range []string{"pgdown", "ctrl+d"} {
 		m := archiveModel(t)
-		before := m.notesUI.archivedSelected
+		before := m.notesUI.archivedCursor.selected
 		m = press(t, m, keyFor(name))
-		if m.notesUI.archivedSelected <= before {
+		if m.notesUI.archivedCursor.selected <= before {
 			t.Errorf("%s did not move the archive selection", name)
 		}
 	}

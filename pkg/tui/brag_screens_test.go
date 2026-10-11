@@ -44,31 +44,31 @@ func TestBragListJAndKMoveWithinTheRows(t *testing.T) {
 	savedWeek40(t, m)
 	m = press(t, m, runes("b"))
 	m = press(t, m, runes("k"))
-	if m.brag.bragSelected != 0 {
-		t.Fatalf("k at the top should stay, got %d", m.brag.bragSelected)
+	if m.brag.bragCursor.selected != 0 {
+		t.Fatalf("k at the top should stay, got %d", m.brag.bragCursor.selected)
 	}
 	m = press(t, m, runes("j"))
 	m = press(t, m, runes("j"))
 	m = press(t, m, runes("k"))
-	if m.brag.bragSelected != 1 {
-		t.Fatalf("selected = %d, want 1", m.brag.bragSelected)
+	if m.brag.bragCursor.selected != 1 {
+		t.Fatalf("selected = %d, want 1", m.brag.bragCursor.selected)
 	}
 	last := len(m.bragRows()) - 1
-	m.brag.bragSelected = last
-	if m = press(t, m, runes("j")); m.brag.bragSelected != last {
-		t.Fatalf("j at the bottom should stay, got %d", m.brag.bragSelected)
+	m.brag.bragCursor.selected = last
+	if m = press(t, m, runes("j")); m.brag.bragCursor.selected != last {
+		t.Fatalf("j at the bottom should stay, got %d", m.brag.bragCursor.selected)
 	}
 }
 
 func TestOpeningTheBragListClampsAStaleSelection(t *testing.T) {
 	m, _ := bragTestModel(t, wednesday())
 	savedWeek40(t, m)
-	m.brag.bragSelected = 999
+	m.brag.bragCursor.selected = 999
 	m = press(t, m, runes("b"))
-	if m.brag.bragSelected != len(m.bragRows())-1 {
-		t.Fatalf("selected = %d of %d", m.brag.bragSelected, len(m.bragRows()))
+	if m.brag.bragCursor.selected != len(m.bragRows())-1 {
+		t.Fatalf("selected = %d of %d", m.brag.bragCursor.selected, len(m.bragRows()))
 	}
-	m.brag.bragSelected = 999
+	m.brag.bragCursor.selected = 999
 	if next, _ := m.bragListEnter(tea.KeyMsg{}); next.(Model).mode != ViewBragList {
 		t.Fatal("enter on no row should do nothing")
 	}

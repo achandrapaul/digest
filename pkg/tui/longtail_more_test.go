@@ -128,20 +128,6 @@ func TestFooterWordHelpers(t *testing.T) {
 	}
 }
 
-func TestAppStateRebuildReportsAnUnusableStore(t *testing.T) {
-	m := syncTestModel(t)
-	m.appStateKnown = false
-	m.store = unusableNoteStore()
-	msg, ok := m.rebuildAppStateCmd()().(appStateRebuiltMsg)
-	if !ok || msg.err == nil {
-		t.Fatalf("msg = %#v", msg)
-	}
-	next, _ := m.applyRebuiltAppState(msg)
-	if latestMessageText(next.(Model)) == "" {
-		t.Fatal("the rebuild error should be shown")
-	}
-}
-
 func TestSettingsKeyWithoutAConfigPathUsesTheDefaultConfig(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)

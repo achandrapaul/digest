@@ -87,7 +87,7 @@ func jobTestModel(t *testing.T) (Model, *[]string, *[]string) {
 func markJobRunning(t *testing.T, m *Model, jobName string) {
 	t.Helper()
 	pid := os.Getpid()
-	if err := os.WriteFile(filepath.Join(getLogsDir(), jobName+".pid"), []byte(strconv.Itoa(pid)), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(jobRuntime().LogsDir, jobName+".pid"), []byte(strconv.Itoa(pid)), 0644); err != nil {
 		t.Fatal(err)
 	}
 	m.jobs.runningJobPIDs = map[string]int{jobName: pid}
@@ -386,7 +386,7 @@ func TestDOnJobDoesNothingWhileItsDryRunIsInFlight(t *testing.T) {
 
 func markDryRunInFlight(t *testing.T, m *Model, jobName string) {
 	t.Helper()
-	if err := os.WriteFile(dryRunFilePath(jobName, "pid"), []byte(strconv.Itoa(os.Getpid())), 0644); err != nil {
+	if err := os.WriteFile(jobRuntime().DryRunPath(jobName, "pid"), []byte(strconv.Itoa(os.Getpid())), 0644); err != nil {
 		t.Fatal(err)
 	}
 	m.jobs.dryRunsInFlight = map[string]bool{jobName: true}

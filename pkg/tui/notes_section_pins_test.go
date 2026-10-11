@@ -15,10 +15,10 @@ func TestArchiveGroupsNotesByDayAndClampsTheSelection(t *testing.T) {
 	m := openArchiveModel(t)
 	now := time.Now()
 	m.notesUI.browsedNotes = append(m.notesUI.browsedNotes, &model.Note{Summary: "archived last week", Status: model.StatusArchived, Source: model.SourceManual, Created: now.AddDate(0, 0, -9), Updated: now.AddDate(0, 0, -8)})
-	m.notesUI.archivedSelected = -3
+	m.notesUI.archivedCursor.selected = -3
 	m.refreshArchivedViewport()
-	if m.notesUI.archivedSelected != 0 {
-		t.Fatalf("selected = %d", m.notesUI.archivedSelected)
+	if m.notesUI.archivedCursor.selected != 0 {
+		t.Fatalf("selected = %d", m.notesUI.archivedCursor.selected)
 	}
 	content := stripANSI(m.renderArchivedContent(100, 0))
 	if !strings.Contains(content, now.AddDate(0, 0, -8).Format("Monday 02 Jan 2006")) || !strings.Contains(content, "\n\n") {
@@ -57,10 +57,10 @@ func TestBrowsedNotesRefreshTheSearchPreviewAndBragList(t *testing.T) {
 	}
 	bragModel, _ := bragTestModel(t, wednesday())
 	bragModel = press(t, bragModel, runes("b"))
-	bragModel.brag.bragSelected = 999
+	bragModel.brag.bragCursor.selected = 999
 	next, _ = bragModel.Update(browsedNotesMsg{notes: []*model.Note{}})
-	if got := next.(Model); got.brag.bragSelected != len(got.bragRows())-1 {
-		t.Fatalf("selected = %d of %d", got.brag.bragSelected, len(got.bragRows()))
+	if got := next.(Model); got.brag.bragCursor.selected != len(got.bragRows())-1 {
+		t.Fatalf("selected = %d of %d", got.brag.bragCursor.selected, len(got.bragRows()))
 	}
 	_ = brag.Week{}
 }

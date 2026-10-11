@@ -43,6 +43,6 @@ type gitState struct {
 	prAlertsDue           bool
 	gitPopupRepo          *GitRepoStat
 	gitPopupTab           int
-	gitPopupSelected      int
+	gitPopupCursor        listCursor
 	changesSince          map[string]changesSinceReview
 }

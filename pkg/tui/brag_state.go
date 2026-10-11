@@ -6,7 +6,7 @@ type bragState struct {
 	bragSaved      *bragSavedMemo
 	bragStates     map[string]bragRowState
 	bragRuns       []brag.Run
-	bragSelected   int
+	bragCursor     listCursor
 	bragExpanded   map[int]bool
 	bragPeriod     brag.Period
 	bragEntry      *brag.Brag

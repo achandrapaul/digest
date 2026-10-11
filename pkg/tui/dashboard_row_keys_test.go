@@ -133,14 +133,14 @@ func TestEnterAndTabOnAGitRepoOpenItsDetails(t *testing.T) {
 	opened := stubOpenURL(t)
 	m := gitStripTestModel(t)
 	selectNavItem(t, &m, "repo:beta")
-	m.git.gitPopupTab, m.git.gitPopupSelected = 2, 3
+	m.git.gitPopupTab, m.git.gitPopupCursor.selected = 2, 3
 	for _, key := range []tea.KeyMsg{{Type: tea.KeyEnter}, {Type: tea.KeyTab}} {
 		opened := press(t, m, key)
 		if opened.mode != ViewGitDetails || opened.git.gitPopupRepo == nil || opened.git.gitPopupRepo.Name != "beta" {
 			t.Fatalf("%s on repo: mode=%v repo=%v", key, opened.mode, opened.git.gitPopupRepo)
 		}
-		if opened.git.gitPopupTab != 0 || opened.git.gitPopupSelected != 0 {
-			t.Errorf("%s: git details should open on the first filter and row: tab=%d selected=%d", key, opened.git.gitPopupTab, opened.git.gitPopupSelected)
+		if opened.git.gitPopupTab != 0 || opened.git.gitPopupCursor.selected != 0 {
+			t.Errorf("%s: git details should open on the first filter and row: tab=%d selected=%d", key, opened.git.gitPopupTab, opened.git.gitPopupCursor.selected)
 		}
 	}
 	if len(*opened) != 0 {

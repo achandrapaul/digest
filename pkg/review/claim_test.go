@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/achandrapaul/digest/pkg/system/process"
 	"github.com/charmbracelet/log"
 )
 
@@ -24,7 +25,7 @@ func stubParentPID(t *testing.T, pid int) {
 
 func readPID(t *testing.T, dir string) int {
 	t.Helper()
-	pid, ok := readInt(filepath.Join(dir, pidFile))
+	pid, ok := process.ReadInt(filepath.Join(dir, pidFile))
 	if !ok {
 		t.Fatalf("no pid file in %s", dir)
 	}
@@ -50,7 +51,7 @@ func TestClaimRunDirectWritesOwnPIDAndExit(t *testing.T) {
 		t.Errorf("stale findings kept")
 	}
 	release(nil)
-	if code, ok := readInt(filepath.Join(dir, exitFile)); !ok || code != 0 {
+	if code, ok := process.ReadInt(filepath.Join(dir, exitFile)); !ok || code != 0 {
 		t.Errorf("exit = %d, %v", code, ok)
 	}
 }
@@ -63,7 +64,7 @@ func TestClaimRunDirectFailureWritesExitOne(t *testing.T) {
 		t.Fatal(err)
 	}
 	release(errors.New("clone failed"))
-	if code, _ := readInt(filepath.Join(dir, exitFile)); code != 1 {
+	if code, _ := process.ReadInt(filepath.Join(dir, exitFile)); code != 1 {
 		t.Errorf("exit = %d", code)
 	}
 }
@@ -217,7 +218,7 @@ func TestBackgroundChildClaimsThePIDItsLauncherWrote(t *testing.T) {
 	if _, err := os.Stat(pidPath); err == nil {
 		t.Error("the child should remove its pid file when the review ends")
 	}
-	if code, ok := readInt(filepath.Join(dir, exitFile)); !ok || code != 0 {
+	if code, ok := process.ReadInt(filepath.Join(dir, exitFile)); !ok || code != 0 {
 		t.Errorf("exit = %d, %v", code, ok)
 	}
 }

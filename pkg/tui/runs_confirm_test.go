@@ -23,7 +23,7 @@ func stubDryRunStop(t *testing.T) *[]string {
 	previous := stopJobDryRun
 	stopJobDryRun = func(jobName string) error {
 		stopped = append(stopped, jobName)
-		return os.Remove(dryRunFilePath(jobName, "pid"))
+		return os.Remove(jobRuntime().DryRunPath(jobName, "pid"))
 	}
 	t.Cleanup(func() { stopJobDryRun = previous })
 	return &stopped
@@ -72,7 +72,7 @@ func TestRunWhileTheDryRunIsInFlightStopsItAfterConfirm(t *testing.T) {
 func TestDOnAStaleRunningJobClearsItsPIDAfterConfirm(t *testing.T) {
 	for _, fromPreview := range []bool{false, true} {
 		m, executed, dryRun := jobTestModel(t)
-		pidPath := filepath.Join(getLogsDir(), "nightly.pid")
+		pidPath := filepath.Join(jobRuntime().LogsDir, "nightly.pid")
 		pid := exitedPID(t)
 		if err := os.WriteFile(pidPath, []byte(strconv.Itoa(pid)), 0644); err != nil {
 			t.Fatal(err)
@@ -529,7 +529,7 @@ func TestBOpensTheBragListOnTheUnbraggedWeekWithoutRefreshing(t *testing.T) {
 	if notice := m.unbraggedWeekNotice(); notice == "" {
 		t.Fatal("expected the unbragged week notice")
 	}
-	m.brag.bragSelected = 0
+	m.brag.bragCursor.selected = 0
 	next, cmd := m.Update(runes("b"))
 	m = next.(Model)
 	row, ok := m.selectedBragRow()

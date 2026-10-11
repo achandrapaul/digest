@@ -144,7 +144,7 @@ func TestCtrlYInNotePreviewCopiesSummaryAndBody(t *testing.T) {
 func TestCtrlYInJobPreviewCopiesTheLog(t *testing.T) {
 	copied := captureClipboard(t)
 	m := selectionTestModel(t)
-	if err := os.WriteFile(filepath.Join(getLogsDir(), "janitor.log"), []byte("cleaned 3 files\n"), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(jobRuntime().LogsDir, "janitor.log"), []byte("cleaned 3 files\n"), 0644); err != nil {
 		t.Fatal(err)
 	}
 	m = openPreviewOn(t, m, "job:janitor")

@@ -4,11 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os/exec"
 	"regexp"
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/achandrapaul/digest/pkg/system"
 )
 
 type ActivityPR struct {
@@ -152,9 +153,7 @@ func ParsePRDetails(raw json.RawMessage, viewer string) (QueuedPR, error) {
 }
 
 var runAuthStatus = func(ctx context.Context) ([]byte, error) {
-	cmd := exec.CommandContext(ctx, "gh", "auth", "status")
-	cmd.WaitDelay = commandWaitDelay
-	return cmd.CombinedOutput()
+	return system.GHCommand(ctx, "auth", "status").CombinedOutput()
 }
 
 var loggedInHostPattern = regexp.MustCompile(`(?:Logged|log) in to (\S+)`)

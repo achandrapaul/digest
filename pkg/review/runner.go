@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -16,6 +15,7 @@ import (
 	"time"
 
 	"github.com/achandrapaul/digest/pkg/system"
+	"github.com/achandrapaul/digest/pkg/system/process"
 
 	"github.com/charmbracelet/log"
 )
@@ -78,7 +78,7 @@ func claimRun(stateDir string) (func(runErr error), error) {
 	pidPath := filepath.Join(stateDir, pidFile)
 	ownPID := os.Getpid()
 	wrapped := false
-	if pid, ok := readInt(pidPath); ok && pid != ownPID && processAlive(pid) {
+	if pid, ok := process.ReadInt(pidPath); ok && pid != ownPID && process.PIDAlive(pid) {
 		if pid != parentPID() {
 			return nil, ErrReviewRunning
 		}
@@ -103,7 +103,7 @@ func claimRun(stateDir string) (func(runErr error), error) {
 			}
 			_ = system.Write(filepath.Join(stateDir, exitFile), []byte(exitCode))
 		}
-		if pid, ok := readInt(pidPath); ok && pid == ownPID {
+		if pid, ok := process.ReadInt(pidPath); ok && pid == ownPID {
 			_ = system.Remove(pidPath)
 		}
 	}, nil
@@ -150,9 +150,7 @@ func run(ctx context.Context, ref PRRef, root, commandTemplate string, logger *l
 	reviewCtx, cancelReview := context.WithTimeout(ctx, reviewCommandTimeout)
 	defer cancelReview()
 	var reviewOutput bytes.Buffer
-	cmd := exec.CommandContext(reviewCtx, "sh", "-c", command)
-	cmd.WaitDelay = commandWaitDelay
-	killGroupOnCancel(cmd)
+	cmd := system.ShellCommand(reviewCtx, command)
 	cmd.Dir = cloneDir
 	cmd.Env = ReviewEnv()
 	cmd.Stdout = io.MultiWriter(&reviewOutput, stdout)

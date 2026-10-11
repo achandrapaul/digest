@@ -11,6 +11,7 @@ import (
 	"github.com/achandrapaul/digest/pkg/model"
 	"github.com/achandrapaul/digest/pkg/review"
 	"github.com/achandrapaul/digest/pkg/sourcecontrol"
+	"github.com/achandrapaul/digest/pkg/system/process"
 )
 
 func localDate(year int, month time.Month, day int) time.Time {
@@ -200,15 +201,15 @@ func TestRunBragCommandKillsChildrenOnCancel(t *testing.T) {
 	if _, err := runBragCommand(ctx, `sleep 30 & echo $! > "`+pidFile+`"; wait`, ""); err == nil {
 		t.Fatal("cancelled command should fail")
 	}
-	childPID, ok := readInt(pidFile)
+	childPID, ok := process.ReadInt(pidFile)
 	if !ok {
 		t.Fatal("child pid not recorded")
 	}
 	deadline := time.Now().Add(2 * time.Second)
-	for processAlive(childPID) && time.Now().Before(deadline) {
+	for process.PIDAlive(childPID) && time.Now().Before(deadline) {
 		time.Sleep(20 * time.Millisecond)
 	}
-	if processAlive(childPID) {
+	if process.PIDAlive(childPID) {
 		t.Errorf("child %d still running after cancel", childPID)
 	}
 }

@@ -364,7 +364,7 @@ func (m Model) renderGitDetailsModal(modalWidth, innerWidth int) string {
 	if len(items) == 0 {
 		listLines = append(listLines, "  "+mutedStyle.Render("(no items in this tab)"))
 	} else {
-		firstRow, lastRow := visibleGitRows(m.git.gitPopupSelected, len(items), listRows)
+		firstRow, lastRow := visibleGitRows(m.git.gitPopupCursor.selected, len(items), listRows)
 		for i := firstRow; i < lastRow; i++ {
 			item := items[i]
 			prefix := "  "
@@ -377,7 +377,7 @@ func (m Model) renderGitDetailsModal(modalWidth, innerWidth int) string {
 			}
 			gap := max(titleWidth-ansi.StringWidth(title), 1)
 
-			if i == m.git.gitPopupSelected {
+			if i == m.git.gitPopupCursor.selected {
 				renderedTitle := selectedTitle(title)
 				listLines = append(listLines, fmt.Sprintf("%s%s%s %s", prefix, renderedTitle, safeRepeat(" ", gap), underlined(mutedStyle.Render(kindTag))))
 			} else {
@@ -529,29 +529,24 @@ func (m Model) closeGitDetails(tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 func (m Model) switchGitFilter(tea.KeyMsg) (tea.Model, tea.Cmd) {
 	m.git.gitPopupTab = (m.git.gitPopupTab + 1) % 4
-	m.git.gitPopupSelected = 0
+	m.git.gitPopupCursor.selected = 0
 	return m, nil
 }
 
 func (m Model) gitCursorDown(tea.KeyMsg) (tea.Model, tea.Cmd) {
-	gitItems := m.filteredGitItems()
-	if len(gitItems) > 0 && m.git.gitPopupSelected < len(gitItems)-1 {
-		m.git.gitPopupSelected++
-	}
+	m.git.gitPopupCursor.Move(1, len(m.filteredGitItems()))
 	return m, nil
 }
 
 func (m Model) gitCursorUp(tea.KeyMsg) (tea.Model, tea.Cmd) {
-	if m.git.gitPopupSelected > 0 {
-		m.git.gitPopupSelected--
-	}
+	m.git.gitPopupCursor.Move(-1, len(m.filteredGitItems()))
 	return m, nil
 }
 
 func (m Model) openGitItem(tea.KeyMsg) (tea.Model, tea.Cmd) {
 	gitItems := m.filteredGitItems()
-	if len(gitItems) > 0 && m.git.gitPopupSelected < len(gitItems) {
-		m.openLink(gitItems[m.git.gitPopupSelected].URL)
+	if len(gitItems) > 0 && m.git.gitPopupCursor.selected < len(gitItems) {
+		m.openLink(gitItems[m.git.gitPopupCursor.selected].URL)
 	}
 	return m, nil
 }

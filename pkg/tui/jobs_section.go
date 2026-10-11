@@ -2,11 +2,11 @@ package tui
 
 import (
 	"fmt"
-	"path/filepath"
 	"time"
 
 	"github.com/achandrapaul/digest/pkg/automation"
 	"github.com/achandrapaul/digest/pkg/brag"
+	"github.com/achandrapaul/digest/pkg/jobs"
 	"github.com/achandrapaul/digest/pkg/review"
 	"github.com/achandrapaul/digest/pkg/system"
 
@@ -104,7 +104,7 @@ func loadJobLogTick(jobName string, query jobStatesQuery, knownStamp, dryRunOutp
 		return jobLogTickMsg{}
 	}
 	msg := jobLogTickMsg{jobName: jobName, states: query.load()}
-	msg.stamp = jobLogStampFor(jobName, msg.states.runningPIDs[jobName] > 0)
+	msg.stamp = jobRuntime().LogStamp(jobName, msg.states.runningPIDs[jobName] > 0)
 	if msg.stamp != knownStamp {
 		msg.output, msg.outputLoaded = loadJobOutput(jobName, dryRunOutput), true
 	}
@@ -168,18 +168,18 @@ func (m Model) runSelectedJob(tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.runToRetry = &retried
 		return m.beginStopConfirm(), nil
 	}
-	if item.Kind != KindJobDraft || item.Draft == nil || isJobRunning(item.Draft.Name) {
+	if item.Kind != KindJobDraft || item.Draft == nil || jobRuntime().IsRunning(item.Draft.Name) {
 		return m, nil
 	}
 	m.jobs.jobToExecute = item.Draft.Name
-	m.jobs.jobRunStopsDryRun = isDryRunInFlight(item.Draft.Name)
+	m.jobs.jobRunStopsDryRun = jobRuntime().DryRunInFlight(item.Draft.Name)
 	m.jobs.jobConfirmError = ""
 	return m.beginStopConfirm(), nil
 }
 
 func (m Model) dryRunSelectedJob(tea.KeyMsg) (tea.Model, tea.Cmd) {
 	item, found := m.selectedNavItem()
-	if !found || item.Kind != KindJobDraft || item.Draft == nil || isJobRunning(item.Draft.Name) || !jobHasDryRun(item.Draft.DryRunCommand) || m.jobs.dryRunsInFlight[item.Draft.Name] {
+	if !found || item.Kind != KindJobDraft || item.Draft == nil || jobRuntime().IsRunning(item.Draft.Name) || !jobs.HasDryRun(item.Draft.DryRunCommand) || m.jobs.dryRunsInFlight[item.Draft.Name] {
 		return m, nil
 	}
 	m.jobs.jobDryRunToStart = item.Draft.Name
@@ -195,7 +195,7 @@ func (m Model) stopSelectedItem(tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return run.Stop(m)
 	}
 	switch {
-	case item.Kind == KindJobDraft && item.Draft != nil && isJobRunning(item.Draft.Name):
+	case item.Kind == KindJobDraft && item.Draft != nil && jobRuntime().IsRunning(item.Draft.Name):
 		m.jobs.jobToAbort = item.Draft.Name
 		return m.beginStopConfirm(), nil
 	case item.Kind == KindJobDraft && item.Draft != nil && m.jobRunning(item.Draft.Name):
@@ -490,7 +490,7 @@ func (m Model) confirmRunJob() (tea.Model, tea.Cmd) {
 	if !m.beginLaunch(jobLaunchKey(jobName, false)) {
 		return m, nil
 	}
-	return m, launchJobCmd(jobLaunch{cfg: m.cfg, spec: findJobSpec(m.cfg, jobName), stopDryRunFirst: m.jobs.jobRunStopsDryRun, states: m.jobStatesQuery(m.jobs.jobRunStopsDryRun)})
+	return m, launchJobCmd(jobLaunch{cfg: m.cfg, spec: jobs.FindSpec(m.cfg, jobName), stopDryRunFirst: m.jobs.jobRunStopsDryRun, states: m.jobStatesQuery(m.jobs.jobRunStopsDryRun)})
 }
 
 func (m Model) applyJobLaunch(msg jobLaunchedMsg) (tea.Model, tea.Cmd) {
@@ -540,9 +540,8 @@ func (m Model) failJobConfirm(err error) Model {
 }
 
 func clearStaleJobPID(jobName string) {
-	pidFile := filepath.Join(getLogsDir(), fmt.Sprintf("%s.pid", jobName))
-	if !isJobRunning(jobName) {
-		_ = system.Remove(pidFile)
+	if runtime := jobRuntime(); !runtime.IsRunning(jobName) {
+		_ = system.Remove(runtime.PIDPath(jobName))
 	}
 }
 
@@ -572,7 +571,7 @@ func (m Model) landPreviewOnSelection() (tea.Model, tea.Cmd) {
 	m.mode = ViewPreview
 	cmds := []tea.Cmd{m.changesSinceReviewCmd(m.currentPRItem())}
 	if found && item.Kind == KindJobDraft && item.Draft != nil && m.jobRunning(item.Draft.Name) {
-		m.jobs.jobLogStamp = jobLogStampFor(item.Draft.Name, true)
+		m.jobs.jobLogStamp = jobRuntime().LogStamp(item.Draft.Name, true)
 		cmds = append(cmds, m.ensureJobLogRefresh())
 	}
 	return m, tea.Batch(cmds...)

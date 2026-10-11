@@ -25,7 +25,7 @@ func browsedSummaries(m Model) []string {
 func applyNoteLoads(m Model, cmd tea.Cmd) Model {
 	for _, msg := range collectMsgsWithoutTicks(cmd) {
 		switch msg.(type) {
-		case loadNotesMsg, browsedNotesMsg, appStateRebuiltMsg, closedThisWeekMsg:
+		case loadNotesMsg, browsedNotesMsg, closedThisWeekMsg:
 			next, followUp := m.Update(msg)
 			m = applyNoteLoads(next.(Model), followUp)
 		}

@@ -1,20 +1,17 @@
 package automation
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"slices"
 	"sort"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/achandrapaul/digest/pkg/aitool"
@@ -59,9 +56,8 @@ type Result struct {
 var ErrNeedsReauth = errors.New("needs re-auth")
 
 var (
-	commandTimeout   = 10 * time.Minute
-	checkTimeout     = time.Minute
-	commandWaitDelay = 2 * time.Second
+	commandTimeout = 10 * time.Minute
+	checkTimeout   = time.Minute
 )
 
 var authFailurePattern = regexp.MustCompile(`(?i)\b401\b|unauthori[sz]ed|mcp__\w+__authenticate|authentication (required|failed)|(re-?)?authenticate to|invalid (api )?token|token (has )?(expired|is invalid|was revoked)|not (logged|signed) in`)
@@ -103,20 +99,13 @@ func Find(specs []config.AutomationSpec, name string) (config.AutomationSpec, bo
 }
 
 var runCommand = func(ctx context.Context, command, input string) (string, error) {
-	cmd := exec.CommandContext(ctx, "sh", "-c", command)
-	cmd.WaitDelay = commandWaitDelay
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	cmd.Cancel = func() error { return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL) }
-	cmd.Stdin = strings.NewReader(input)
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-	output, err := cmd.Output()
+	output, stderr, err := system.RunShell(ctx, "", command, input)
 	if err != nil {
-		if message := strings.TrimSpace(stderr.String()); message != "" {
-			return string(output), fmt.Errorf("%w: %s", err, message)
+		if message := strings.TrimSpace(stderr); message != "" {
+			return output, fmt.Errorf("%w: %s", err, message)
 		}
 	}
-	return string(output), err
+	return output, err
 }
 
 func runBounded(ctx context.Context, timeout time.Duration, command, input string) (string, error) {

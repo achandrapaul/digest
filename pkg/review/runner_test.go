@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/achandrapaul/digest/pkg/system/process"
 	"github.com/charmbracelet/log"
 )
 
@@ -145,7 +146,7 @@ func TestCancelledStepsKillTheirChildProcesses(t *testing.T) {
 		go func() { done <- start(ctx, dir, "sleep 30 & echo $! > child.pid; wait") }()
 		var childPID int
 		for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
-			if pid, ok := readInt(pidPath); ok {
+			if pid, ok := process.ReadInt(pidPath); ok {
 				childPID = pid
 				break
 			}
@@ -155,9 +156,9 @@ func TestCancelledStepsKillTheirChildProcesses(t *testing.T) {
 		}
 		cancel()
 		<-done
-		for deadline := time.Now().Add(3 * time.Second); processAlive(childPID) && time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
+		for deadline := time.Now().Add(3 * time.Second); process.PIDAlive(childPID) && time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
 		}
-		if processAlive(childPID) {
+		if process.PIDAlive(childPID) {
 			_ = syscall.Kill(childPID, syscall.SIGKILL)
 			t.Errorf("%s: cancelling left child process %d running", name, childPID)
 		}

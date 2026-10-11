@@ -10,6 +10,7 @@ import (
 
 	"github.com/achandrapaul/digest/pkg/automation"
 	"github.com/achandrapaul/digest/pkg/config"
+	"github.com/achandrapaul/digest/pkg/jobs"
 	"github.com/achandrapaul/digest/pkg/model"
 	"github.com/achandrapaul/digest/pkg/tui/textarea"
 
@@ -297,7 +298,7 @@ func (m Model) reauthHint(run automation.Run) string {
 
 func (m Model) automationLogTail(noteID string) string {
 	var kept []string
-	for _, line := range strings.Split(readFileTail(automation.LogPath(m.automationRoot(), noteID), logPeekBytes), "\n") {
+	for _, line := range strings.Split(readFileTail(automation.LogPath(m.automationRoot(), noteID), jobs.LogPeekBytes), "\n") {
 		if strings.TrimSpace(line) != "" {
 			kept = append(kept, line)
 		}

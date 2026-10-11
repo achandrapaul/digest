@@ -134,8 +134,8 @@ func chooseMenuAutomation(t *testing.T, m Model, name string) Model {
 	if m.mode != ViewActionMenu {
 		t.Fatalf(". did not open the actions menu, mode = %v", m.mode)
 	}
-	for m.notesUI.actionMenuItems[m.notesUI.actionMenuSelected].name != name {
-		if m.notesUI.actionMenuSelected == len(m.notesUI.actionMenuItems)-1 {
+	for m.notesUI.actionMenuItems[m.notesUI.actionMenuCursor.selected].name != name {
+		if m.notesUI.actionMenuCursor.selected == len(m.notesUI.actionMenuItems)-1 {
 			t.Fatalf("%s missing from menu %+v", name, m.notesUI.actionMenuItems)
 		}
 		m = press(t, m, runes("j"))

@@ -10,7 +10,7 @@ import (
 
 type notesState struct {
 	currentNote             *model.Note
-	archivedSelected        int
+	archivedCursor          listCursor
 	archivedSelectedMap     map[int]bool
 	archivedViewport        viewport.Model
 	deleteTargetNotes       []*model.Note
@@ -21,12 +21,12 @@ type notesState struct {
 	missingSave             *failedNoteSave
 	actionMenuNoteID        string
 	actionMenuItems         []noteAction
-	actionMenuSelected      int
+	actionMenuCursor        listCursor
 	notifyInput             *textinput.Model
 	notifyNotice            string
 	notifyEntries           map[string]notify.Entry
 	linkMenuItems           []string
-	linkMenuSelected        int
+	linkMenuCursor          listCursor
 	inlineInput             *textinput.Model
 	startupNotesErr         error
 }

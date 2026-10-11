@@ -45,13 +45,13 @@ func TestGitDetailsUpMovesTheCursorAndEnterOpensTheItem(t *testing.T) {
 	m = press(t, m, tea.KeyMsg{Type: tea.KeyDown})
 	m = press(t, m, tea.KeyMsg{Type: tea.KeyDown})
 	m = press(t, m, runes("k"))
-	if m.git.gitPopupSelected != 1 {
-		t.Fatalf("selected = %d, want 1", m.git.gitPopupSelected)
+	if m.git.gitPopupCursor.selected != 1 {
+		t.Fatalf("selected = %d, want 1", m.git.gitPopupCursor.selected)
 	}
 	m = press(t, m, tea.KeyMsg{Type: tea.KeyUp})
 	m = press(t, m, tea.KeyMsg{Type: tea.KeyUp})
-	if m.git.gitPopupSelected != 0 {
-		t.Fatalf("selected = %d, want 0", m.git.gitPopupSelected)
+	if m.git.gitPopupCursor.selected != 0 {
+		t.Fatalf("selected = %d, want 0", m.git.gitPopupCursor.selected)
 	}
 	m = press(t, m, tea.KeyMsg{Type: tea.KeyEnter})
 	if len(*opened) != 1 || (*opened)[0] != "https://github.com/o/console/pull/1" {

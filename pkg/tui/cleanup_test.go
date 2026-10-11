@@ -109,42 +109,30 @@ func TestNewPendingPRsReadTheirReviewStateOnce(t *testing.T) {
 	}
 }
 
-func TestJobLogReadsOnlyItsTail(t *testing.T) {
-	m := jobPreviewModel(t)
-	if err := os.WriteFile(filepath.Join(getLogsDir(), "janitor.log"), []byte(strings.Repeat("x", jobLogTailBytes*2)+"\nlast line\n"), 0644); err != nil {
-		t.Fatal(err)
-	}
-	logText := readJobLog("janitor")
-	if len(logText) > jobLogTailBytes || !strings.HasSuffix(logText, "last line\n") {
-		t.Errorf("read %d bytes, want the last %d", len(logText), jobLogTailBytes)
-	}
-	_ = m
-}
-
 func TestDryRunResultsReloadOnlyWhenTheirLogChanges(t *testing.T) {
 	m := selectionTestModel(t)
 	for suffix, content := range map[string]string{"exit": "0", "log": "found 2 files"} {
-		if err := os.WriteFile(dryRunFilePath("janitor", suffix), []byte(content), 0644); err != nil {
+		if err := os.WriteFile(jobRuntime().DryRunPath("janitor", suffix), []byte(content), 0644); err != nil {
 			t.Fatal(err)
 		}
 	}
 	reads := 0
-	original := readDryRunLog
-	readDryRunLog = func(path string) ([]byte, error) {
+	original := loadDryRunResult
+	loadDryRunResult = func(jobName string) (string, int, bool) {
 		reads++
-		return original(path)
+		return original(jobName)
 	}
-	t.Cleanup(func() { readDryRunLog = original })
+	t.Cleanup(func() { loadDryRunResult = original })
 	m.refreshDryRunResults()
 	m.refreshDryRunResults()
 	if reads != 1 {
 		t.Errorf("an unchanged dry-run log was read %d times", reads)
 	}
 	future := time.Now().Add(time.Minute)
-	if err := os.WriteFile(dryRunFilePath("janitor", "log"), []byte("found 3 files"), 0644); err != nil {
+	if err := os.WriteFile(jobRuntime().DryRunPath("janitor", "log"), []byte("found 3 files"), 0644); err != nil {
 		t.Fatal(err)
 	}
-	_ = os.Chtimes(dryRunFilePath("janitor", "log"), future, future)
+	_ = os.Chtimes(jobRuntime().DryRunPath("janitor", "log"), future, future)
 	m.refreshDryRunResults()
 	if reads != 2 || m.jobs.jobDryRunOutputs["janitor"] != "found 3 files" {
 		t.Errorf("a changed log should reload: reads=%d output=%q", reads, m.jobs.jobDryRunOutputs["janitor"])
@@ -237,27 +225,6 @@ func TestQuitCancelsCommitLoading(t *testing.T) {
 	}
 }
 
-func TestOldJobLogArchivesArePruned(t *testing.T) {
-	logsDir := t.TempDir()
-	now := time.Now()
-	old, recent, other := "janitor-20200101-000000.log", "janitor-20991231-000000.log", "notes.txt"
-	for _, name := range []string{old, recent, other, "janitor.log"} {
-		if err := os.WriteFile(filepath.Join(logsDir, name), []byte("x"), 0644); err != nil {
-			t.Fatal(err)
-		}
-	}
-	stale := now.AddDate(0, 0, -30)
-	for _, name := range []string{old, other} {
-		_ = os.Chtimes(filepath.Join(logsDir, name), stale, stale)
-	}
-	pruneJobLogArchives(logsDir, "janitor", 14, now)
-	for name, kept := range map[string]bool{old: false, recent: true, other: true, "janitor.log": true} {
-		if _, err := os.Stat(filepath.Join(logsDir, name)); (err == nil) != kept {
-			t.Errorf("%s kept=%v, want %v", name, err == nil, kept)
-		}
-	}
-}
-
 func TestSyncTrimsPRDetailsToListedPRs(t *testing.T) {
 	m := syncTestModel(t)
 	m.git.prDetails = map[string]json.RawMessage{"https://github.com/o/gone/pull/1": json.RawMessage(`{}`)}
@@ -289,19 +256,5 @@ func TestStartupReusesTheNotesItAlreadyListed(t *testing.T) {
 	}
 	if loaded, ok := m.startupNotesCmd()().(loadNotesMsg); !ok || len(loaded.notes) != 1 {
 		t.Errorf("startup listed the notes store again: %d notes", len(loaded.notes))
-	}
-}
-
-func TestDryRunResultReadsOnlyItsTail(t *testing.T) {
-	jobPreviewModel(t)
-	if err := os.WriteFile(dryRunFilePath("janitor", "exit"), []byte("0"), 0600); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(dryRunFilePath("janitor", "log"), []byte(strings.Repeat("x", jobLogTailBytes*3)+"\nwould remove 2 clones\n"), 0600); err != nil {
-		t.Fatal(err)
-	}
-	output, _, ok := loadDryRunResult("janitor")
-	if !ok || len(output) > jobLogTailBytes || !strings.HasSuffix(output, "would remove 2 clones\n") {
-		t.Errorf("ok %v, read %d bytes, want at most %d ending in the summary", ok, len(output), jobLogTailBytes)
 	}
 }

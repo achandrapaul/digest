@@ -16,6 +16,7 @@ import (
 	"github.com/achandrapaul/digest/pkg/automation"
 	"github.com/achandrapaul/digest/pkg/brag"
 	"github.com/achandrapaul/digest/pkg/config"
+	"github.com/achandrapaul/digest/pkg/jobs"
 	"github.com/achandrapaul/digest/pkg/model"
 	"github.com/achandrapaul/digest/pkg/review"
 	"github.com/achandrapaul/digest/pkg/sourcecontrol"
@@ -223,7 +224,7 @@ func readLocalReviews(root string, refs []review.PRRef, previous map[string]loca
 }
 
 func readReviewLogTail(stateDir string) string {
-	return lastLines(readFileTail(filepath.Join(stateDir, review.LogFile), logPeekBytes), 12)
+	return lastLines(readFileTail(filepath.Join(stateDir, review.LogFile), jobs.LogPeekBytes), 12)
 }
 
 func (m Model) missingListedReviews() bool {
@@ -423,9 +424,8 @@ type relatedHistoryMsg struct {
 var gitLogForFiles = func(dir string, files []string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
-	args := append([]string{"-C", dir, "log", "-n", "5", "--format=%h %s", "origin/HEAD", "--"}, files...)
-	gitLog := exec.CommandContext(ctx, "git", args...)
-	gitLog.WaitDelay = time.Second
+	args := append([]string{"log", "-n", "5", "--format=%h %s", "origin/HEAD", "--"}, files...)
+	gitLog := system.GitCommand(ctx, dir, args...)
 	out, err := gitLog.Output()
 	var exitErr *exec.ExitError
 	if errors.As(err, &exitErr) && len(bytes.TrimSpace(exitErr.Stderr)) > 0 {
@@ -1033,7 +1033,7 @@ func reviewRunPreview(root string, run review.ReviewRun) runPreview {
 	if run.Status == review.RunRunning {
 		status = "RUNNING"
 	}
-	logText := strings.TrimSpace(readFileTail(filepath.Join(review.StateDir(root, run.Meta.Ref), review.LogFile), jobLogTailBytes))
+	logText := strings.TrimSpace(readFileTail(filepath.Join(review.StateDir(root, run.Meta.Ref), review.LogFile), jobs.LogTailBytes))
 	if logText == "" {
 		logText = "(no log output yet)"
 	}

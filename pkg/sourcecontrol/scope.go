@@ -3,12 +3,12 @@ package sourcecontrol
 import (
 	"context"
 	"net/url"
-	"os/exec"
 	"regexp"
 	"strings"
 	"time"
 
 	"github.com/achandrapaul/digest/pkg/config"
+	"github.com/achandrapaul/digest/pkg/system"
 )
 
 var scpRemotePattern = regexp.MustCompile(`^[^@/\s]+@([^:/\s]+):([^\s]+)$`)
@@ -45,9 +45,7 @@ var remoteLookupTimeout = 5 * time.Second
 func originRemote(repoPath string) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), remoteLookupTimeout)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, "git", "-C", repoPath, "remote", "get-url", "origin")
-	cmd.WaitDelay = commandWaitDelay
-	return cmd.Output()
+	return system.GitCommand(ctx, repoPath, "remote", "get-url", "origin").Output()
 }
 
 func readRepoScopes(roots []string) map[string][]string {

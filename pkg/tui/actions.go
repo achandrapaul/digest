@@ -79,18 +79,18 @@ func (m Model) openActionMenu(tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 	m.notesUI.actionMenuNoteID = note.ID
 	m.notesUI.actionMenuItems = m.noteActions(note)
-	m.notesUI.actionMenuSelected = 0
+	m.notesUI.actionMenuCursor.selected = 0
 	m.pushMode(ViewActionMenu)
 	return m, nil
 }
 
 func (m Model) actionMenuDown(tea.KeyMsg) (tea.Model, tea.Cmd) {
-	m.notesUI.actionMenuSelected = min(m.notesUI.actionMenuSelected+1, max(len(m.notesUI.actionMenuItems)-1, 0))
+	m.notesUI.actionMenuCursor.Move(1, len(m.notesUI.actionMenuItems))
 	return m, nil
 }
 
 func (m Model) actionMenuUp(tea.KeyMsg) (tea.Model, tea.Cmd) {
-	m.notesUI.actionMenuSelected = max(m.notesUI.actionMenuSelected-1, 0)
+	m.notesUI.actionMenuCursor.Move(-1, len(m.notesUI.actionMenuItems))
 	return m, nil
 }
 
@@ -103,10 +103,10 @@ func (m Model) closeActionMenu(tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) chooseAction(tea.KeyMsg) (tea.Model, tea.Cmd) {
-	if m.notesUI.actionMenuSelected >= len(m.notesUI.actionMenuItems) {
+	if m.notesUI.actionMenuCursor.selected >= len(m.notesUI.actionMenuItems) {
 		return m, nil
 	}
-	chosen := m.notesUI.actionMenuItems[m.notesUI.actionMenuSelected]
+	chosen := m.notesUI.actionMenuItems[m.notesUI.actionMenuCursor.selected]
 	if chosen.name == actionNameNotifyOff {
 		return m.removeReminder()
 	}
@@ -290,7 +290,7 @@ func (m Model) renderActionDropdown() string {
 	var rows []string
 	for index, action := range m.notesUI.actionMenuItems {
 		label := fmt.Sprintf("%-*s", labelWidth, "@"+action.name)
-		if index == m.notesUI.actionMenuSelected {
+		if index == m.notesUI.actionMenuCursor.selected {
 			rows = append(rows, hintKeyStyle.Render("› "+label))
 		} else {
 			rows = append(rows, hintTextStyle.Render("  "+label))

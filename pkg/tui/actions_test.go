@@ -109,8 +109,8 @@ func setNotify(t *testing.T, m Model, interval string) Model {
 func TestAtOpensActionsWithNotifyFirst(t *testing.T) {
 	m, _ := actionsTestModel(t)
 	m, _ = pressKey(t, m, "@")
-	if m.mode != ViewActionMenu || strings.Join(actionNames(m), ",") != "notify,jira" || m.notesUI.actionMenuSelected != 0 {
-		t.Fatalf("mode %v actions %v selected %d", m.mode, actionNames(m), m.notesUI.actionMenuSelected)
+	if m.mode != ViewActionMenu || strings.Join(actionNames(m), ",") != "notify,jira" || m.notesUI.actionMenuCursor.selected != 0 {
+		t.Fatalf("mode %v actions %v selected %d", m.mode, actionNames(m), m.notesUI.actionMenuCursor.selected)
 	}
 	if view := m.View(); !strings.Contains(view, "@notify") || !strings.Contains(view, "@jira") {
 		t.Errorf("menu should list @notify and @jira:\n%s", view)

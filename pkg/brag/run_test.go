@@ -14,6 +14,7 @@ import (
 
 	"github.com/achandrapaul/digest/pkg/config"
 	"github.com/achandrapaul/digest/pkg/model"
+	"github.com/achandrapaul/digest/pkg/system/process"
 )
 
 func writeState(t *testing.T, root, id string, files map[string]string) {
@@ -49,11 +50,11 @@ func TestClaimRunWritesPIDAndExitCode(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if pid, ok := readInt(filepath.Join(StateDir(root, "2026-W40"), runPIDFile)); !ok || pid != os.Getpid() {
+	if pid, ok := process.ReadInt(filepath.Join(StateDir(root, "2026-W40"), runPIDFile)); !ok || pid != os.Getpid() {
 		t.Errorf("pid = %d", pid)
 	}
 	release(errors.New("boom"))
-	if code, _ := readInt(filepath.Join(StateDir(root, "2026-W40"), runExitFile)); code != 1 {
+	if code, _ := process.ReadInt(filepath.Join(StateDir(root, "2026-W40"), runExitFile)); code != 1 {
 		t.Errorf("exit = %d", code)
 	}
 	if Status(root, "2026-W40") != RunFailed {
@@ -217,7 +218,7 @@ func TestBackgroundRunRecordsAnUnreportedExitCode(t *testing.T) {
 	if status := waitForBrag(t, root, week.ID()); status != RunFailed {
 		t.Errorf("status = %v", status)
 	}
-	if code, _ := readInt(filepath.Join(StateDir(root, week.ID()), runExitFile)); code != 2 {
+	if code, _ := process.ReadInt(filepath.Join(StateDir(root, week.ID()), runExitFile)); code != 2 {
 		t.Errorf("exit = %d", code)
 	}
 }

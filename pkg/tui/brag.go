@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/achandrapaul/digest/pkg/brag"
+	"github.com/achandrapaul/digest/pkg/jobs"
 	"github.com/achandrapaul/digest/pkg/review"
 	"github.com/achandrapaul/digest/pkg/system"
 	"github.com/achandrapaul/digest/pkg/tui/textarea"
@@ -139,10 +140,10 @@ func (m Model) readBragRowState(period brag.Period) bragRowState {
 
 func (m Model) selectedBragRow() (bragRow, bool) {
 	rows := m.bragRows()
-	if m.brag.bragSelected < 0 || m.brag.bragSelected >= len(rows) {
+	if m.brag.bragCursor.selected < 0 || m.brag.bragCursor.selected >= len(rows) {
 		return bragRow{}, false
 	}
-	return rows[m.brag.bragSelected], true
+	return rows[m.brag.bragCursor.selected], true
 }
 
 func (m *Model) refreshBragRuns() {
@@ -192,9 +193,7 @@ func (m Model) openBrag(tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if m.unbraggedWeekNotice() != "" {
 		m.selectBragWeek(brag.WeekOf(bragClock()).Previous())
 	}
-	if rows := m.bragRows(); m.brag.bragSelected >= len(rows) {
-		m.brag.bragSelected = max(len(rows)-1, 0)
-	}
+	m.brag.bragCursor.Clamp(len(m.bragRows()))
 	if m.appStateKnown && !m.appState.FirstNoteCreated.IsZero() {
 		return m, nil
 	}
@@ -212,7 +211,7 @@ func (m *Model) selectBragWeek(week brag.Week) {
 	}
 	for index, row := range m.bragRows() {
 		if row.period != nil && row.period.ID() == week.ID() {
-			m.brag.bragSelected = index
+			m.brag.bragCursor.selected = index
 			return
 		}
 	}
@@ -225,16 +224,12 @@ func (m Model) closeBrag(tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) bragCursorDown(tea.KeyMsg) (tea.Model, tea.Cmd) {
-	if m.brag.bragSelected < len(m.bragRows())-1 {
-		m.brag.bragSelected++
-	}
+	m.brag.bragCursor.Move(1, len(m.bragRows()))
 	return m, nil
 }
 
 func (m Model) bragCursorUp(tea.KeyMsg) (tea.Model, tea.Cmd) {
-	if m.brag.bragSelected > 0 {
-		m.brag.bragSelected--
-	}
+	m.brag.bragCursor.Move(-1, len(m.bragRows()))
 	return m, nil
 }
 
@@ -560,10 +555,10 @@ func (m Model) renderBragList() string {
 	fixed := lipgloss.Height(title) + 1 + lipgloss.Height(strings.Join(below, "\n"))
 	rowsAvailable := max(1, modalHeight-modalStyle.GetVerticalFrameSize()-fixed)
 	rows := m.bragRows()
-	first, last := visibleGitRows(m.brag.bragSelected, len(rows), rowsAvailable)
+	first, last := visibleGitRows(m.brag.bragCursor.selected, len(rows), rowsAvailable)
 	var lines []string
 	for index := first; index < last; index++ {
-		lines = append(lines, m.renderBragRow(rows[index], index == m.brag.bragSelected, innerWidth))
+		lines = append(lines, m.renderBragRow(rows[index], index == m.brag.bragCursor.selected, innerWidth))
 	}
 	for len(lines) < rowsAvailable {
 		lines = append(lines, "")
@@ -630,7 +625,7 @@ func bragRunPreview(root string, run brag.Run) runPreview {
 	if run.Status == brag.RunRunning {
 		status = "RUNNING"
 	}
-	logText := strings.TrimSpace(readFileTail(filepath.Join(brag.StateDir(root, run.Meta.ID), brag.RunLogFile), jobLogTailBytes))
+	logText := strings.TrimSpace(readFileTail(filepath.Join(brag.StateDir(root, run.Meta.ID), brag.RunLogFile), jobs.LogTailBytes))
 	if logText == "" {
 		logText = "(no log output yet)"
 	}

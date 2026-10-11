@@ -67,8 +67,8 @@ func TestArchiveJAndKMoveAndClamp(t *testing.T) {
 		case "up":
 			msg = tea.KeyMsg{Type: tea.KeyUp}
 		}
-		if m = press(t, m, msg); m.notesUI.archivedSelected != move.want || m.mode != ViewArchived {
-			t.Fatalf("after %s selected %d want %d mode %v", move.key, m.notesUI.archivedSelected, move.want, m.mode)
+		if m = press(t, m, msg); m.notesUI.archivedCursor.selected != move.want || m.mode != ViewArchived {
+			t.Fatalf("after %s selected %d want %d mode %v", move.key, m.notesUI.archivedCursor.selected, move.want, m.mode)
 		}
 	}
 }
@@ -218,7 +218,7 @@ func TestArchiveOnEmptyArchiveIgnoresActionKeys(t *testing.T) {
 	m := noteSaveModel(t)
 	m = press(t, m, tea.KeyMsg{Type: tea.KeyCtrlE})
 	for _, key := range []tea.KeyMsg{{Type: tea.KeySpace}, runes("u"), runes("d"), runes("j")} {
-		if m = press(t, m, key); m.mode != ViewArchived || len(m.notesUI.archivedSelectedMap) != 0 || m.notesUI.archivedSelected != 0 {
+		if m = press(t, m, key); m.mode != ViewArchived || len(m.notesUI.archivedSelectedMap) != 0 || m.notesUI.archivedCursor.selected != 0 {
 			t.Errorf("%s on empty archive: mode %v", key.String(), m.mode)
 		}
 	}

@@ -51,14 +51,9 @@ func (m Model) loadNotesCmd() tea.Msg {
 
 func (m *Model) refreshArchivedViewport() {
 	archivedNotes := m.getArchivedNotes()
-	if m.notesUI.archivedSelected >= len(archivedNotes) && len(archivedNotes) > 0 {
-		m.notesUI.archivedSelected = len(archivedNotes) - 1
-	}
-	if m.notesUI.archivedSelected < 0 {
-		m.notesUI.archivedSelected = 0
-	}
+	m.notesUI.archivedCursor.Clamp(len(archivedNotes))
 	modalWidth := modalWidthFor(m.width)
-	m.notesUI.archivedViewport.SetContent(m.renderArchivedContent(modalWidth-6, m.notesUI.archivedSelected))
+	m.notesUI.archivedViewport.SetContent(m.renderArchivedContent(modalWidth-6, m.notesUI.archivedCursor.selected))
 }
 
 func startOfDay(moment time.Time) time.Time {
@@ -234,9 +229,7 @@ func (m *Model) refreshBrowsedView() {
 			m.updatePreviewViewport()
 		}
 	case ViewBragList:
-		if rows := m.bragRows(); m.brag.bragSelected >= len(rows) {
-			m.brag.bragSelected = max(len(rows)-1, 0)
-		}
+		m.brag.bragCursor.Clamp(len(m.bragRows()))
 	}
 }
 
@@ -340,7 +333,7 @@ func (m Model) editorNoticeLine() string {
 }
 
 func (m Model) openArchive(tea.KeyMsg) (tea.Model, tea.Cmd) {
-	m.notesUI.archivedSelected = 0
+	m.notesUI.archivedCursor.selected = 0
 	m.notesUI.archivedSelectedMap = make(map[int]bool)
 	modalWidth := modalWidthFor(m.width)
 	innerWidth := modalWidth - 6
@@ -350,7 +343,7 @@ func (m Model) openArchive(tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 
 	m.notesUI.archivedViewport = viewport.New(innerWidth, innerHeight)
-	m.notesUI.archivedViewport.SetContent(m.renderArchivedContent(innerWidth, m.notesUI.archivedSelected))
+	m.notesUI.archivedViewport.SetContent(m.renderArchivedContent(innerWidth, m.notesUI.archivedCursor.selected))
 	m.mode = ViewArchived
 	return m, m.browseNotesCmd()
 }
@@ -453,8 +446,8 @@ func (m Model) archivedTargets() []*model.Note {
 				targets = append(targets, archivedNotes[idx])
 			}
 		}
-	} else if len(archivedNotes) > 0 && m.notesUI.archivedSelected < len(archivedNotes) {
-		targets = append(targets, archivedNotes[m.notesUI.archivedSelected])
+	} else if len(archivedNotes) > 0 && m.notesUI.archivedCursor.selected < len(archivedNotes) {
+		targets = append(targets, archivedNotes[m.notesUI.archivedCursor.selected])
 	}
 	return targets
 }
@@ -467,16 +460,16 @@ func (m Model) closeArchive(tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 func (m Model) toggleArchiveSelection(tea.KeyMsg) (tea.Model, tea.Cmd) {
 	archivedNotes := m.getArchivedNotes()
-	if len(archivedNotes) > 0 && m.notesUI.archivedSelected < len(archivedNotes) {
+	if len(archivedNotes) > 0 && m.notesUI.archivedCursor.selected < len(archivedNotes) {
 		if m.notesUI.archivedSelectedMap == nil {
 			m.notesUI.archivedSelectedMap = make(map[int]bool)
 		}
-		if m.notesUI.archivedSelectedMap[m.notesUI.archivedSelected] {
-			delete(m.notesUI.archivedSelectedMap, m.notesUI.archivedSelected)
+		if m.notesUI.archivedSelectedMap[m.notesUI.archivedCursor.selected] {
+			delete(m.notesUI.archivedSelectedMap, m.notesUI.archivedCursor.selected)
 		} else {
-			m.notesUI.archivedSelectedMap[m.notesUI.archivedSelected] = true
+			m.notesUI.archivedSelectedMap[m.notesUI.archivedCursor.selected] = true
 		}
-		m.notesUI.archivedViewport.SetContent(m.renderArchivedContent(m.archivedInnerWidth(), m.notesUI.archivedSelected))
+		m.notesUI.archivedViewport.SetContent(m.renderArchivedContent(m.archivedInnerWidth(), m.notesUI.archivedCursor.selected))
 	}
 	return m, nil
 }
@@ -500,9 +493,9 @@ func (m Model) archivedRowLine(selectedIndex int) int {
 }
 
 func (m Model) moveArchiveSelection(delta int) (tea.Model, tea.Cmd) {
-	m.notesUI.archivedSelected = max(min(m.notesUI.archivedSelected+delta, len(m.getArchivedNotes())-1), 0)
-	m.notesUI.archivedViewport.SetContent(m.renderArchivedContent(m.archivedInnerWidth(), m.notesUI.archivedSelected))
-	selectedLine, viewHeight := m.archivedRowLine(m.notesUI.archivedSelected), max(m.notesUI.archivedViewport.Height, 1)
+	m.notesUI.archivedCursor.Move(delta, len(m.getArchivedNotes()))
+	m.notesUI.archivedViewport.SetContent(m.renderArchivedContent(m.archivedInnerWidth(), m.notesUI.archivedCursor.selected))
+	selectedLine, viewHeight := m.archivedRowLine(m.notesUI.archivedCursor.selected), max(m.notesUI.archivedViewport.Height, 1)
 	switch {
 	case selectedLine < m.notesUI.archivedViewport.YOffset:
 		m.notesUI.archivedViewport.SetYOffset(selectedLine)

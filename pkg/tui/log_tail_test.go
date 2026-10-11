@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/achandrapaul/digest/pkg/brag"
+	"github.com/achandrapaul/digest/pkg/jobs"
 	"github.com/achandrapaul/digest/pkg/review"
 )
 
@@ -33,7 +34,7 @@ func TestRunPreviewsReadOnlyTheLogTail(t *testing.T) {
 		if !strings.Contains(preview, "LASTLINE") || strings.Contains(preview, "FIRSTLINE") {
 			t.Errorf("%s preview should show only the end of a large log", name)
 		}
-		if len(preview) > int(jobLogTailBytes)+1024 {
+		if len(preview) > int(jobs.LogTailBytes)+1024 {
 			t.Errorf("%s preview holds %d bytes", name, len(preview))
 		}
 	}
@@ -70,7 +71,7 @@ func TestLogTailsDropTerminalControlSequences(t *testing.T) {
 	if err := os.WriteFile(path, []byte("install \x1b]52;c;ZXZpbA==\x07ok\n\x1b[2Jcleared\r\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	if got := readFileTail(path, jobLogTailBytes); got != "install ok\ncleared\n" {
+	if got := readFileTail(path, jobs.LogTailBytes); got != "install ok\ncleared\n" {
 		t.Errorf("log tail = %q", got)
 	}
 }

@@ -14,8 +14,6 @@ import (
 
 var ErrCloneInProgress = errors.New("the running review is still cloning; try again shortly")
 
-var prepareClone = review.PrepareTo
-
 func ClonePR(ctx context.Context, root string, pr review.QueuedPR) (string, error) {
 	ref := pr.Ref
 	review.AdoptLegacyDirs(root, ref)
@@ -37,5 +35,5 @@ func ClonePR(ctx context.Context, root string, pr review.QueuedPR) (string, erro
 	}
 	cloneCtx, cancel := context.WithTimeout(ctx, 15*time.Minute)
 	defer cancel()
-	return prepareClone(cloneCtx, ref, root, log.New(logOutput), logOutput)
+	return prSource.Prepare(cloneCtx, ref, root, log.New(logOutput), logOutput)
 }

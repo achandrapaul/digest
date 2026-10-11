@@ -134,19 +134,19 @@ func TestSearchPagingClamps(t *testing.T) {
 	}
 	m = typeQuery(t, press(t, m, runes("/")), "note")
 	m = press(t, m, tea.KeyMsg{Type: tea.KeyPgDown})
-	if m.searchSelected <= 1 {
-		t.Errorf("pgdown selected = %d", m.searchSelected)
+	if m.searchCursor.selected <= 1 {
+		t.Errorf("pgdown selected = %d", m.searchCursor.selected)
 	}
-	pageSelected := m.searchSelected
+	pageSelected := m.searchCursor.selected
 	m = press(t, m, tea.KeyMsg{Type: tea.KeyCtrlU})
-	if m.searchSelected >= pageSelected || m.searchSelected < 0 {
-		t.Errorf("ctrl+u selected = %d", m.searchSelected)
+	if m.searchCursor.selected >= pageSelected || m.searchCursor.selected < 0 {
+		t.Errorf("ctrl+u selected = %d", m.searchCursor.selected)
 	}
 	for range 20 {
 		m = press(t, m, tea.KeyMsg{Type: tea.KeyCtrlD})
 	}
-	if m.searchSelected != 59 {
-		t.Errorf("ctrl+d end = %d", m.searchSelected)
+	if m.searchCursor.selected != 59 {
+		t.Errorf("ctrl+d end = %d", m.searchCursor.selected)
 	}
 	if !strings.Contains(m.View(), "note 59") {
 		t.Error("last row not visible")
@@ -155,8 +155,8 @@ func TestSearchPagingClamps(t *testing.T) {
 		m = press(t, m, tea.KeyMsg{Type: tea.KeyPgUp})
 	}
 	m = press(t, m, tea.KeyMsg{Type: tea.KeyUp})
-	if m.searchSelected != 0 {
-		t.Errorf("pgup start = %d", m.searchSelected)
+	if m.searchCursor.selected != 0 {
+		t.Errorf("pgup start = %d", m.searchCursor.selected)
 	}
 }
 

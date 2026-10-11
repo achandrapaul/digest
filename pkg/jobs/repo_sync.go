@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -306,8 +305,6 @@ func gitCmd(cwd string, args ...string) CmdResult {
 	return gitCmdTimeout(cwd, 10*time.Second, args...)
 }
 
-var commandWaitDelay = 2 * time.Second
-
 func fetchArgs(dryRun bool, refspecs ...string) []string {
 	if dryRun {
 		return append([]string{"fetch", "--no-prune", "--no-auto-gc"}, refspecs...)
@@ -319,14 +316,7 @@ func gitCmdTimeout(cwd string, timeout time.Duration, args ...string) CmdResult 
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, "git", args...)
-	cmd.WaitDelay = commandWaitDelay
-	cmd.Dir = cwd
-	cmd.Env = append(append(os.Environ(),
-		"GIT_TERMINAL_PROMPT=0",
-		"GIT_OPTIONAL_LOCKS=0",
-		"GIT_SSH_COMMAND=ssh -o BatchMode=yes -o ConnectTimeout=5",
-	), system.GitSafeEnv()...)
+	cmd := system.GitCommand(ctx, cwd, args...)
 
 	var out, errOut bytes.Buffer
 	cmd.Stdout = &out

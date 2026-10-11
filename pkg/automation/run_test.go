@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/achandrapaul/digest/pkg/config"
+	"github.com/achandrapaul/digest/pkg/system/process"
 )
 
 func TestRunJobRefusesNoteIDsOutsideTheRoot(t *testing.T) {
@@ -30,7 +31,7 @@ func TestClaimRunRecordsTheExitCodeAndClearsThePID(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if pid, found := readInt(filepath.Join(StateDir(root, "note-1"), runPIDFile)); !found || pid != os.Getpid() {
+		if pid, found := process.ReadInt(filepath.Join(StateDir(root, "note-1"), runPIDFile)); !found || pid != os.Getpid() {
 			t.Errorf("pid = %d", pid)
 		}
 		if Status(root, "note-1").Status != RunRunning {

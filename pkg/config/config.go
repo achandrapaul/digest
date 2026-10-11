@@ -450,15 +450,6 @@ func Init(path string, force bool) (written, backup string, err error) {
 	return written, backup, writeDefaultConfig(written)
 }
 
-func automationsEntry(root *yaml.Node) int {
-	for index := 0; index+1 < len(root.Content); index += 2 {
-		if root.Content[index].Value == "automations" {
-			return index
-		}
-	}
-	return -1
-}
-
 func InitAutomations(path string) (written, backup string, err error) {
 	written, err = resolveConfigPath(path)
 	if err != nil {
@@ -471,20 +462,21 @@ func InitAutomations(path string) (written, backup string, err error) {
 	if err != nil {
 		return written, "", fmt.Errorf("read %s: %w", written, err)
 	}
-	var document, template yaml.Node
+	var document yaml.Node
 	if err := yaml.Unmarshal(content, &document); err != nil {
 		return written, "", fmt.Errorf("parse %s: %w", written, err)
 	}
 	if len(document.Content) == 0 || document.Content[0].Kind != yaml.MappingNode {
 		return written, "", fmt.Errorf("parse %s: the config is not a mapping", written)
 	}
-	if err := yaml.Unmarshal([]byte(DefaultConfigYAML), &template); err != nil {
+	templateRoot, err := TemplateNode()
+	if err != nil {
 		return written, "", err
 	}
-	root, templateRoot := document.Content[0], template.Content[0]
-	templateIndex := automationsEntry(templateRoot)
+	root := document.Content[0]
+	templateIndex, _ := MappingValue(templateRoot, "automations")
 	templateEntry := templateRoot.Content[templateIndex : templateIndex+2]
-	if index := automationsEntry(root); index >= 0 {
+	if index, _ := MappingValue(root, "automations"); index >= 0 {
 		copy(root.Content[index:index+2], templateEntry)
 	} else {
 		root.Content = append(root.Content, templateEntry...)

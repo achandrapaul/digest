@@ -7,10 +7,10 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strconv"
-	"strings"
 	"syscall"
 
 	"github.com/achandrapaul/digest/pkg/system"
+	"github.com/achandrapaul/digest/pkg/system/process"
 )
 
 const (
@@ -58,26 +58,9 @@ func LogPath(root, noteID string) string {
 	return filepath.Join(StateDir(root, noteID), runLogFile)
 }
 
-func readInt(path string) (int, bool) {
-	data, err := system.Read(path)
-	if err != nil {
-		return 0, false
-	}
-	value, err := strconv.Atoi(strings.TrimSpace(string(data)))
-	return value, err == nil
-}
-
-func processAlive(pid int) bool {
-	if pid <= 0 {
-		return false
-	}
-	process, err := os.FindProcess(pid)
-	return err == nil && process.Signal(syscall.Signal(0)) == nil
-}
-
 func running(root, noteID string) bool {
-	pid, found := readInt(filepath.Join(StateDir(root, noteID), runPIDFile))
-	return found && processAlive(pid)
+	pid, found := process.ReadInt(filepath.Join(StateDir(root, noteID), runPIDFile))
+	return found && process.PIDAlive(pid)
 }
 
 func writeMeta(dir string, meta RunMeta) error {
@@ -104,7 +87,7 @@ func claimRun(root, noteID string) (func(runErr error), error) {
 		return nil, err
 	}
 	pidPath := filepath.Join(dir, runPIDFile)
-	if pid, found := readInt(pidPath); found && processAlive(pid) && pid != os.Getpid() {
+	if pid, found := process.ReadInt(pidPath); found && process.PIDAlive(pid) && pid != os.Getpid() {
 		return nil, ErrRunning
 	}
 	if err := system.Remove(filepath.Join(dir, runExitFile)); err != nil && !os.IsNotExist(err) {
@@ -119,14 +102,14 @@ func claimRun(root, noteID string) (func(runErr error), error) {
 	}, nil
 }
 
-func recordUnreportedExit(dir string, process *os.Process, state *os.ProcessState) {
+func recordUnreportedExit(dir string, child *os.Process, state *os.ProcessState) {
 	exitPath := filepath.Join(dir, runExitFile)
 	if state == nil || !state.Exited() || system.Exists(exitPath) {
 		return
 	}
 	_ = system.Write(exitPath, []byte(strconv.Itoa(state.ExitCode())))
 	pidPath := filepath.Join(dir, runPIDFile)
-	if pid, found := readInt(pidPath); found && pid == process.Pid {
+	if pid, found := process.ReadInt(pidPath); found && pid == child.Pid {
 		_ = system.Remove(pidPath)
 	}
 }
@@ -140,7 +123,7 @@ func Status(root, noteID string) Run {
 		run.Status = RunRunning
 		return run
 	}
-	exitCode, found := readInt(filepath.Join(dir, runExitFile))
+	exitCode, found := process.ReadInt(filepath.Join(dir, runExitFile))
 	switch {
 	case !found:
 		run.Status = RunIdle
@@ -203,35 +186,21 @@ func StartBackground(root, noteID, automationName string, phase Phase) error {
 	if err != nil {
 		return fmt.Errorf("locate digest binary: %w", err)
 	}
-	logFile, err := system.OpenLog(LogPath(root, noteID))
-	if err != nil {
-		return err
-	}
-	defer logFile.Close()
-	pidPath := filepath.Join(dir, runPIDFile)
-	cmd := exec.Command(executable, "automation", "--note", noteID, "--name", automationName, "--phase", string(phase))
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
-	cmd.Stdout, cmd.Stderr = logFile, logFile
-	cmd.Dir = dir
-	if err := cmd.Start(); err != nil {
-		return err
-	}
-	pidErr := system.Write(pidPath, []byte(strconv.Itoa(cmd.Process.Pid)))
-	go func() {
-		_ = cmd.Wait()
-		recordUnreportedExit(dir, cmd.Process, cmd.ProcessState)
-	}()
-	if pidErr != nil {
-		return fmt.Errorf("automation started but its pid file could not be written: %w", pidErr)
-	}
-	return nil
+	return process.SpawnDetached(process.DetachSpec{
+		Label:   "automation",
+		Args:    []string{executable, "automation", "--note", noteID, "--name", automationName, "--phase", string(phase)},
+		Dir:     dir,
+		LogPath: LogPath(root, noteID),
+		PIDPath: filepath.Join(dir, runPIDFile),
+		OnExit:  func(cmd *exec.Cmd) { recordUnreportedExit(dir, cmd.Process, cmd.ProcessState) },
+	})
 }
 
 func Stop(root, noteID string) error {
 	dir := StateDir(root, noteID)
 	pidPath := filepath.Join(dir, runPIDFile)
-	pid, found := readInt(pidPath)
-	if !found || !processAlive(pid) {
+	pid, found := process.ReadInt(pidPath)
+	if !found || !process.PIDAlive(pid) {
 		return nil
 	}
 	if err := syscall.Kill(-pid, syscall.SIGTERM); err != nil && !errors.Is(err, syscall.ESRCH) {

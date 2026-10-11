@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"fmt"
+	"strings"
 	"time"
 
 	"github.com/achandrapaul/digest/pkg/appstate"
@@ -29,35 +31,21 @@ func (m *Model) loadAppState() {
 	m.appState, m.appStateKnown = state, found
 }
 
-type appStateRebuiltMsg struct {
-	state appstate.State
-	built bool
-	err   error
-}
-
-func (m Model) rebuildAppStateCmd() tea.Cmd {
-	if m.appStateKnown {
-		return nil
+func (m *Model) requireAppState() {
+	_, found, err := appstate.Load(m.cfg.Root())
+	var advice string
+	switch {
+	case err != nil:
+		advice = fmt.Sprintf("The app state file can't be read: %v\n\nRun digest migrate to rebuild it.", err)
+	case found:
+		return
+	case m.store.HasNotes():
+		advice = appstate.Path(m.cfg.Root()) + " is missing.\n\nRun digest migrate to recreate it."
+	default:
+		advice = "digest isn't set up yet.\n\nRun digest bootstrap."
 	}
-	noteStore, root, isWorkDay := m.store, m.cfg.Root(), m.cfg.IsWorkDay
-	return func() tea.Msg {
-		notes, err := noteStore.List()
-		if !storeResultUsable(err) {
-			return appStateRebuiltMsg{err: err}
-		}
-		state := appstate.FromNotes(notes, time.Now(), isWorkDay)
-		return appStateRebuiltMsg{state: state, built: true, err: appstate.Save(root, state)}
-	}
-}
-
-func (m Model) applyRebuiltAppState(msg appStateRebuiltMsg) (tea.Model, tea.Cmd) {
-	if msg.err != nil {
-		m.showError("STATE ERROR", msg.err)
-	}
-	if msg.built && !m.appStateKnown {
-		m.appState, m.appStateKnown = msg.state, true
-	}
-	return m, nil
+	m.errorTitle, m.errorLines, m.quitOnErrorDismiss = "APP STATE", strings.Split(advice, "\n"), true
+	m.pushMode(ViewError)
 }
 
 func (m *Model) appStateAfterSaves(saved []savedNoteResult) tea.Cmd {
@@ -67,7 +55,9 @@ func (m *Model) appStateAfterSaves(saved []savedNoteResult) tea.Cmd {
 	state, changed := m.appState, false
 	for _, result := range saved {
 		var created, done bool
-		state, created = state.NoteCreated(result.after.Created)
+		if result.before.FilePath == "" {
+			state, created = state.NoteCreated(&result.after)
+		}
 		if !store.IsDonePath(result.before.FilePath) && result.after.Status == model.StatusDone {
 			state, done = state.MarkDone(time.Now(), m.cfg.IsWorkDay)
 		}

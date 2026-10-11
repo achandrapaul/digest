@@ -5,12 +5,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/achandrapaul/digest/pkg/system"
 	"github.com/charmbracelet/log"
 )
 
@@ -37,9 +37,8 @@ func fetchMergedPRs(repo string, timeout time.Duration) ([]MergedPR, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, "gh", "pr", "list", "--state", "merged", "--limit", "200", "--json", "number,headRefName,headRefOid,mergedAt")
+	cmd := system.GHCommand(ctx, "pr", "list", "--state", "merged", "--limit", "200", "--json", "number,headRefName,headRefOid,mergedAt")
 	cmd.Dir = repo
-	cmd.WaitDelay = commandWaitDelay
 	out, err := cmd.Output()
 	if err != nil {
 		return nil, err

@@ -85,7 +85,7 @@ func RunSummaries(root string, schedule SummarySchedule, facts habit.Facts, now 
 	}
 	notification := Notification{Title: summaryTitles[slot], Message: line, Group: summaryGroup}
 	if schedule.Terminal != "" {
-		notification.Execute = "open -b " + shellQuote(schedule.Terminal)
+		notification.Execute = "open -b " + system.ShellQuote(schedule.Terminal)
 	}
 	if err := Send(notification); err != nil {
 		return errors.Join(errors.New("digest summary"), err)

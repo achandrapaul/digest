@@ -23,17 +23,8 @@ var movedJanitorKeys = []struct {
 	{"janitor_patterns", config.OptionPatterns},
 }
 
-func mappingValue(mapping *yaml.Node, key string) (int, *yaml.Node) {
-	for index := 0; index+1 < len(mapping.Content); index += 2 {
-		if mapping.Content[index].Value == key {
-			return index, mapping.Content[index+1]
-		}
-	}
-	return -1, nil
-}
-
 func setMappingValue(mapping *yaml.Node, key string, value *yaml.Node, comment string) {
-	if index, _ := mappingValue(mapping, key); index >= 0 {
+	if index, _ := config.MappingValue(mapping, key); index >= 0 {
 		mapping.Content[index+1] = value
 		return
 	}
@@ -44,7 +35,7 @@ func builtInJobNodeName(job *yaml.Node) (string, bool) {
 	if job.Kind != yaml.MappingNode {
 		return "", false
 	}
-	_, name := mappingValue(job, "name")
+	_, name := config.MappingValue(job, "name")
 	if name == nil {
 		return "", false
 	}
@@ -116,7 +107,7 @@ func migrateJanitorOptions(configPath string, out io.Writer, dryRun bool) error 
 
 	var moved []string
 	for _, key := range movedJanitorKeys {
-		if index, _ := mappingValue(root, key.topLevel); index >= 0 {
+		if index, _ := config.MappingValue(root, key.topLevel); index >= 0 {
 			moved = append(moved, key.topLevel)
 		}
 	}
@@ -124,7 +115,7 @@ func migrateJanitorOptions(configPath string, out io.Writer, dryRun bool) error 
 		return nil
 	}
 
-	_, jobs := mappingValue(root, "jobs")
+	_, jobs := config.MappingValue(root, "jobs")
 	if jobs == nil {
 		jobs = &yaml.Node{Kind: yaml.SequenceNode, Tag: "!!seq"}
 		setMappingValue(root, "jobs", jobs, "")
@@ -133,17 +124,17 @@ func migrateJanitorOptions(configPath string, out io.Writer, dryRun bool) error 
 		return fmt.Errorf("parse %s: jobs is not a list", configPath)
 	}
 	janitor := janitorJobNode(jobs)
-	_, options := mappingValue(janitor, "options")
+	_, options := config.MappingValue(janitor, "options")
 	if options == nil || options.Kind != yaml.MappingNode {
 		options = &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
 		setMappingValue(janitor, "options", options, "")
 	}
 	for _, key := range movedJanitorKeys {
-		index, value := mappingValue(root, key.topLevel)
+		index, value := config.MappingValue(root, key.topLevel)
 		if index < 0 {
 			continue
 		}
-		if optionIndex, _ := mappingValue(options, key.option); optionIndex < 0 {
+		if optionIndex, _ := config.MappingValue(options, key.option); optionIndex < 0 {
 			setMappingValue(options, key.option, value, root.Content[index].HeadComment)
 		}
 		root.Content = append(root.Content[:index], root.Content[index+2:]...)
@@ -167,7 +158,7 @@ func migrateSyncInterval(configPath string, out io.Writer, dryRun bool) error {
 	if err != nil || root == nil {
 		return err
 	}
-	index, _ := mappingValue(root, retiredSyncIntervalKey)
+	index, _ := config.MappingValue(root, retiredSyncIntervalKey)
 	if index < 0 {
 		return nil
 	}
@@ -184,11 +175,11 @@ func migrateSyncInterval(configPath string, out io.Writer, dryRun bool) error {
 }
 
 func templateAutomationNodes() ([]*yaml.Node, error) {
-	var template yaml.Node
-	if err := yaml.Unmarshal([]byte(config.DefaultConfigYAML), &template); err != nil {
+	template, err := config.TemplateNode()
+	if err != nil {
 		return nil, err
 	}
-	_, automations := mappingValue(template.Content[0], "automations")
+	_, automations := config.MappingValue(template, "automations")
 	if automations == nil || automations.Kind != yaml.SequenceNode {
 		return nil, errors.New("the config template has no automations list")
 	}
@@ -199,7 +190,7 @@ func automationNodeName(automation *yaml.Node) string {
 	if automation.Kind != yaml.MappingNode {
 		return ""
 	}
-	if _, name := mappingValue(automation, "name"); name != nil {
+	if _, name := config.MappingValue(automation, "name"); name != nil {
 		return strings.ToLower(strings.TrimSpace(name.Value))
 	}
 	return ""
@@ -210,7 +201,7 @@ func migrateAutomations(configPath string, out io.Writer, dryRun, calendarOffere
 	if err != nil || root == nil {
 		return false, err
 	}
-	_, automations := mappingValue(root, "automations")
+	_, automations := config.MappingValue(root, "automations")
 	if automations == nil {
 		return false, nil
 	}
@@ -225,7 +216,7 @@ func migrateAutomations(configPath string, out io.Writer, dryRun, calendarOffere
 	var calendarTemplate *yaml.Node
 	for _, templateNode := range templateNodes {
 		name := automationNodeName(templateNode)
-		if _, automationType := mappingValue(templateNode, "automation_type"); automationType != nil {
+		if _, automationType := config.MappingValue(templateNode, "automation_type"); automationType != nil {
 			templateTypes[name] = automationType.Value
 		}
 		if name == config.AutomationGoogleCalendar {
@@ -245,10 +236,10 @@ func migrateAutomations(configPath string, out io.Writer, dryRun, calendarOffere
 		if !builtIn {
 			continue
 		}
-		if typeIndex, _ := mappingValue(automation, "automation_type"); typeIndex >= 0 {
+		if typeIndex, _ := config.MappingValue(automation, "automation_type"); typeIndex >= 0 {
 			continue
 		}
-		nameIndex, _ := mappingValue(automation, "name")
+		nameIndex, _ := config.MappingValue(automation, "name")
 		typeEntry := []*yaml.Node{
 			{Kind: yaml.ScalarNode, Tag: "!!str", Value: "automation_type"},
 			{Kind: yaml.ScalarNode, Tag: "!!str", Value: automationType},
@@ -301,18 +292,18 @@ func rootsInCommand(command string) []string {
 
 func migrateBuiltInJob(job *yaml.Node, name string) bool {
 	changed := false
-	if _, nameNode := mappingValue(job, "name"); nameNode.Value != name {
+	if _, nameNode := config.MappingValue(job, "name"); nameNode.Value != name {
 		nameNode.Value = name
 		changed = true
 	}
 	var roots []string
 	for _, key := range []string{"command", "cmd", "dry-run-command", "dry_run_command"} {
-		if _, value := mappingValue(job, key); value != nil && len(roots) == 0 {
+		if _, value := config.MappingValue(job, key); value != nil && len(roots) == 0 {
 			roots = rootsInCommand(value.Value)
 		}
 	}
 	for _, key := range jobCommandKeys {
-		if index, _ := mappingValue(job, key); index >= 0 {
+		if index, _ := config.MappingValue(job, key); index >= 0 {
 			job.Content = append(job.Content[:index], job.Content[index+2:]...)
 			changed = true
 		}
@@ -320,12 +311,12 @@ func migrateBuiltInJob(job *yaml.Node, name string) bool {
 	if len(roots) == 0 {
 		return changed
 	}
-	_, options := mappingValue(job, "options")
+	_, options := config.MappingValue(job, "options")
 	if options == nil || options.Kind != yaml.MappingNode {
 		options = &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
 		setMappingValue(job, "options", options, "")
 	}
-	if index, _ := mappingValue(options, config.OptionRoots); index < 0 {
+	if index, _ := config.MappingValue(options, config.OptionRoots); index < 0 {
 		rootsNode := &yaml.Node{Kind: yaml.SequenceNode, Tag: "!!seq"}
 		for _, root := range roots {
 			rootsNode.Content = append(rootsNode.Content, stringNode(root))
@@ -340,7 +331,7 @@ func migrateBuiltInJobs(configPath string, out io.Writer, dryRun bool) error {
 	if err != nil || root == nil {
 		return err
 	}
-	_, jobs := mappingValue(root, "jobs")
+	_, jobs := config.MappingValue(root, "jobs")
 	if jobs == nil {
 		return nil
 	}

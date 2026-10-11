@@ -1,39 +1,27 @@
 package brag
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/achandrapaul/digest/pkg/system"
 )
 
-var commandWaitDelay = 2 * time.Second
-
 var bragCommandTimeout = 5 * time.Minute
 
 var runBragCommand = func(ctx context.Context, command, input string) (string, error) {
-	cmd := exec.CommandContext(ctx, "sh", "-c", command)
-	cmd.WaitDelay = commandWaitDelay
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	cmd.Cancel = func() error { return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL) }
-	cmd.Stdin = strings.NewReader(input)
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-	out, err := cmd.Output()
+	out, stderr, err := system.RunShell(ctx, "", command, input)
 	if err != nil {
-		if message := strings.TrimSpace(stderr.String()); message != "" {
+		if message := strings.TrimSpace(stderr); message != "" {
 			return "", fmt.Errorf("brag command: %s", message)
 		}
 		return "", fmt.Errorf("brag command: %w", err)
 	}
-	return string(out), nil
+	return out, nil
 }
 
 func GenerateSummary(ctx context.Context, command, prompt string, period Period, facts string) (string, error) {

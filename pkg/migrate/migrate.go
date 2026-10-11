@@ -16,9 +16,9 @@ import (
 	"github.com/achandrapaul/digest/pkg/model"
 	"github.com/achandrapaul/digest/pkg/notify"
 	"github.com/achandrapaul/digest/pkg/review"
-	"github.com/achandrapaul/digest/pkg/running"
 	"github.com/achandrapaul/digest/pkg/store"
 	"github.com/achandrapaul/digest/pkg/system"
+	"github.com/achandrapaul/digest/pkg/system/process"
 )
 
 var (
@@ -52,7 +52,7 @@ type plannedNote struct {
 }
 
 func Run(options Options) (int, error) {
-	if running.Alive(options.TUIMarker) {
+	if process.Alive(options.TUIMarker) {
 		return 0, ErrTUIRunning
 	}
 	if automation.AnyRunning(options.AutomationDir) {
@@ -62,7 +62,7 @@ func Run(options Options) (int, error) {
 		return 0, err
 	}
 	storedState, _, err := appstate.Load(options.Root)
-	if err != nil {
+	if err != nil && !appstate.IsCorrupt(err) {
 		return 0, err
 	}
 	calendarPresent, err := migrateAutomations(options.ConfigPath, options.Out, options.DryRun, storedState.CalendarOffered)
@@ -280,30 +280,36 @@ func moveAutomationState(options Options, originalID, newID string) error {
 
 func migrateAppState(options Options, notes []*model.Note, calendarPresent bool) error {
 	stored, found, err := appstate.Load(options.Root)
-	if err != nil {
+	corrupt := appstate.IsCorrupt(err)
+	if err != nil && !corrupt {
 		return err
 	}
 	fromNotes := appstate.FromNotes(notes, options.now(), options.isWorkDay)
+	fromNotes.FirstNoteCreated = appstate.FirstManualNoteCreated(notes)
 	fromNotes.CalendarOffered = calendarPresent
 	if !found {
-		if options.DryRun {
-			fmt.Fprintf(options.Out, "would save %s\n", appstate.Path(options.Root))
-			return nil
+		if !options.DryRun {
+			return saveAppState(options.Root, fromNotes)
 		}
-		return saveAppState(options.Root, fromNotes)
+		plan := "would save"
+		if corrupt {
+			plan = "would replace the unreadable"
+		}
+		fmt.Fprintf(options.Out, "%s %s\n", plan, appstate.Path(options.Root))
+		return nil
 	}
 	recordCalendar := calendarPresent && !stored.CalendarOffered
-	moveFirstNote := !fromNotes.FirstNoteCreated.IsZero() && !fromNotes.FirstNoteCreated.Equal(stored.FirstNoteCreated)
-	if !recordCalendar && !moveFirstNote {
+	fillFirstNote := stored.FirstNoteCreated.IsZero() && !fromNotes.FirstNoteCreated.IsZero()
+	if !recordCalendar && !fillFirstNote {
 		return nil
 	}
 	if options.DryRun {
-		if moveFirstNote {
+		if fillFirstNote {
 			fmt.Fprintf(options.Out, "would set first_note_created to %s\n", fromNotes.FirstNoteCreated.Format(time.RFC3339))
 		}
 		return nil
 	}
-	if moveFirstNote {
+	if fillFirstNote {
 		stored.FirstNoteCreated = fromNotes.FirstNoteCreated
 	}
 	stored.CalendarOffered = stored.CalendarOffered || calendarPresent

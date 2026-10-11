@@ -117,7 +117,7 @@ func longArchiveModel(t *testing.T) Model {
 }
 
 func archiveSelectionVisible(m Model) bool {
-	summary := m.getArchivedNotes()[m.notesUI.archivedSelected].Summary
+	summary := m.getArchivedNotes()[m.notesUI.archivedCursor.selected].Summary
 	return strings.Contains(stripANSI(m.notesUI.archivedViewport.View()), summary)
 }
 
@@ -136,18 +136,18 @@ func TestArchivePagingMovesTheSelectionAndScrollFollows(t *testing.T) {
 	}
 	for _, step := range steps {
 		m = press(t, m, step.key)
-		if m.notesUI.archivedSelected != step.want || m.mode != ViewArchived {
-			t.Fatalf("%s: selected %d want %d mode %v", step.key, m.notesUI.archivedSelected, step.want, m.mode)
+		if m.notesUI.archivedCursor.selected != step.want || m.mode != ViewArchived {
+			t.Fatalf("%s: selected %d want %d mode %v", step.key, m.notesUI.archivedCursor.selected, step.want, m.mode)
 		}
 		if !archiveSelectionVisible(m) {
-			t.Errorf("%s: selected row %d scrolled out of view", step.key, m.notesUI.archivedSelected)
+			t.Errorf("%s: selected row %d scrolled out of view", step.key, m.notesUI.archivedCursor.selected)
 		}
 	}
 	for range 10 {
 		m = press(t, m, tea.KeyMsg{Type: tea.KeyPgDown})
 	}
-	if m.notesUI.archivedSelected != len(m.getArchivedNotes())-1 || !archiveSelectionVisible(m) {
-		t.Errorf("pgdown should clamp to the last note and show it, selected %d", m.notesUI.archivedSelected)
+	if m.notesUI.archivedCursor.selected != len(m.getArchivedNotes())-1 || !archiveSelectionVisible(m) {
+		t.Errorf("pgdown should clamp to the last note and show it, selected %d", m.notesUI.archivedCursor.selected)
 	}
 	for range 3 {
 		m = press(t, m, runes("k"))

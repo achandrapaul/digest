@@ -17,7 +17,7 @@ func TestPulseTicksReuseTheDashboardButStillAnimateTheHeader(t *testing.T) {
 	m.mode = ViewDashboard
 	m.width, m.height = 160, 50
 	markRunning(t, m, m.git.ghPendingPRs[0].PR.Ref)
-	writeLivePID(t, filepath.Join(getLogsDir(), "janitor.pid"))
+	writeLivePID(t, filepath.Join(jobRuntime().LogsDir, "janitor.pid"))
 	m = update(m, reviewPollTickMsg{snapshot: m.loadReviewPollSnapshot()})
 	m.git.loadingGit = true
 	m.postMessage(messageSourceGit, messageProgress, "syncing")

@@ -74,10 +74,6 @@ func AllowedTools(plugins []string) []string {
 	return tools
 }
 
-func shellQuote(text string) string {
-	return "'" + strings.ReplaceAll(text, "'", `'\''`) + "'"
-}
-
 func allowedToolsFlag(plugins []string) string {
 	tools := AllowedTools(plugins)
 	if len(tools) == 0 {
@@ -85,7 +81,7 @@ func allowedToolsFlag(plugins []string) string {
 	}
 	quoted := make([]string, len(tools))
 	for index, tool := range tools {
-		quoted[index] = shellQuote(tool)
+		quoted[index] = system.ShellQuote(tool)
 	}
 	return " --allowedTools " + strings.Join(quoted, " ")
 }
@@ -99,7 +95,7 @@ func ReviewCommand(prompt string, plugins []string) string {
 	if slices.ContainsFunc(plugins, IsConnector) {
 		isolation = " --setting-sources user"
 	}
-	return "claude -p " + shellQuote(prompt) + isolation + " --permission-prompts none" + allowedToolsFlag(plugins)
+	return "claude -p " + system.ShellQuote(prompt) + isolation + " --permission-prompts none" + allowedToolsFlag(plugins)
 }
 
 type TokenCheck struct {

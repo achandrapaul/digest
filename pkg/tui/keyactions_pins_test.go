@@ -11,21 +11,21 @@ import (
 
 func TestClampingKeepsPopupSelectionsInRange(t *testing.T) {
 	m := mixedGitDetailsModel(t)
-	m.git.gitPopupSelected = 99
+	m.git.gitPopupCursor.selected = 99
 	m.clampScreenSelection()
-	if m.git.gitPopupSelected != 2 {
-		t.Fatalf("git selection = %d", m.git.gitPopupSelected)
+	if m.git.gitPopupCursor.selected != 2 {
+		t.Fatalf("git selection = %d", m.git.gitPopupCursor.selected)
 	}
 	archive := openArchiveModel(t)
-	archive.notesUI.archivedSelected = 99
+	archive.notesUI.archivedCursor.selected = 99
 	archive.clampScreenSelection()
-	if archive.notesUI.archivedSelected != 2 {
-		t.Fatalf("archive selection = %d", archive.notesUI.archivedSelected)
+	if archive.notesUI.archivedCursor.selected != 2 {
+		t.Fatalf("archive selection = %d", archive.notesUI.archivedCursor.selected)
 	}
-	archive.notesUI.archivedSelected = -2
+	archive.notesUI.archivedCursor.selected = -2
 	archive.clampScreenSelection()
-	if archive.notesUI.archivedSelected != 0 {
-		t.Fatalf("archive selection = %d", archive.notesUI.archivedSelected)
+	if archive.notesUI.archivedCursor.selected != 0 {
+		t.Fatalf("archive selection = %d", archive.notesUI.archivedCursor.selected)
 	}
 }
 

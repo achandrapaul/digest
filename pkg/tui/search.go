@@ -370,18 +370,18 @@ func (m Model) searchListHeight() int {
 
 func (m *Model) keepSearchSelectionVisible() {
 	results, heights := m.searchMatches()
-	m.searchSelected = min(max(m.searchSelected, 0), max(len(results)-1, 0))
-	m.searchScroll, _ = searchWindow(heights, m.searchSelected, m.searchScroll, m.searchListHeight())
+	m.searchCursor.Clamp(len(results))
+	m.searchCursor.Follow(heights, m.searchListHeight())
 }
 
 func (m Model) searchPageSize() int {
 	_, heights := m.searchMatches()
-	first, last := searchWindow(heights, m.searchSelected, m.searchScroll, m.searchListHeight())
+	first, last := searchWindow(heights, m.searchCursor.selected, m.searchCursor.scroll, m.searchListHeight())
 	return max(1, last-first)
 }
 
 func (m Model) moveSearchSelection(delta int) Model {
-	m.searchSelected += delta
+	m.searchCursor.selected += delta
 	m.keepSearchSelectionVisible()
 	return m
 }
@@ -454,9 +454,9 @@ func (m Model) renderSearchModal(modalWidth int) string {
 		for _, note := range results {
 			dateWidth = max(dateWidth, ansi.StringWidth(searchDateLabel(note.Updated, now)))
 		}
-		first, last := searchWindow(heights, m.searchSelected, m.searchScroll, listHeight)
+		first, last := searchWindow(heights, m.searchCursor.selected, m.searchCursor.scroll, listHeight)
 		for index := first; index < last; index++ {
-			listLines = append(listLines, strings.Split(m.renderSearchRow(results[index], index == m.searchSelected, query, dateWidth, innerWidth), "\n")...)
+			listLines = append(listLines, strings.Split(m.renderSearchRow(results[index], index == m.searchCursor.selected, query, dateWidth, innerWidth), "\n")...)
 		}
 	}
 	listLines = listLines[:min(len(listLines), listHeight)]
@@ -484,7 +484,7 @@ func (m Model) searchPreviewIndex(results []*model.Note) int {
 			return index
 		}
 	}
-	return min(max(m.searchSelected, 0), len(results)-1)
+	return min(max(m.searchCursor.selected, 0), len(results)-1)
 }
 
 func (m Model) searchPreviewNote() *model.Note {
@@ -516,8 +516,8 @@ func (m *Model) showSearchPreviewAt(index int) {
 	if len(results) == 0 {
 		return
 	}
-	m.searchSelected = min(max(index, 0), len(results)-1)
-	m.searchPreviewID = results[m.searchSelected].ID
+	m.searchCursor.selected = min(max(index, 0), len(results)-1)
+	m.searchPreviewID = results[m.searchCursor.selected].ID
 	m.keepSearchSelectionVisible()
 	m.searchInput.Blur()
 	m.searchPreviewing, m.mode = true, ViewPreview
@@ -526,8 +526,8 @@ func (m *Model) showSearchPreviewAt(index int) {
 }
 
 func (m *Model) afterSearchPreviewArchive() {
-	if m.searchSelected < len(m.searchResults()) {
-		m.showSearchPreviewAt(m.searchSelected)
+	if m.searchCursor.selected < len(m.searchResults()) {
+		m.showSearchPreviewAt(m.searchCursor.selected)
 		return
 	}
 	m.leaveSearchPreview()
@@ -540,12 +540,12 @@ func (m *Model) leaveSearchPreview() {
 }
 
 func (m Model) openSearchPreview(tea.KeyMsg) (tea.Model, tea.Cmd) {
-	m.showSearchPreviewAt(m.searchSelected)
+	m.showSearchPreviewAt(m.searchCursor.selected)
 	return m, nil
 }
 
 func (m Model) openSearchResult(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	m.showSearchPreviewAt(m.searchSelected)
+	m.showSearchPreviewAt(m.searchCursor.selected)
 	if !m.previewingSearch() {
 		return m, nil
 	}

@@ -44,14 +44,14 @@ func TestJobsKeepRunningAfterTheAppQuits(t *testing.T) {
 	t.Cleanup(func() { setDigestRoot(previousRoot) })
 	deadline := time.Now().Add(5 * time.Second)
 	output, exitCode, finished := loadDryRunResult("survivor-dry")
-	for (!finished || !strings.Contains(readJobLog("survivor"), "after the app quit")) && time.Now().Before(deadline) {
+	for (!finished || !strings.Contains(jobRuntime().ReadLog("survivor"), "after the app quit")) && time.Now().Before(deadline) {
 		time.Sleep(50 * time.Millisecond)
 		output, exitCode, finished = loadDryRunResult("survivor-dry")
 	}
 	if !finished || exitCode != 4 || !strings.Contains(output, "after the app quit") {
 		t.Errorf("dry run should finish after the app quits: finished %v exit %d output %q", finished, exitCode, output)
 	}
-	if log := readJobLog("survivor"); !strings.Contains(log, "after the app quit") {
+	if log := jobRuntime().ReadLog("survivor"); !strings.Contains(log, "after the app quit") {
 		t.Errorf("job should keep logging after the app quits: %q", log)
 	}
 }
