@@ -26,7 +26,7 @@ func upstreamView(m Model) string {
 
 	displayLine := 0
 	for l, line := range m.value {
-		wrappedLines := m.memoizedWrap(line, m.width)
+		wrappedLines := wrap(line, m.width)
 
 		if m.row == l {
 			style = m.style.computedCursorLine()

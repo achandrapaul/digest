@@ -3,7 +3,6 @@
 package textarea
 
 import (
-	"crypto/sha256"
 	"fmt"
 	"strconv"
 	"strings"
@@ -13,7 +12,6 @@ import (
 	"github.com/charmbracelet/bubbles/cursor"
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/runeutil"
-	"github.com/charmbracelet/bubbles/textarea/memoization"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -173,17 +171,9 @@ func (s Style) computedText() lipgloss.Style {
 	return s.Text.Inherit(s.Base).Inline(true)
 }
 
-// line is the input to the text wrapping function. This is stored in a struct
-// so that it can be hashed and memoized.
-type line struct {
-	runes []rune
-	width int
-}
-
-// Hash returns a hash of the line.
-func (w line) Hash() string {
-	v := fmt.Sprintf("%s:%d", string(w.runes), w.width)
-	return fmt.Sprintf("%x", sha256.Sum256([]byte(v)))
+type rowHeights struct {
+	width   int
+	heights []int
 }
 
 // Model is the Bubble Tea model for this text area element.
@@ -191,7 +181,7 @@ type Model struct {
 	Err error
 
 	// General settings.
-	cache *memoization.MemoCache[line, [][]rune]
+	rows *rowHeights
 
 	// Prompt is printed at the beginning of each line.
 	//
@@ -297,7 +287,7 @@ func New() Model {
 		style:                &blurredStyle,
 		FocusedStyle:         focusedStyle,
 		BlurredStyle:         blurredStyle,
-		cache:                memoization.NewMemoCache[line, [][]rune](maxLines),
+		rows:                 &rowHeights{},
 		EndOfBufferCharacter: ' ',
 		ShowLineNumbers:      true,
 		Cursor:               cur,
@@ -447,6 +437,7 @@ func (m *Model) insertRunesFromUserInput(runes []rune) {
 	m.value[m.row] = append(m.value[m.row], tail...)
 
 	m.SetCursor(m.col)
+	m.refreshHeight(m.row)
 }
 
 // Value returns the value of the text input.
@@ -596,6 +587,9 @@ func (m *Model) Blur() {
 
 // Reset sets the input to its default state with no input.
 func (m *Model) Reset() {
+	if m.rows != nil {
+		m.rows.heights = nil
+	}
 	m.value = make([][]rune, minHeight, maxLines)
 	m.col = 0
 	m.row = 0
@@ -816,7 +810,7 @@ func (m *Model) capitalizeRight() {
 // LineInfo returns the number of characters from the start of the
 // (soft-wrapped) line and the (soft-wrapped) line width.
 func (m Model) LineInfo() LineInfo {
-	grid := m.memoizedWrap(m.value[m.row], m.width)
+	grid := wrap(m.value[m.row], m.width)
 
 	// Find out which line we are currently on. This can be determined by the
 	// m.col and counting the number of runes that we need to skip.
@@ -965,15 +959,12 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 
 	// Used to determine if the cursor should blink.
 	oldRow, oldCol := m.cursorLineNumber(), m.col
+	editedRow := m.row
 
 	var cmds []tea.Cmd
 
 	if m.value[m.row] == nil {
 		m.value[m.row] = make([]rune, 0)
-	}
-
-	if m.MaxHeight > 0 && m.MaxHeight != m.cache.Capacity() {
-		m.cache = memoization.NewMemoCache[line, [][]rune](m.MaxHeight)
 	}
 
 	switch msg := msg.(type) {
@@ -1076,6 +1067,9 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		m.Err = msg
 	}
 
+	m.refreshHeight(editedRow)
+	m.refreshHeight(m.row)
+
 	vp, cmd := m.viewport.Update(msg)
 	m.viewport = &vp
 	cmds = append(cmds, cmd)
@@ -1100,16 +1094,18 @@ func (m Model) View() string {
 	}
 	m.Cursor.TextStyle = m.style.computedCursorLine()
 
-	wrappedRows := make([][][]rune, len(m.value))
+	heights := m.heights()
 	contentLines := 0
-	for l, line := range m.value {
-		wrappedRows[l] = m.memoizedWrap(line, m.width)
-		contentLines += len(wrappedRows[l])
+	for _, rowHeight := range heights {
+		contentLines += rowHeight
 	}
-	screenLines := make([]string, contentLines+m.height+1)
-	m.viewport.SetContent(strings.Repeat("\n", len(screenLines)-1))
+	totalLines := contentLines + m.height + 1
 	top := max(0, m.viewport.YOffset)
-	bottom := min(top+m.viewport.Height, len(screenLines))
+	if top > totalLines-1 {
+		top = max(0, totalLines-m.viewport.Height)
+	}
+	bottom := min(top+m.viewport.Height, totalLines)
+	window := make([]string, bottom-top)
 
 	var (
 		style            lipgloss.Style
@@ -1119,11 +1115,11 @@ func (m Model) View() string {
 
 	displayLine := 0
 	for l, line := range m.value {
-		wrappedLines := wrappedRows[l]
-		if displayLine+len(wrappedLines) <= top || displayLine >= bottom {
-			displayLine += len(wrappedLines)
+		if displayLine >= bottom || displayLine+heights[l] <= top {
+			displayLine += heights[l]
 			continue
 		}
+		wrappedLines := wrap(line, m.width)
 
 		if m.row == l {
 			style = m.style.computedCursorLine()
@@ -1169,7 +1165,7 @@ func (m Model) View() string {
 				s.WriteString(style.Render(string(wrappedLine)))
 			}
 			s.WriteString(style.Render(strings.Repeat(" ", max(0, padding))))
-			screenLines[displayLine] = s.String()
+			window[displayLine-top] = s.String()
 			displayLine++
 		}
 	}
@@ -1185,12 +1181,13 @@ func (m Model) View() string {
 			leftGutter := string(m.EndOfBufferCharacter)
 			rightGapWidth := m.Width() - lipgloss.Width(leftGutter) + widestLineNumber
 			rightGap := strings.Repeat(" ", max(0, rightGapWidth))
-			screenLines[displayLine] = prompt + m.style.computedEndOfBuffer().Render(leftGutter+rightGap)
+			window[displayLine-top] = prompt + m.style.computedEndOfBuffer().Render(leftGutter+rightGap)
 		}
 		displayLine++
 	}
 
-	m.viewport.SetContent(strings.Join(screenLines, "\n"))
+	content := strings.Repeat("\n", top) + strings.Join(window, "\n") + strings.Repeat("\n", totalLines-bottom)
+	m.viewport.SetContent(content)
 	return m.style.Base.Render(m.viewport.View())
 }
 
@@ -1316,24 +1313,46 @@ func Blink() tea.Msg {
 	return cursor.Blink()
 }
 
-func (m Model) memoizedWrap(runes []rune, width int) [][]rune {
-	input := line{runes: runes, width: width}
-	if v, ok := m.cache.Get(input); ok {
-		return v
+func (m Model) heightOf(runes []rune) int {
+	if 2*len(runes)+1 < m.width {
+		return 1
 	}
-	v := wrap(runes, width)
-	m.cache.Set(input, v)
-	return v
+	return len(wrap(runes, m.width))
+}
+
+func (m Model) computeHeights(into []int) []int {
+	into = into[:0]
+	for _, runes := range m.value {
+		into = append(into, m.heightOf(runes))
+	}
+	return into
+}
+
+func (m Model) heights() []int {
+	if m.rows == nil {
+		return m.computeHeights(nil)
+	}
+	if m.rows.width != m.width || len(m.rows.heights) != len(m.value) {
+		m.rows.heights = m.computeHeights(m.rows.heights)
+		m.rows.width = m.width
+	}
+	return m.rows.heights
+}
+
+func (m Model) refreshHeight(row int) {
+	heights := m.heights()
+	if m.rows != nil && row >= 0 && row < len(heights) {
+		heights[row] = m.heightOf(m.value[row])
+	}
 }
 
 // cursorLineNumber returns the line number that the cursor is on.
 // This accounts for soft wrapped lines.
 func (m Model) cursorLineNumber() int {
 	line := 0
-	for i := 0; i < m.row; i++ {
-		// Calculate the number of lines that the current line will be split
-		// into.
-		line += len(m.memoizedWrap(m.value[i], m.width))
+	heights := m.heights()
+	for i := 0; i < m.row && i < len(heights); i++ {
+		line += heights[i]
 	}
 	line += m.LineInfo().RowOffset
 	return line
