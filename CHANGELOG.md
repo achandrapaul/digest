@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.0.154 — 2026-10-11
+
+### Changes
+- [dfbf9b6](https://github.com/achandrapaul/digest/commit/dfbf9b6c5d8debcd12964a8a608ef304c21d468e) ci: release is safe to rerun and a slow go proxy no longer blocks the tap
+- [6fe6527](https://github.com/achandrapaul/digest/commit/6fe6527d86dfaf3b647d02db3db759ec9b5251d7) ci: release workflow runs on v* tag pushes and accepts tags without the v prefix
+
 ## v0.0.153 — 2026-10-11
 
 ### Changes
