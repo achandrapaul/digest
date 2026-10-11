@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.0.156 — 2026-10-11
+
+### Changes
+- [310f233](https://github.com/achandrapaul/digest/commit/310f2338015251a84dc0d4050b6ab41adff4515d) perf: editor keeps per-row wrapped heights instead of a wrap cache, typing in a 10k-line note drops from 100-940 ms to about 2 ms
+
 ## v0.0.155 — 2026-10-11
 
 ### Changes
