@@ -1,6 +1,8 @@
 name: release
 
 on:
+  push:
+    tags: ['v*']
   workflow_dispatch:
     inputs:
       tag:
@@ -27,8 +29,14 @@ jobs:
       - id: tag
         env:
           INPUT_TAG: ${{ inputs.tag }}
+          REF_TAG: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
         run: |
-          release_tag="${INPUT_TAG:-$(git tag --list 'v*' --sort=-v:refname | head -n 1)}"
+          release_tag="${INPUT_TAG:-$REF_TAG}"
+          release_tag="${release_tag:-$(git tag --list 'v*' --sort=-v:refname | head -n 1)}"
+          case "$release_tag" in
+            ""|v*) ;;
+            *) release_tag="v$release_tag" ;;
+          esac
           if [ -z "$release_tag" ]; then
             echo "no tag to release" >&2
             exit 1
