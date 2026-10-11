@@ -31,6 +31,8 @@ From source, with [mise](https://mise.jdx.dev):
 mise run build
 ```
 
+Run `mise run hooks` once so every commit runs the tests first.
+
 ## Setup
 
 After installing, run this once:
