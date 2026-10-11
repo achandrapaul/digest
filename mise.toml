@@ -43,23 +43,32 @@ git fetch --tags -q
 go run ./cmd/release notes "$(cat .version)"
 '''
 
-[tasks."release:commit"]
-description = "Bump .version, add its CHANGELOG.md section, commit as release:<level> and push; off main it also opens a PR"
+[tasks."release:trigger"]
+description = "Branch off the latest main, bump .version, add its CHANGELOG.md section, commit as release:<level>, push the branch and open the PR that releases it"
 quiet = true
 usage = 'arg "[level]" default="patch" help="patch, minor or major" { choices "patch" "minor" "major" }'
 run = '''
 set -eu
 release_level="$usage_level"
-mise run bump "$release_level"
-mise run release:notes > /dev/null
+git fetch --tags -q origin main
+current_version=$(git show origin/main:.version)
+next_version=$(semver bump "$release_level" "$current_version")
+release_branch="release/v$next_version"
+if git ls-remote --exit-code --heads origin "$release_branch" > /dev/null 2>&1; then
+  printf '\033[31m✗\033[0m %s already exists on origin\n' "$release_branch" >&2
+  exit 1
+fi
+worktree_dir=$(mktemp -d)
+trap 'git worktree remove --force "$worktree_dir" > /dev/null 2>&1 || true' EXIT
+git worktree add -q -b "$release_branch" "$worktree_dir" origin/main
+cd "$worktree_dir"
+printf '%s\n' "$next_version" > .version
+go run ./cmd/release notes "$next_version" > /dev/null
 git add .version CHANGELOG.md
 git commit -q -m "release:$release_level" -- .version CHANGELOG.md
-current_branch=$(git rev-parse --abbrev-ref HEAD)
-git push -u origin "$current_branch"
-if [ "$current_branch" != "main" ]; then
-  gh pr view > /dev/null 2>&1 || gh pr create --fill --base main
-fi
-printf '\033[32m✓\033[0m released \033[1mv%s\033[0m on %s\n' "$(cat .version)" "$current_branch"
+git push -q -u origin "$release_branch"
+gh pr create --base main --head "$release_branch" --title "release:$release_level v$next_version" --body "Merging bumps .version to $next_version, which tags v$next_version and publishes it."
+printf '\033[32m✓\033[0m release PR for \033[1mv%s\033[0m from %s\n' "$next_version" "$release_branch"
 '''
 
 [tasks.hooks]

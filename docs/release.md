@@ -19,16 +19,16 @@ Pushes to `main` never release on their own. To cut a version:
 
 ```sh
 mise run release:level          # prints the level the commits call for
-mise run release:commit         # patch by default; pass minor or major to choose
+mise run release:trigger        # patch by default; pass minor or major to choose
 ```
 
-`release:commit` bumps `.version`, adds the new [CHANGELOG.md](../CHANGELOG.md) section with `mise run release:notes`, commits both as `release:<patch|minor|major>` and pushes the current branch. On `main` it only pushes; on any other branch it also opens a pull request into `main`. The section lists every commit since the newest tag under Changes, as a link to the commit, its title and its description; release, changelog and benchmark commits are left out.
+`release:trigger` branches `release/v<next-version>` off the latest `origin/main` in a temporary worktree, so your own branch and working tree stay untouched. It bumps `.version`, adds the new [CHANGELOG.md](../CHANGELOG.md) section with `go run ./cmd/release notes`, commits both as `release:<patch|minor|major>`, pushes the branch and opens a pull request into `main`. It stops when that branch already exists on origin. The section lists every commit since the newest tag under Changes, as a link to the commit, its title and its description; release, changelog and benchmark commits are left out.
 
-A push to `main` that changes `.version` runs the build workflow. It runs vet and tests and tags `v<version>`. Nothing is published yet.
+Merging the pull request is what releases: the push to `main` that changes `.version` runs the build workflow. It runs vet and tests and tags `v<version>`; the tag push starts the release workflow below.
 
 ## Publishing a release
 
-Run the release workflow from the Actions tab, or `gh workflow run release.yml -f tag=v<version>`; without a tag it takes the latest one. It checks out the tag, publishes the macOS binaries on GitHub with that version's changelog section as release notes, asks the Go module proxy for the tag, and points the Homebrew formula at it. Older tags and releases stay; GitHub marks the newest one as Latest.
+The release workflow starts on every pushed `v*` tag. To rerun it or publish an older tag, use the Actions tab or `gh workflow run release.yml -f tag=v<version>`; without a tag it takes the latest one. It checks out the tag, publishes the macOS binaries on GitHub with that version's changelog section as release notes, asks the Go module proxy for the tag, and points the Homebrew formula at it. Older tags and releases stay; GitHub marks the newest one as Latest.
 
 ## Benchmarks
 
