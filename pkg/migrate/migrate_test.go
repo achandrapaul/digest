@@ -285,8 +285,13 @@ func TestMigrateKeepsAnExistingFirstNoteCreated(t *testing.T) {
 		if _, err := Run(options); err != nil {
 			t.Fatal(err)
 		}
-		if got, _, _ := appstate.Load(f.root); !reflect.DeepEqual(got, stored) {
-			t.Errorf("an existing first_note_created should never be touched: %+v", got)
+		got, _, _ := appstate.Load(f.root)
+		if !got.FirstNoteCreated.Equal(stored.FirstNoteCreated) {
+			t.Errorf("an existing first_note_created should never be touched: %v", got.FirstNoteCreated)
+		}
+		got.FirstNoteCreated = stored.FirstNoteCreated
+		if !reflect.DeepEqual(got, stored) {
+			t.Errorf("the rest of the app state should stay: %+v", got)
 		}
 	}
 	if strings.Contains(f.output.String(), "first_note_created") {
