@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.0.153 — 2026-10-11
+
+### Changes
+- [2db9262](https://github.com/achandrapaul/digest/commit/2db926298f76ec797e9e9b23bd0a8537c856170f) test: compare first_note_created by instant in migrate test
+- [558c318](https://github.com/achandrapaul/digest/commit/558c318883e5074cf603159e837a0fd77402bc43) chore: pre-commit hook runs the tests, mise run hooks installs it
+- [b2299bc](https://github.com/achandrapaul/digest/commit/b2299bc9b9a3e2cb97c104cbf0f6b9830112ca86) refactor: shared system exec, process, clipboard and tail helpers, jobs runtime moved into pkg/jobs, list cursor, config template helpers and PR source interface; first_note_created set once from the first manual note, TUI requires app state and advises migrate or bootstrap, bootstrap writes an empty state, migrate fills only a null date; track cmd/digest sources
+- [763971c](https://github.com/achandrapaul/digest/commit/763971c0221047360d3d12aac41fc278f067f937) feat: digest bootstrap, tag-based release notes, git hooks and fsmonitor off for job git calls, unknown config key warnings, migrate carries reminders and automation state and adds google calendar once, TUI split into per-area state with a mode stack, CI race, lint and mod checks, go 1.27.1; remove git auto-sync
+- [751594c](https://github.com/achandrapaul/digest/commit/751594ceb771773d02d8c5c4e37147088abd264b) fix: tap formula uses the achandrapaul module path
+
 ## v0.0.152 — 2026-10-10
 
 ### Changes
