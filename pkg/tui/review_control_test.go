@@ -2,7 +2,6 @@ package tui
 
 import (
 	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -109,19 +108,18 @@ func TestDOnRunningReviewRowStopsIt(t *testing.T) {
 	}
 }
 
-func TestPreviewHeaderShowsReviewPID(t *testing.T) {
+func TestPreviewHeaderShowsTheRunningReviewTag(t *testing.T) {
 	m := reviewTestModel(t)
 	m = markRunningCached(t, m, m.currentPRItem().PR.Ref)
-	want := fmt.Sprintf("PID %d", os.Getpid())
-	if !strings.Contains(m.View(), want) {
-		t.Errorf("PR preview missing %q", want)
+	if view := stripANSI(m.View()); !strings.Contains(view, "reviewing...") || strings.Contains(view, "PID ") {
+		t.Errorf("PR preview should show the row's reviewing tag:\n%s", view)
 	}
 	runs, running, _ := reviewRunsModel(t)
 	selectNavItem(t, &runs, "review:"+running.URL)
 	runs.mode = ViewPreview
 	runs.updatePreviewViewport()
-	if !strings.Contains(runs.View(), want) {
-		t.Errorf("review job preview missing %q", want)
+	if view := stripANSI(runs.View()); !strings.HasSuffix(previewTitleLine(t, view, "REVIEW JOB:"), "reviewing...") {
+		t.Errorf("review job preview should show the row's reviewing tag:\n%s", view)
 	}
 }
 
@@ -145,7 +143,7 @@ func TestReviewFooterLabelsD(t *testing.T) {
 	}
 }
 
-func TestJobPreviewHeaderShowsPID(t *testing.T) {
+func TestJobPreviewHeaderShowsTheRunningTag(t *testing.T) {
 	m := selectionTestModel(t)
 	if err := os.WriteFile(filepath.Join(jobRuntime().LogsDir, "janitor.pid"), []byte(strconv.Itoa(os.Getpid())), 0644); err != nil {
 		t.Fatal(err)
@@ -153,8 +151,8 @@ func TestJobPreviewHeaderShowsPID(t *testing.T) {
 	selectNavItem(t, &m, "job:janitor")
 	m.mode = ViewPreview
 	m.updatePreviewViewport()
-	if want := fmt.Sprintf("PID %d", os.Getpid()); !strings.Contains(m.View(), want) {
-		t.Errorf("job preview missing %q", want)
+	if titleLine := previewTitleLine(t, stripANSI(m.View()), "JOB: janitor"); !strings.HasSuffix(titleLine, "#job   running...") {
+		t.Errorf("job preview should show the row's running tag: %q", titleLine)
 	}
 }
 

@@ -544,3 +544,26 @@ func TestTightenPermissionsLeavesASharedRootAlone(t *testing.T) {
 		t.Errorf("shared root %v, notes %v (%v %v)", rootInfo, notesInfo, rootErr, notesErr)
 	}
 }
+
+func TestRedactPatternsParseAndBuildARedactor(t *testing.T) {
+	var cfg Config
+	if err := yaml.Unmarshal([]byte("redact_patterns:\n  - 'INTERNAL-[0-9]{6}'\n"), &cfg); err != nil {
+		t.Fatal(err)
+	}
+	redactor, err := cfg.Redactor()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := redactor.Apply("code INTERNAL-123456 password=hunter22"); got != "code [REDACTED:custom] password=[REDACTED:credential]" {
+		t.Errorf("redacted = %q", got)
+	}
+	if _, err := (*Config)(nil).Redactor(); err != nil {
+		t.Errorf("nil config should still get the built-in rules, got %v", err)
+	}
+	if err := yaml.Unmarshal([]byte("redact_patterns: ['(']\n"), &cfg); err == nil || !strings.Contains(err.Error(), "redact_patterns") {
+		t.Errorf("invalid pattern err = %v", err)
+	}
+	if !strings.Contains(DefaultConfigYAML, "redact_patterns: []") {
+		t.Errorf("template should expose redact_patterns")
+	}
+}

@@ -11,6 +11,7 @@ import (
 
 	"github.com/achandrapaul/digest/pkg/aitool"
 	"github.com/achandrapaul/digest/pkg/paths"
+	"github.com/achandrapaul/digest/pkg/redact"
 	"github.com/achandrapaul/digest/pkg/system"
 
 	"gopkg.in/yaml.v3"
@@ -87,6 +88,7 @@ type Config struct {
 	ShowTags            string              `yaml:"show_tags"`
 	TerminalApp         string              `yaml:"terminal_app"`
 	Automations         []AutomationSpec    `yaml:"automations,omitempty"`
+	RedactPatterns      []string            `yaml:"redact_patterns"`
 	UnknownKeys         []string            `yaml:"-"`
 }
 
@@ -204,6 +206,13 @@ func (c *Config) validateAutomations() error {
 	return nil
 }
 
+func (c *Config) Redactor() (*redact.Redactor, error) {
+	if c == nil {
+		return redact.New(nil)
+	}
+	return redact.New(c.RedactPatterns)
+}
+
 func (c *Config) BragCommandTemplate() string {
 	return DefaultBragCommand
 }
@@ -291,6 +300,7 @@ func (c *Config) UnmarshalYAML(value *yaml.Node) error {
 		ShowTags            string               `yaml:"show_tags"`
 		TerminalApp         string               `yaml:"terminal_app"`
 		Automations         []AutomationSpec     `yaml:"automations"`
+		RedactPatterns      []string             `yaml:"redact_patterns"`
 	}
 
 	if err := value.Decode(&raw); err != nil {
@@ -342,6 +352,10 @@ func (c *Config) UnmarshalYAML(value *yaml.Node) error {
 	c.ShowTags = raw.ShowTags
 	c.TerminalApp = raw.TerminalApp
 	c.Automations = raw.Automations
+	if _, err := redact.New(raw.RedactPatterns); err != nil {
+		return err
+	}
+	c.RedactPatterns = raw.RedactPatterns
 
 	return nil
 }

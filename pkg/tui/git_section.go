@@ -403,6 +403,16 @@ func (m Model) renderGitDetailsModal(modalWidth, innerWidth int) string {
 }
 
 func (m Model) renderGitRepoRow(repo *GitRepoStat, selected bool, width int) string {
+	stats := m.gitRepoStats(repo)
+	if room := width - 10; lipgloss.Width(stats) > room {
+		stats = "…" + string([]rune(stats)[len([]rune(stats))-max(room-1, 1):])
+	}
+
+	nameStyle := subSectionStyle
+	return alignRight("     "+underlinedWhen(selected, nameStyle.Render(repo.Name)), []string{mutedStyle.Render(stats)}, width, selected) + "\n"
+}
+
+func (m Model) gitRepoStats(repo *GitRepoStat) string {
 	var statParts []string
 	if repo.Assigned > 0 {
 		statParts = append(statParts, fmt.Sprintf("%d assigned", repo.Assigned))
@@ -413,13 +423,7 @@ func (m Model) renderGitRepoRow(repo *GitRepoStat, selected bool, width int) str
 	if m.cfg.DailyCommitsEnabled() {
 		statParts = append(statParts, fmt.Sprintf("%d commits", repo.Commits))
 	}
-	stats := strings.Join(statParts, " · ")
-	if room := width - 10; lipgloss.Width(stats) > room {
-		stats = "…" + string([]rune(stats)[len([]rune(stats))-max(room-1, 1):])
-	}
-
-	nameStyle := subSectionStyle
-	return alignRight("     "+underlinedWhen(selected, nameStyle.Render(repo.Name)), []string{mutedStyle.Render(stats)}, width, selected) + "\n"
+	return strings.Join(statParts, " · ")
 }
 
 type rowTagCellCache struct {

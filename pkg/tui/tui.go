@@ -491,7 +491,6 @@ func (m *Model) setPreviewContent(item NavItem, mdContent string, innerWidth, in
 
 func (m *Model) jobPreviewContent(draft *JobDraft, output jobOutput, width int) string {
 	running := m.jobRunning(draft.Name)
-	m.jobs.previewJobLogFinished = output.text != "" && !output.isDryRun
 	switch {
 	case !running && draft.DryRunInFlight:
 		return renderMarkdown(fmt.Sprintf("# Job: %s (DRY RUN IN PROGRESS)\n\nDry run in progress...", draft.Name), width)

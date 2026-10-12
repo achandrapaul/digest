@@ -12,6 +12,7 @@ import (
 	"github.com/achandrapaul/digest/pkg/aitool"
 	"github.com/achandrapaul/digest/pkg/config"
 	"github.com/achandrapaul/digest/pkg/model"
+	"github.com/achandrapaul/digest/pkg/redact"
 	"github.com/achandrapaul/digest/pkg/store"
 )
 
@@ -65,7 +66,7 @@ func TestDraftPhaseSavesAnOrderedDraft(t *testing.T) {
 	spec := fakeSpec(`cat > "$INPUT_COPY"; echo 'Here is the draft:'; printf '%s\n' '{"description":"## Problem\nDeploys fail","labels":["deploy"],"summary":"Flaky deploys","project":"PROJ","issue_type":"Task","team":"Platform"}'`)
 	inputCopy := filepath.Join(root, "input.txt")
 	t.Setenv("INPUT_COPY", inputCopy)
-	if _, err := Execute(context.Background(), spec, root, testNote(), PhaseDraft); err != nil {
+	if _, err := Execute(context.Background(), spec, root, testNote(), PhaseDraft, nil); err != nil {
 		t.Fatal(err)
 	}
 	draft, err := LoadDraft(root, "note-1")
@@ -91,14 +92,14 @@ func TestDraftPhaseSavesAnOrderedDraft(t *testing.T) {
 
 func TestDraftWithoutSummaryFails(t *testing.T) {
 	root := t.TempDir()
-	_, err := Execute(context.Background(), fakeSpec(`echo '{"project":"PROJ"}'`), root, testNote(), PhaseDraft)
+	_, err := Execute(context.Background(), fakeSpec(`echo '{"project":"PROJ"}'`), root, testNote(), PhaseDraft, nil)
 	if err == nil || !strings.Contains(err.Error(), "summary") {
 		t.Errorf("err = %v", err)
 	}
-	if _, err := Execute(context.Background(), fakeSpec(`echo 'no json here'`), root, testNote(), PhaseDraft); err == nil {
+	if _, err := Execute(context.Background(), fakeSpec(`echo 'no json here'`), root, testNote(), PhaseDraft, nil); err == nil {
 		t.Error("output without JSON should fail")
 	}
-	_, err = Execute(context.Background(), fakeSpec(`echo 'Looking at the note'; echo; echo 'NO PROJECT: add a Jira project key to the note'; echo`), root, testNote(), PhaseDraft)
+	_, err = Execute(context.Background(), fakeSpec(`echo 'Looking at the note'; echo; echo 'NO PROJECT: add a Jira project key to the note'; echo`), root, testNote(), PhaseDraft, nil)
 	if err == nil || !strings.Contains(err.Error(), "NO PROJECT: add a Jira project key to the note") || strings.Contains(err.Error(), "Looking at the note") {
 		t.Errorf("err = %v", err)
 	}
@@ -110,7 +111,7 @@ func TestAuthErrorsInClaudeOutputNeedReauth(t *testing.T) {
 		`echo 'Call mcp__atlassian__authenticate first'`,
 		`echo 'error: token expired' >&2; exit 1`,
 	} {
-		_, err := Execute(context.Background(), fakeSpec(command), t.TempDir(), testNote(), PhaseDraft)
+		_, err := Execute(context.Background(), fakeSpec(command), t.TempDir(), testNote(), PhaseDraft, nil)
 		if !errors.Is(err, ErrNeedsReauth) {
 			t.Errorf("%s: err = %v", command, err)
 		}
@@ -125,7 +126,7 @@ func TestCreatePhaseReturnsTheResult(t *testing.T) {
 	inputCopy := filepath.Join(root, "input.txt")
 	t.Setenv("INPUT_COPY", inputCopy)
 	spec := fakeSpec(`cat > "$INPUT_COPY"; echo 'Created it.'; echo '{"kind":"Ticket","key":"PROJ-77","url":"https://jira/browse/PROJ-77"}'`)
-	result, err := Execute(context.Background(), spec, root, testNote(), PhaseCreate)
+	result, err := Execute(context.Background(), spec, root, testNote(), PhaseCreate, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -136,19 +137,19 @@ func TestCreatePhaseReturnsTheResult(t *testing.T) {
 	if !strings.Contains(string(input), "CREATE PROMPT") || !strings.Contains(string(input), "summary: Flaky deploys") {
 		t.Errorf("create input:\n%s", input)
 	}
-	doc, err := Execute(context.Background(), fakeTypedSpec("doc", `echo '{"kind":"doc","url":"https://docs/page"}'`), root, testNote(), PhaseCreate)
+	doc, err := Execute(context.Background(), fakeTypedSpec("doc", `echo '{"kind":"doc","url":"https://docs/page"}'`), root, testNote(), PhaseCreate, nil)
 	if err != nil || doc != (Result{Kind: "doc", URL: "https://docs/page"}) {
 		t.Errorf("doc = %+v %v", doc, err)
 	}
 	for _, output := range []string{`{"key":"PROJ-78"}`, `{"kind":"page","key":"PROJ-78"}`, `{"kind":"doc","key":"PROJ-78"}`, `{"kind":"ticket"}`, "Created PROJ-78 for you"} {
-		if result, err := Execute(context.Background(), fakeSpec("echo '"+output+"'"), root, testNote(), PhaseCreate); err == nil {
+		if result, err := Execute(context.Background(), fakeSpec("echo '"+output+"'"), root, testNote(), PhaseCreate, nil); err == nil {
 			t.Errorf("%s accepted as %+v", output, result)
 		}
 	}
 }
 
 func TestCreateWithoutDraftFails(t *testing.T) {
-	if _, err := Execute(context.Background(), fakeSpec(`echo '{"key":"A-1"}'`), t.TempDir(), testNote(), PhaseCreate); err == nil {
+	if _, err := Execute(context.Background(), fakeSpec(`echo '{"key":"A-1"}'`), t.TempDir(), testNote(), PhaseCreate, nil); err == nil {
 		t.Error("create without a draft should fail")
 	}
 }
@@ -158,7 +159,7 @@ func TestCommandTimesOut(t *testing.T) {
 	commandTimeout = 200 * time.Millisecond
 	t.Cleanup(func() { commandTimeout = previous })
 	started := time.Now()
-	_, err := Execute(context.Background(), fakeSpec("sleep 5 & wait"), t.TempDir(), testNote(), PhaseDraft)
+	_, err := Execute(context.Background(), fakeSpec("sleep 5 & wait"), t.TempDir(), testNote(), PhaseDraft, nil)
 	if err == nil || !strings.Contains(err.Error(), "timed out") {
 		t.Errorf("err = %v", err)
 	}
@@ -321,11 +322,11 @@ func TestCreateRejectsAKindThatIsNotTheAutomationType(t *testing.T) {
 		t.Fatal(err)
 	}
 	spec := fakeTypedSpec("event", `echo '{"kind":"doc","url":"https://calendar/e1"}'`)
-	if _, err := Execute(context.Background(), spec, root, testNote(), PhaseCreate); err == nil || !strings.Contains(err.Error(), `kind must be "event", got "doc"`) {
+	if _, err := Execute(context.Background(), spec, root, testNote(), PhaseCreate, nil); err == nil || !strings.Contains(err.Error(), `kind must be "event", got "doc"`) {
 		t.Errorf("err = %v", err)
 	}
 	untyped := fakeTypedSpec("", `echo '{"kind":"","url":"https://calendar/e1"}'`)
-	if _, err := Execute(context.Background(), untyped, root, testNote(), PhaseCreate); err == nil {
+	if _, err := Execute(context.Background(), untyped, root, testNote(), PhaseCreate, nil); err == nil {
 		t.Error("an empty kind should never be accepted")
 	}
 }
@@ -410,7 +411,7 @@ func TestCommandIsBuiltFromTheEntryPlugins(t *testing.T) {
 	tokenChecks = func(plugins []string) []aitool.TokenCheck { return nil }
 	t.Cleanup(func() { runCommand, tokenChecks = previousRun, previousChecks })
 	spec := config.AutomationSpec{Name: "jira", Plugins: []string{"claude_ai_Example"}, DraftPrompt: "DRAFT"}
-	if _, err := Execute(context.Background(), spec, t.TempDir(), testNote(), PhaseDraft); err != nil {
+	if _, err := Execute(context.Background(), spec, t.TempDir(), testNote(), PhaseDraft, nil); err != nil {
 		t.Fatal(err)
 	}
 	if len(ranCommands) != 1 || !strings.HasPrefix(ranCommands[0], "claude -p --model sonnet") || !strings.Contains(ranCommands[0], "--allowedTools 'mcp__claude_ai_Example__*'") {
@@ -436,7 +437,7 @@ func TestInstalledPluginTokenCheckRunsFirst(t *testing.T) {
 	}
 	t.Cleanup(func() { runCommand, tokenChecks = previousRun, previousChecks })
 	spec := config.AutomationSpec{Name: "jira", Plugins: []string{"jira-inator"}, DraftPrompt: "DRAFT"}
-	_, err := Execute(context.Background(), spec, t.TempDir(), testNote(), PhaseDraft)
+	_, err := Execute(context.Background(), spec, t.TempDir(), testNote(), PhaseDraft, nil)
 	if !errors.Is(err, ErrNeedsReauth) || !strings.Contains(err.Error(), "make a new jira token") {
 		t.Errorf("err = %v", err)
 	}
@@ -445,7 +446,7 @@ func TestInstalledPluginTokenCheckRunsFirst(t *testing.T) {
 	}
 	tokenChecks = func([]string) []aitool.TokenCheck { return nil }
 	ranCommands = nil
-	if _, err := Execute(context.Background(), spec, t.TempDir(), testNote(), PhaseDraft); err != nil || len(ranCommands) != 1 {
+	if _, err := Execute(context.Background(), spec, t.TempDir(), testNote(), PhaseDraft, nil); err != nil || len(ranCommands) != 1 {
 		t.Errorf("no installed plugin should skip the check: err %v commands %v", err, ranCommands)
 	}
 }
@@ -460,7 +461,7 @@ func TestTokenCheckErrorHidesCommandOutput(t *testing.T) {
 	}
 	t.Cleanup(func() { runCommand, tokenChecks = previousRun, previousChecks })
 	spec := config.AutomationSpec{Name: "jira", Plugins: []string{"jira-inator"}, DraftPrompt: "DRAFT"}
-	_, err := Execute(context.Background(), spec, t.TempDir(), testNote(), PhaseDraft)
+	_, err := Execute(context.Background(), spec, t.TempDir(), testNote(), PhaseDraft, nil)
 	if !errors.Is(err, ErrNeedsReauth) || strings.Contains(err.Error(), "secret-token-value") || !strings.Contains(err.Error(), "jira-inator") {
 		t.Errorf("err = %v", err)
 	}
@@ -470,5 +471,44 @@ func TestReauthErrorWithoutHintHidesCommandOutput(t *testing.T) {
 	err := needsReauth(config.AutomationSpec{Name: "jira"})
 	if !errors.Is(err, ErrNeedsReauth) || strings.Contains(err.Error(), "secret-value") || !strings.Contains(err.Error(), "jira") {
 		t.Errorf("err = %v", err)
+	}
+}
+
+func TestExecuteRedactsSecretsBeforeSending(t *testing.T) {
+	var sentInputs []string
+	previousRun, previousChecks, previousLog := runCommand, tokenChecks, redactionLog
+	runCommand = func(ctx context.Context, command, input string) (string, error) {
+		sentInputs = append(sentInputs, input)
+		return `{"summary": "Rotate creds", "key": "PROJ-1", "kind": "ticket"}`, nil
+	}
+	tokenChecks = func([]string) []aitool.TokenCheck { return nil }
+	var logged strings.Builder
+	redactionLog = &logged
+	t.Cleanup(func() { runCommand, tokenChecks, redactionLog = previousRun, previousChecks, previousLog })
+	redactor, err := redact.New(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	root := t.TempDir()
+	note := &model.Note{ID: "note-1", Summary: "Rotate creds", Body: "db password=hunter22 leaked"}
+	if _, err := Execute(context.Background(), fakeSpec(""), root, note, PhaseDraft, redactor); err != nil {
+		t.Fatal(err)
+	}
+	if err := SaveDraft(root, note.ID, "summary: x\ndescription: token=abcdef99\n"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Execute(context.Background(), fakeSpec(""), root, note, PhaseCreate, redactor); err != nil {
+		t.Fatal(err)
+	}
+	for _, input := range sentInputs {
+		if strings.Contains(input, "hunter22") || strings.Contains(input, "abcdef99") {
+			t.Errorf("secret reached claude: %q", input)
+		}
+	}
+	if len(sentInputs) != 2 || !strings.Contains(sentInputs[0], "password=[REDACTED:credential]") || !strings.Contains(sentInputs[1], "token=[REDACTED:credential]") {
+		t.Errorf("inputs = %q", sentInputs)
+	}
+	if got := logged.String(); strings.Count(got, "redacted 1 secret (credential)") != 2 || strings.Contains(got, "hunter22") {
+		t.Errorf("log = %q", got)
 	}
 }

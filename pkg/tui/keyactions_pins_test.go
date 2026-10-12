@@ -63,6 +63,7 @@ func TestRowKeysWithNothingSelectedDoNothing(t *testing.T) {
 		"copy":    m.copyPreviewItem,
 		"stop":    m.previewStop,
 		"enter":   m.previewEnter,
+		"work on": m.toggleWorkOn,
 	} {
 		if next, cmd := action(tea.KeyMsg{}); cmd != nil || next.(Model).mode != m.mode {
 			t.Fatalf("%s should do nothing", name)

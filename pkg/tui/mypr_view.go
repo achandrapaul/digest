@@ -91,12 +91,16 @@ func (m Model) renderMyPRBlock(firstIndex, width int) []myPRColumnLine {
 			branch += " (draft)"
 		}
 		left := fmt.Sprintf("       %s %s", underlinedWhen(selected, numberStyle.Render(fmt.Sprintf("#%d", pr.Ref.Number))), mutedStyle.Render(branch))
-		facts := mutedStyle.Render(fmt.Sprintf("%s · %s ago", myPRFilesText(pr.ChangedFiles), shortAge(time.Since(pr.CreatedAt))))
-		icon := facts + "  " + myPRApprovalCell(pr.ReviewDecision) + " " + myPRCIIcon(pr.CIState)
+		icon := myPRTagCell(pr)
 		left = ansi.Truncate(left, max(width-lipgloss.Width(icon)-2, 1), "…")
 		lines = append(lines, myPRColumnLine{text: left + safeRepeat(" ", width-lipgloss.Width(left)-lipgloss.Width(icon)-1) + underlinedWhen(selected, icon), navIndex: navIndex})
 	}
 	return lines
+}
+
+func myPRTagCell(pr review.QueuedPR) string {
+	facts := mutedStyle.Render(fmt.Sprintf("%s · %s ago", myPRFilesText(pr.ChangedFiles), shortAge(time.Since(pr.CreatedAt))))
+	return facts + "  " + myPRApprovalCell(pr.ReviewDecision) + " " + myPRCIIcon(pr.CIState)
 }
 
 var myPRReviewWords = map[string]string{

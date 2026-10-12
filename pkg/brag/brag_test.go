@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/achandrapaul/digest/pkg/model"
+	"github.com/achandrapaul/digest/pkg/redact"
 	"github.com/achandrapaul/digest/pkg/review"
 	"github.com/achandrapaul/digest/pkg/sourcecontrol"
 	"github.com/achandrapaul/digest/pkg/system/process"
@@ -162,16 +163,16 @@ func TestGenerateSummaryKeepsOurFacts(t *testing.T) {
 	}
 	defer func() { runBragCommand = original }()
 	week := WeekOf(localDate(2026, 10, 1))
-	summary, err := GenerateSummary(context.Background(), "claude -p", "Summarise my week.", week, "- shipped brag")
+	summary, err := GenerateSummary(context.Background(), "claude -p", "Summarise my week.", week, "- shipped brag", nil)
 	if err != nil || summary != "- Shipped brag" || !strings.HasPrefix(stdin, "Summarise my week.\n\n## Facts") || !strings.Contains(stdin, "- shipped brag") {
 		t.Errorf("summary=%q err=%v stdin=%q", summary, err, stdin)
 	}
 	runBragCommand = func(ctx context.Context, command, input string) (string, error) { return "  plain summary  ", nil }
-	if summary, _ := GenerateSummary(context.Background(), "x", "p", week, "f"); summary != "plain summary" {
+	if summary, _ := GenerateSummary(context.Background(), "x", "p", week, "f", nil); summary != "plain summary" {
 		t.Errorf("summary without heading = %q", summary)
 	}
 	runBragCommand = func(ctx context.Context, command, input string) (string, error) { return "   ", nil }
-	if _, err := GenerateSummary(context.Background(), "x", "p", week, "f"); err == nil {
+	if _, err := GenerateSummary(context.Background(), "x", "p", week, "f", nil); err == nil {
 		t.Errorf("empty output should fail")
 	}
 }
@@ -185,7 +186,7 @@ func TestGenerateSummaryTimesOutHungCommand(t *testing.T) {
 		return "", ctx.Err()
 	}
 	started := time.Now()
-	_, err := GenerateSummary(context.Background(), "x", "p", WeekOf(localDate(2026, 10, 1)), "f")
+	_, err := GenerateSummary(context.Background(), "x", "p", WeekOf(localDate(2026, 10, 1)), "f", nil)
 	if err == nil || !strings.Contains(err.Error(), "timed out after") {
 		t.Errorf("hung command err = %v", err)
 	}
@@ -234,7 +235,7 @@ func TestCreateAndRegenerate(t *testing.T) {
 	}
 	defer func() { runBragCommand = original }()
 
-	created, err := Create(context.Background(), root, "cmd", "prompt", week, "- collected fact")
+	created, err := Create(context.Background(), root, "cmd", "prompt", week, "- collected fact", nil)
 	if err != nil || created.Summary != "- first" || created.Facts != "- collected fact" {
 		t.Fatalf("created = %+v err = %v", created, err)
 	}
@@ -243,7 +244,7 @@ func TestCreateAndRegenerate(t *testing.T) {
 	if err := edited.Save(root); err != nil {
 		t.Fatal(err)
 	}
-	regenerated, err := Regenerate(context.Background(), root, "cmd", "prompt", week)
+	regenerated, err := Regenerate(context.Background(), root, "cmd", "prompt", week, nil)
 	if err != nil || regenerated.Summary != "- second" || !strings.Contains(regenerated.Facts, "- my manual point") {
 		t.Fatalf("regenerated = %+v err = %v", regenerated, err)
 	}
@@ -360,7 +361,7 @@ func TestPerformanceReviewKeepsWholeOutput(t *testing.T) {
 	defer func() { runBragCommand = original }()
 	root := t.TempDir()
 	year := YearOf(localDate(2026, 1, 1))
-	created, err := Create(context.Background(), root, "cmd", "prompt", year, "### September 2026\n- Led")
+	created, err := Create(context.Background(), root, "cmd", "prompt", year, "### September 2026\n- Led", nil)
 	if err != nil || !strings.Contains(created.Summary, "## Summary\nGreat year.") || !strings.Contains(created.Summary, "## Growth areas") {
 		t.Fatalf("created = %+v err = %v", created, err)
 	}
@@ -375,5 +376,36 @@ func TestHeadingsMatchWholeLinesOnly(t *testing.T) {
 	parsed, err := ParseBody(month, "## Facts\n\n### Week 40\n\n#### Summary\n\n- weekly\n\n## Summary\n\n- monthly\n")
 	if err != nil || parsed.Summary != "- monthly" || !strings.Contains(parsed.Facts, "#### Summary") {
 		t.Errorf("parsed = %+v err = %v", parsed, err)
+	}
+}
+
+func TestGenerateSummaryRedactsFactsButStoresThemUnchanged(t *testing.T) {
+	originalCommand, originalLog := runBragCommand, redactionLog
+	var stdin string
+	runBragCommand = func(ctx context.Context, command, input string) (string, error) {
+		stdin = input
+		return "## Summary\n\n- rotated creds", nil
+	}
+	var logged strings.Builder
+	redactionLog = &logged
+	defer func() { runBragCommand, redactionLog = originalCommand, originalLog }()
+	redactor, err := redact.New(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	root := t.TempDir()
+	facts := "- rotated the db password=hunter22"
+	created, err := Create(context.Background(), root, "cmd", "prompt", WeekOf(localDate(2026, 9, 30)), facts, redactor)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(stdin, "hunter22") || !strings.Contains(stdin, "password=[REDACTED:credential]") {
+		t.Errorf("stdin = %q", stdin)
+	}
+	if created.Facts != facts {
+		t.Errorf("stored facts = %q, want the original", created.Facts)
+	}
+	if got := logged.String(); got != "redacted 1 secret (credential)\n" {
+		t.Errorf("log = %q", got)
 	}
 }

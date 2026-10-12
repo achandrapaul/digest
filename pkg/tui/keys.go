@@ -32,6 +32,7 @@ const (
 	actionInlineEdit
 	actionDeleteItem
 	actionToggleDone
+	actionWorkOn
 	actionPreviousDay
 	actionNextDay
 	actionCursorDown

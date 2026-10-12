@@ -34,7 +34,7 @@ func TestLockFailureStillSavesTheBrag(t *testing.T) {
 	failingLocks(t, root)
 	stubCommand(t, "- Shipped the picker")
 	week := WeekOf(localDate(2026, 9, 30))
-	entry, err := Create(context.Background(), root, "claude", "prompt", week, "- shipped")
+	entry, err := Create(context.Background(), root, "claude", "prompt", week, "- shipped", nil)
 	if err != nil || entry == nil {
 		t.Fatalf("a brag whose file only failed to lock should count as saved: %v", err)
 	}
@@ -42,7 +42,7 @@ func TestLockFailureStillSavesTheBrag(t *testing.T) {
 		t.Fatalf("brag file should be written: %+v %v", loaded, err)
 	}
 	stubCommand(t, "- Shipped it again")
-	if _, err := Regenerate(context.Background(), root, "claude", "prompt", week); err != nil {
+	if _, err := Regenerate(context.Background(), root, "claude", "prompt", week, nil); err != nil {
 		t.Errorf("regenerate should also count a lock failure as saved: %v", err)
 	}
 }
@@ -56,7 +56,7 @@ func TestUnlockFailureKeepsTheOldBrag(t *testing.T) {
 	})
 	stubCommand(t, "- First")
 	week := WeekOf(localDate(2026, 9, 30))
-	if _, err := Create(context.Background(), root, "claude", "prompt", week, "- shipped"); err != nil {
+	if _, err := Create(context.Background(), root, "claude", "prompt", week, "- shipped", nil); err != nil {
 		t.Fatal(err)
 	}
 	original := system.ChangeFileFlags
@@ -68,7 +68,7 @@ func TestUnlockFailureKeepsTheOldBrag(t *testing.T) {
 	}
 	t.Cleanup(func() { system.ChangeFileFlags = original })
 	stubCommand(t, "- Second")
-	if _, err := Regenerate(context.Background(), root, "claude", "prompt", week); !errors.Is(err, system.ErrUnlock) {
+	if _, err := Regenerate(context.Background(), root, "claude", "prompt", week, nil); !errors.Is(err, system.ErrUnlock) {
 		t.Fatalf("err = %v, want ErrUnlock", err)
 	}
 	if loaded, _ := Load(root, week); loaded == nil || loaded.Summary != "- First" {

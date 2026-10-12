@@ -13,9 +13,9 @@ import (
 )
 
 type previewHeading struct {
-	title  string
-	status string
-	tag    string
+	title   string
+	tags    []string
+	subject string
 }
 
 type itemKindHandler struct {
@@ -85,8 +85,7 @@ func gitRepoKind() itemKindHandler {
 		}),
 		header: func(m Model, item NavItem, header *previewHeading) {
 			header.title = fmt.Sprintf(" GIT REPO: %s ", item.GitRepo.Name)
-			header.status = badgeActive.Render("SYNCED")
-			header.tag = tagStyle.Render("#git")
+			header.tags, header.subject = []string{m.gitRepoStats(item.GitRepo)}, ""
 		},
 	}
 }
@@ -126,11 +125,7 @@ func pendingPRKind() itemKindHandler {
 			if item.PendingGitPR.Kind == sourcecontrol.ReReviewKind {
 				header.title = fmt.Sprintf(" RE-REVIEW: %s ", item.PendingGitPR.Repository)
 			}
-			header.status = m.prStateBadge(item.PendingGitPR)
-			if pid, running := m.reviewPIDFor(item.PendingGitPR); running {
-				header.status = badgeActive.Render(fmt.Sprintf("RUNNING · PID %d", pid))
-			}
-			header.tag = tagStyle.Render("#github")
+			header.tags, header.subject = m.prTags(item.PendingGitPR, true), ""
 		},
 	}
 }
@@ -154,8 +149,7 @@ func myPRKind() itemKindHandler {
 				return
 			}
 			header.title = fmt.Sprintf(" MY PR: %s #%d ", item.MyPR.Ref.Repo, item.MyPR.Ref.Number)
-			header.status = badgeActive.Render(strings.ToUpper(myPRCIText(item.MyPR.CIState)))
-			header.tag = tagStyle.Render("#my-pr")
+			header.tags, header.subject = []string{myPRTagCell(*item.MyPR)}, ""
 		},
 	}
 }
@@ -177,21 +171,7 @@ func jobDraftKind() itemKindHandler {
 		}),
 		header: func(m Model, item NavItem, header *previewHeading) {
 			header.title = fmt.Sprintf(" JOB: %s ", item.Draft.Name)
-			switch {
-			case m.jobs.runningJobPIDs[item.Draft.Name] > 0:
-				header.status = badgeActive.Render(fmt.Sprintf("RUNNING · PID %d", m.jobs.runningJobPIDs[item.Draft.Name]))
-			case item.Draft.DryRunInFlight:
-				header.status = badgeActive.Render("DRY RUNNING")
-			case m.jobs.previewJobLogFinished:
-				header.status = badgeDone.Render("FINISHED")
-			case item.Draft.HasRunDryRun && item.Draft.ExitCode == 0:
-				header.status = badgeDone.Render("SUCCESS")
-			case item.Draft.HasRunDryRun:
-				header.status = staleStyle.Render("NEED ACT")
-			default:
-				header.status = badgeActive.Render("IDLE")
-			}
-			header.tag = tagStyle.Render("#job")
+			header.tags, header.subject = []string{m.draftRowTag(item.Draft)}, ""
 		},
 		followsLog: true,
 	}
@@ -214,11 +194,7 @@ func reviewRunKind() itemKindHandler {
 		},
 		header: func(m Model, item NavItem, header *previewHeading) {
 			header.title = fmt.Sprintf(" REVIEW JOB: %s ", reviewRunLabel(*item.ReviewRun))
-			header.status = stateStyle(review.StateFailed).Render("FAILED")
-			if state := m.review.localReviews[review.StateDir(m.reviewRoot(), item.ReviewRun.Meta.Ref)]; state.pid > 0 {
-				header.status = badgeActive.Render(fmt.Sprintf("RUNNING · PID %d", state.pid))
-			}
-			header.tag = tagStyle.Render("#github")
+			header.tags, header.subject = []string{m.reviewRunRowTag(*item.ReviewRun)}, ""
 		},
 		followsLog: true,
 	}
@@ -241,11 +217,7 @@ func bragRunKind() itemKindHandler {
 		},
 		header: func(m Model, item NavItem, header *previewHeading) {
 			header.title = fmt.Sprintf(" BRAG JOB: %s ", item.BragRun.Meta.ID)
-			header.status = stateStyle(review.StateFailed).Render("FAILED")
-			if item.BragRun.Status == brag.RunRunning {
-				header.status = badgeActive.Render("RUNNING")
-			}
-			header.tag = tagStyle.Render("#brag")
+			header.tags, header.subject = []string{m.bragRunRowTag(*item.BragRun)}, ""
 		},
 		followsLog: true,
 	}
@@ -268,11 +240,7 @@ func automationRunKind() itemKindHandler {
 		},
 		header: func(m Model, item NavItem, header *previewHeading) {
 			header.title = fmt.Sprintf(" AUTOMATION JOB: %s ", item.AutomationRun.Meta.Automation)
-			header.status = stateStyle(review.StateFailed).Render("FAILED")
-			if m.automationJobRunning(item.AutomationRun) {
-				header.status = badgeActive.Render("RUNNING")
-			}
-			header.tag = tagStyle.Render("#" + string(item.AutomationRun.Meta.Phase))
+			header.tags, header.subject = []string{m.automationRunRowTag(*item.AutomationRun)}, ""
 		},
 		followsLog: true,
 	}
@@ -304,12 +272,25 @@ func noteKind() itemKindHandler {
 				return
 			}
 			header.title = " PREVIEW NOTE "
-			if item.Note.Status == model.StatusDone {
-				header.status = badgeDone.Render("DONE")
-			}
+			header.tags = m.noteRowTags(item.Note)
 			if item.Note.Subject != "" {
-				header.tag = tagStyle.Render("#" + item.Note.Subject)
+				header.subject = tagStyle.Render("#" + item.Note.Subject)
 			}
 		},
 	}
+}
+
+func workedOnLine(note *model.Note) string {
+	days := note.WorkedOnDays()
+	if len(days) < 2 {
+		return ""
+	}
+	labels := make([]string, len(days))
+	for index, day := range days {
+		labels[index] = day.Format("Mon 02 Jan")
+		if isSameDay(day, note.Created) {
+			labels[index] += " (created)"
+		}
+	}
+	return fmt.Sprintf("You have tried to work on this on %d dates: %s", len(days), strings.Join(labels, ", "))
 }

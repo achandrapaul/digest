@@ -218,8 +218,12 @@ func claimRun(root, id string) (func(runErr error), error) {
 func Execute(ctx context.Context, cfg *config.Config, period Period, regenerate bool, loadNotes func() ([]*model.Note, error), now time.Time) error {
 	root := cfg.BragDir()
 	command, prompt := cfg.BragCommandTemplate(), cfg.BragPrompt(period.Kind())
+	redactor, err := cfg.Redactor()
+	if err != nil {
+		return err
+	}
 	if regenerate {
-		_, err := Regenerate(ctx, root, command, prompt, period)
+		_, err := Regenerate(ctx, root, command, prompt, period, redactor)
 		return err
 	}
 	if _, loadErr := Load(root, period); loadErr == nil {
@@ -229,7 +233,6 @@ func Execute(ctx context.Context, cfg *config.Config, period Period, regenerate 
 		return fmt.Errorf("%s has not ended yet", period.Label())
 	}
 	var facts string
-	var err error
 	switch typed := period.(type) {
 	case Week:
 		facts, err = weekFacts(ctx, cfg, typed, loadNotes, now)
@@ -243,7 +246,7 @@ func Execute(ctx context.Context, cfg *config.Config, period Period, regenerate 
 	if err != nil {
 		return err
 	}
-	_, err = Create(ctx, root, command, prompt, period, facts)
+	_, err = Create(ctx, root, command, prompt, period, facts, redactor)
 	return err
 }
 

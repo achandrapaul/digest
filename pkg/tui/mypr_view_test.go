@@ -132,8 +132,8 @@ func TestTabOpensMyPRDetails(t *testing.T) {
 			t.Errorf("details missing %q:\n%s", want, content)
 		}
 	}
-	if view := stripANSI(m.View()); !strings.Contains(view, "MY PR") || !strings.Contains(view, "#my-pr") {
-		t.Errorf("modal header missing:\n%s", view)
+	if view := stripANSI(m.View()); !strings.HasSuffix(previewTitleLine(t, view, "MY PR"), stripANSI(myPRTagCell(m.git.myPRs[0]))) || !strings.Contains(previewTitleLine(t, view, "MY PR"), "7 files") || strings.Contains(view, "#my-pr") {
+		t.Errorf("modal header should end with the row cell:\n%s", view)
 	}
 	if m = press(t, m, tea.KeyMsg{Type: tea.KeyEsc}); m.mode != ViewDashboard {
 		t.Errorf("esc should close the details, mode=%v", m.mode)

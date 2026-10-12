@@ -165,18 +165,21 @@ func TestFooterSplitsTwoWordLabels(t *testing.T) {
 	}
 }
 
-func TestCtrlCFooterShowsTwoMore(t *testing.T) {
+func TestCtrlCFooterIsOneCentredLine(t *testing.T) {
 	m := selectionTestModel(t)
 	m.width = 260
 	m = press(t, m, tea.KeyMsg{Type: tea.KeyCtrlC})
 	lines := plainLines(m.renderFooter())
-	joined := strings.Join(lines, "\n")
-	if strings.Contains(joined, "press") || strings.Contains(strings.ToLower(joined), "2 more") {
-		t.Fatalf("footer still has old label:\n%s", joined)
+	if len(lines) != 3 {
+		t.Fatalf("footer should be the border box around one line:\n%s", strings.Join(lines, "\n"))
 	}
-	column := runeColumn(lines[1], "ctrl+c")
-	if column < 0 || !strings.HasPrefix(fromRuneColumn(lines[2], column), "2") || !strings.HasPrefix(fromRuneColumn(lines[3], column), "More") {
-		t.Errorf("footer:\n%s", joined)
+	warning := strings.Trim(lines[1], "│ ")
+	if warning != "ctrl+c 2 more to quit" {
+		t.Fatalf("warning = %q", warning)
+	}
+	leftGap, rightGap := runeColumn(lines[1], warning)-1, m.width-1-(runeColumn(lines[1], warning)+lipgloss.Width(warning))
+	if leftGap-rightGap > 1 || rightGap-leftGap > 1 {
+		t.Errorf("warning not centred, gaps %d and %d: %q", leftGap, rightGap, lines[1])
 	}
 }
 

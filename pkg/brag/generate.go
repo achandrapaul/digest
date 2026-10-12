@@ -4,10 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 	"time"
 
+	"github.com/achandrapaul/digest/pkg/redact"
 	"github.com/achandrapaul/digest/pkg/system"
 )
 
@@ -24,10 +26,16 @@ var runBragCommand = func(ctx context.Context, command, input string) (string, e
 	return out, nil
 }
 
-func GenerateSummary(ctx context.Context, command, prompt string, period Period, facts string) (string, error) {
+var redactionLog io.Writer = os.Stderr
+
+func GenerateSummary(ctx context.Context, command, prompt string, period Period, facts string, redactor *redact.Redactor) (string, error) {
 	commandCtx, cancel := context.WithTimeout(ctx, bragCommandTimeout)
 	defer cancel()
-	output, err := runBragCommand(commandCtx, command, prompt+"\n\n"+factsHeading+"\n\n"+facts+"\n")
+	input, report := redactor.Apply(prompt + "\n\n" + factsHeading + "\n\n" + facts + "\n")
+	if summary := report.String(); summary != "" {
+		fmt.Fprintln(redactionLog, summary)
+	}
+	output, err := runBragCommand(commandCtx, command, input)
 	if errors.Is(commandCtx.Err(), context.DeadlineExceeded) {
 		return "", fmt.Errorf("brag command timed out after %s", bragCommandTimeout)
 	}
@@ -45,10 +53,10 @@ func GenerateSummary(ctx context.Context, command, prompt string, period Period,
 	return summary, nil
 }
 
-func Create(ctx context.Context, root, command, prompt string, period Period, facts string) (*Brag, error) {
+func Create(ctx context.Context, root, command, prompt string, period Period, facts string, redactor *redact.Redactor) (*Brag, error) {
 	now := time.Now()
 	entry := &Brag{Period: period, Created: now, Updated: now, Facts: facts}
-	summary, summaryErr := GenerateSummary(ctx, command, prompt, period, facts)
+	summary, summaryErr := GenerateSummary(ctx, command, prompt, period, facts, redactor)
 	if summaryErr == nil {
 		entry.Summary, entry.SummarizedAt = summary, now
 	}
@@ -67,12 +75,12 @@ func saveReportingLock(entry *Brag, root string) error {
 	return err
 }
 
-func Regenerate(ctx context.Context, root, command, prompt string, period Period) (*Brag, error) {
+func Regenerate(ctx context.Context, root, command, prompt string, period Period, redactor *redact.Redactor) (*Brag, error) {
 	entry, err := Load(root, period)
 	if err != nil {
 		return nil, err
 	}
-	summary, err := GenerateSummary(ctx, command, prompt, period, entry.Facts)
+	summary, err := GenerateSummary(ctx, command, prompt, period, entry.Facts, redactor)
 	if err != nil {
 		return entry, err
 	}

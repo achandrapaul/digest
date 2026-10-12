@@ -17,6 +17,7 @@ import (
 	"github.com/achandrapaul/digest/pkg/aitool"
 	"github.com/achandrapaul/digest/pkg/config"
 	"github.com/achandrapaul/digest/pkg/model"
+	"github.com/achandrapaul/digest/pkg/redact"
 	"github.com/achandrapaul/digest/pkg/store"
 	"github.com/achandrapaul/digest/pkg/system"
 
@@ -165,7 +166,17 @@ func noteInput(prompt string, note *model.Note) string {
 	return prompt + "\n\n## Note\n\n" + note.Summary + "\n\n" + strings.TrimSpace(note.Body) + "\n"
 }
 
-func Execute(ctx context.Context, spec config.AutomationSpec, root string, note *model.Note, phase Phase) (Result, error) {
+var redactionLog io.Writer = os.Stderr
+
+func redactedInput(redactor *redact.Redactor, input string) string {
+	redacted, report := redactor.Apply(input)
+	if summary := report.String(); summary != "" {
+		fmt.Fprintln(redactionLog, summary)
+	}
+	return redacted
+}
+
+func Execute(ctx context.Context, spec config.AutomationSpec, root string, note *model.Note, phase Phase, redactor *redact.Redactor) (Result, error) {
 	var input string
 	switch phase {
 	case PhaseDraft:
@@ -182,7 +193,7 @@ func Execute(ctx context.Context, spec config.AutomationSpec, root string, note 
 	if err := ensureAuthenticated(ctx, spec); err != nil {
 		return Result{}, err
 	}
-	output, err := runBounded(ctx, commandTimeout, automationCommand(spec), input)
+	output, err := runBounded(ctx, commandTimeout, automationCommand(spec), redactedInput(redactor, input))
 	if err != nil {
 		if authFailurePattern.MatchString(output + err.Error()) {
 			return Result{}, needsReauth(spec)
@@ -341,7 +352,11 @@ func runJob(ctx context.Context, cfg *config.Config, noteID, automationName stri
 	if err != nil {
 		return err
 	}
-	result, err := Execute(ctx, spec, cfg.AutomationDir(), note, phase)
+	redactor, err := cfg.Redactor()
+	if err != nil {
+		return err
+	}
+	result, err := Execute(ctx, spec, cfg.AutomationDir(), note, phase, redactor)
 	if err != nil || phase != PhaseCreate {
 		return err
 	}

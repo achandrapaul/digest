@@ -80,21 +80,10 @@ func (m Model) dashboardBodyHeight() int {
 }
 
 func (m Model) footerLines() []string {
-	var lines []string
-	if m.ctrlCCount > 0 {
-		var warnings []footerItem
-		for _, binding := range m.dashboardBindings() {
-			if binding.action == actionQuit {
-				warnings = footerItemsFrom([]keyBinding{binding})
-			}
-		}
-		keysLine, firstActionLine, secondActionLine := renderFooterLines(warnings)
-		lines = append(lines, keysLine, firstActionLine)
-		if footerLineCount(warnings) == 3 {
-			lines = append(lines, secondActionLine)
-		}
+	if m.ctrlCCount == 0 {
+		return nil
 	}
-	return lines
+	return []string{lipgloss.PlaceHorizontal(m.width-4, lipgloss.Center, yellowBadgeStyle.Render(quitCountdownText(m.ctrlCCount)))}
 }
 
 func (m Model) renderFooter() string {

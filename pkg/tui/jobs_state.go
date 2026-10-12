@@ -3,22 +3,21 @@ package tui
 import "maps"
 
 type jobsState struct {
-	dryRunLogStamps       map[string]string
-	jobDryRunOutputs      map[string]string
-	jobDryRunExitCodes    map[string]int
-	jobDryRunHasRun       map[string]bool
-	jobLogRunning         bool
-	jobLogStamp           string
-	runStatePolling       bool
-	runningJobPIDs        map[string]int
-	dryRunsInFlight       map[string]bool
-	previewJobLogFinished bool
-	jobToExecute          string
-	jobToAbort            string
-	jobRunStopsDryRun     bool
-	jobDryRunToStart      string
-	staleJobToClear       string
-	jobConfirmError       string
+	dryRunLogStamps    map[string]string
+	jobDryRunOutputs   map[string]string
+	jobDryRunExitCodes map[string]int
+	jobDryRunHasRun    map[string]bool
+	jobLogRunning      bool
+	jobLogStamp        string
+	runStatePolling    bool
+	runningJobPIDs     map[string]int
+	dryRunsInFlight    map[string]bool
+	jobToExecute       string
+	jobToAbort         string
+	jobRunStopsDryRun  bool
+	jobDryRunToStart   string
+	staleJobToClear    string
+	jobConfirmError    string
 }
 
 type dryRunResult struct {

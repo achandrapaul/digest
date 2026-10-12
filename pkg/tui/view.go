@@ -51,7 +51,11 @@ func (m Model) View() string {
 	if m.ctrlCCount == 0 || m.mode == ViewDashboard || m.mode == ViewInlineEdit || m.mode == ViewNotifyInput {
 		return screen
 	}
-	return withQuitCountdown(screen, fmt.Sprintf("ctrl+c %d more to quit", 3-m.ctrlCCount), m.width)
+	return withQuitCountdown(screen, quitCountdownText(m.ctrlCCount), m.width)
+}
+
+func quitCountdownText(pressCount int) string {
+	return fmt.Sprintf("ctrl+c %d more to quit", 3-pressCount)
 }
 
 func withQuitCountdown(screen, warning string, width int) string {
@@ -198,13 +202,20 @@ func (m Model) renderDeleteConfirmModal(modalWidth int) string {
 }
 
 func (m Model) renderPreviewModal(modalWidth, innerWidth int) string {
-	header := previewHeading{title: " PREVIEW ", status: badgeActive.Render("IDLE"), tag: tagStyle.Render("#general")}
+	header := previewHeading{title: " PREVIEW ", tags: []string{badgeActive.Render("IDLE")}}
 	if item, found := m.selectedNavItem(); found {
 		kindHandlerFor(item.Kind).header(m, item, &header)
 	}
 
 	headerLeft := modalTitleStyle.Render(header.title)
-	rightCol := lipgloss.JoinVertical(lipgloss.Right, header.status, header.tag)
+	tagBlock := joinTags(header.tags)
+	if room := innerWidth - lipgloss.Width(headerLeft) - 1; lipgloss.Width(tagBlock) > room {
+		tagBlock = ansi.Truncate(tagBlock, max(room, 0), "…")
+	}
+	rightCol := tagBlock
+	if header.subject != "" {
+		rightCol = lipgloss.JoinVertical(lipgloss.Right, tagBlock, header.subject)
+	}
 	gap := innerWidth - lipgloss.Width(headerLeft) - lipgloss.Width(rightCol)
 
 	topLine := lipgloss.JoinHorizontal(lipgloss.Top, headerLeft, safeRepeat(" ", gap), rightCol)
@@ -214,7 +225,11 @@ func (m Model) renderPreviewModal(modalWidth, innerWidth int) string {
 
 	footerText := renderModalFooter(items, modalWidth-6)
 
-	partsAbove := []string{topLine, ""}
+	partsAbove := []string{topLine}
+	if subheading := m.previewSubheading(innerWidth); subheading != "" {
+		partsAbove = append(partsAbove, subheading)
+	}
+	partsAbove = append(partsAbove, "")
 	if prItem != nil || m.hasDraftTab() {
 		partsAbove = append(partsAbove, m.renderPreviewTabs(), "")
 	}
@@ -232,6 +247,18 @@ func (m Model) renderPreviewModal(modalWidth, innerWidth int) string {
 	popupContent := lipgloss.JoinVertical(lipgloss.Left, previewParts...)
 
 	return m.framedPopup(popupContent, modalWidth)
+}
+
+func (m Model) previewSubheading(innerWidth int) string {
+	item, found := m.selectedNavItem()
+	if !found || item.Note == nil {
+		return ""
+	}
+	line := workedOnLine(item.Note)
+	if line == "" {
+		return ""
+	}
+	return mutedStyle.Width(innerWidth).Render(line)
 }
 
 func scrollViewport(view *viewport.Model, key string) bool {

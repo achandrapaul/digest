@@ -1,7 +1,7 @@
 Everywhere
 
 - ctrl+c — works in any view: each press restarts a 2s window, the 3rd press within it stops git sync and exits, and any other key in between resets the count.
-- ctrl+c warning — the dashboard footer shows "ctrl+c N more"; other popups show "ctrl+c N more to quit" on their bottom line.
+- ctrl+c warning — "ctrl+c N more to quit" as one centred line: in the dashboard footer, and on the bottom line of other popups.
 - Narrow terminal — narrower than the header (banner, version and date, about 45 to 60 columns, never under 40) the screen only says "Terminal window is too small."
 - Scroll keys in preview and brag view — j/k/arrows, pgup/pgdown, ctrl+d/ctrl+u.
 - ctrl+d/ctrl+u in the note, brag and automation editors — move half a page; pgdown/pgup move a full page; forward-delete is the delete key only.
@@ -20,8 +20,8 @@ Dashboard: what you see
 - Header, middle line — version, today's date, and a yellow "Last week (Wnn) isn't bragged — press b" when last week has no brag.
 - Yesterday — done notes from your last working day (work_days in the config) before the day you're viewing; non-work days in between are skipped, so go to them with p to see their notes; titled "Y E S T E R D A Y · date" or the spaced weekday name.
 - Today — "T O D A Y · date" (or the weekday when viewing another day) with a "N jobs ◆" badge on the right.
-- Today: Pending, Carried Over (n) — active notes created before the day you're viewing.
-- Today: Added Today (n) — active notes created on the day you're viewing.
+- Today: Pending, Carried Over (n) — active notes created before the day you're viewing, unless their last started_working_on date is that day; sorted by source tag Z→A (no source counts as #manual), then newest created first.
+- Today: Active items for today (n) — active notes created on the day you're viewing, plus earlier notes whose last started_working_on date is that day; those keep their yellow "Nd ago" tag, counted from created.
 - Today: Closed Today (n) — notes marked done on the day you're viewing.
 - G I T strip — two columns, the previous day and the day you're viewing, with one row per repo: "N assigned · N reviewed · N commits".
 - M Y P R ( S ) — your open PRs grouped by repo: number, branch, "(draft)", files, age, an approved glyph, and CI (✓ ✗ ◌ ·).
@@ -65,7 +65,8 @@ Dashboard: keys
 - enter on a pending PR or My PR — opens it in the browser.
 - enter on a job or run — opens its preview (inside a job preview enter asks to run an idle job).
 - enter on a git repo — opens its details, like tab.
-- space — marks the note done or active and saves it.
+- space — marks the note done or active and saves it; marking done adds the done date to started_working_on when it isn't there yet, and marking active never removes one.
+- f — on an active note created before today, while viewing today: adds today's date to started_working_on ("✓ working on this today") and moves it into Active items for today; again removes today's date ("✓ moved back to pending"). Only that note's file is written and read back. Does nothing on today's notes, done notes or other days.
 - a — opens the editor for a new note dated the day you're viewing.
 - i — edits the selected note's summary in place.
 - @ or . — opens the action menu (active notes only).
@@ -146,6 +147,7 @@ Link menu
 
 Preview (all kinds)
 
+- Header — the title on the left and, on the right, the same tags as the item's dashboard row (all of them, as when the row is selected); a note also shows its #subject below them when it has one.
 - p / n — moves to the previous or next dashboard row inside the preview; landing on a git repo opens its details, landing on a running job starts its live log.
 - h/l/←/→ — do nothing.
 - ? — opens Shortcuts.
@@ -156,6 +158,9 @@ Note preview
 - enter — edits the note. space — marks it done or active.
 - @ / . — opens actions. o — opens links.
 - d — asks to archive, then moves to the next row. ctrl+y — copies the summary and body.
+- f — same as on the dashboard; the preview stays open on the note.
+- Worked-on line — fixed right below the preview header, "You have tried to work on this on N dates: Sat 03 Oct (created), Mon 12 Oct" once the note has a started day besides its created day.
+- started_working_on — a front-matter list of DD-MM-YYYY local days; an unreadable date is ignored and the header shows "✗ notes: <summary>: started_working_on "<value>" is not DD-MM-YYYY".
 
 Note preview: Draft tab (when the note has an automation run)
 
@@ -334,6 +339,14 @@ Automations in config.yaml
 - match — phrases that offer the automation in the action menu: jira ticket, jira, jira ticket; confluence confluence, confluence page, confluence doc; google doc google doc; google calendar calendar event, event, schedule a meeting, add to calendar.
 - google calendar — uses the claude.ai Google Calendar connector (claude_ai_Google_Calendar); authenticate it once with /mcp in Claude Code. The draft stops with "NO TIME:" when the note names no date or start time; a start with no end lasts 30 minutes.
 - Loading — the dashboard reads config.yaml once when it starts and serves automations from memory; digest automation reads config.yaml on every run.
+
+Secret redaction
+
+- What's redacted — the text digest sends to Claude for an automation draft, an automation create and a brag summary; secrets become "[REDACTED:<kind>]".
+- Built-in kinds — private_key, aws_access_key, github_token, slack_token, api_key (sk- keys), jwt, bearer, credential (the value after password, secret, token, api_key and similar; the key stays) and url_password (the password in user:pass@host).
+- redact_patterns — extra regexes in config.yaml; each match becomes "[REDACTED:custom]". An invalid regex fails config load with redact_patterns "<regex>": <reason>.
+- On disk — notes and saved brag facts are never changed; only what is sent is masked.
+- Log — the run log gets one line such as "redacted 2 secrets (credential, jwt)", never the values.
 
 CLI
 

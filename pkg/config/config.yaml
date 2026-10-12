@@ -22,6 +22,9 @@ pr_quantity_per_repo: 15
 show_daily_commits: true
 green_only: true
 jira_base_url: ""
+# extra regexes masked as [REDACTED:custom] before notes reach claude; built-ins already cover
+# private keys, cloud and chat tokens, JWTs, bearer tokens, password/token/secret values and URL passwords
+redact_patterns: []
 
 # branch-reaper, janitor and repo-sync are built into digest; to change one, add it under jobs:
 # with its name and options only (roots, grace_days, patterns, no_quarantine). Options reach

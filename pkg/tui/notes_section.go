@@ -91,7 +91,7 @@ func (m Model) groupNotes() noteGroups {
 				groups.todayDone = append(groups.todayDone, n)
 			}
 		default:
-			if isSameDay(n.Created, m.currentDate) {
+			if isSameDay(n.Created, m.currentDate) || (n.Created.Before(m.currentDate) && n.StartedOn(m.currentDate)) {
 				groups.today = append(groups.today, n)
 			} else if n.Created.Before(m.currentDate) {
 				groups.carried = append(groups.carried, n)
@@ -103,6 +103,12 @@ func (m Model) groupNotes() noteGroups {
 			return bySource
 		}
 		return a.Updated.Compare(b.Updated)
+	})
+	slices.SortStableFunc(groups.carried, func(a, b *model.Note) int {
+		if bySourceTag := strings.Compare(noteSourceText(b), noteSourceText(a)); bySourceTag != 0 {
+			return bySourceTag
+		}
+		return b.Created.Compare(a.Created)
 	})
 	return groups
 }
@@ -427,10 +433,54 @@ func (m Model) toggleSelectedDone(tea.KeyMsg) (tea.Model, tea.Cmd) {
 		} else {
 			item.Note.Status = model.StatusDone
 			item.Note.Updated = m.currentDate
+			item.Note.RecordWorkedOn(m.currentDate)
 		}
 		return m, m.saveNotesCmd(item.Note)
 	}
 	return m, nil
+}
+
+func (m Model) canWorkOn(n *model.Note) bool {
+	return n != nil && n.Status == model.StatusActive && n.FilePath != "" &&
+		isSameDay(m.currentDate, time.Now()) && n.Created.Before(startOfDay(m.currentDate))
+}
+
+func (m Model) workOnLabel(n *model.Note) string {
+	if n != nil && n.StartedOn(time.Now()) {
+		return "back to pending"
+	}
+	return "work on today"
+}
+
+func (m Model) toggleWorkOn(tea.KeyMsg) (tea.Model, tea.Cmd) {
+	item, ok := m.selectedNavItem()
+	if !ok || !m.canWorkOn(item.Note) {
+		return m, nil
+	}
+	notice := "moved back to pending"
+	if item.Note.ToggleWorkingOn(time.Now()) {
+		notice = "working on this today"
+	}
+	m.postMessage(messageSourceNotes, messageSuccess, notice)
+	m.selectNoteByID(item.Note.ID)
+	m.updateScrollOffset()
+	if m.mode == ViewPreview {
+		m.updatePreviewViewport()
+		return m, m.saveNotesFromPreviewCmd(item.Note)
+	}
+	return m, m.saveNotesCmd(item.Note)
+}
+
+func (m *Model) reportInvalidWorkDates(notes []*model.Note) {
+	var problems []string
+	for _, note := range notes {
+		for _, value := range note.InvalidWorkDates() {
+			problems = append(problems, fmt.Sprintf("%s: started_working_on %q is not DD-MM-YYYY", note.Summary, value))
+		}
+	}
+	if len(problems) > 0 {
+		m.postMessage(messageSourceNotes, messageError, strings.Join(problems, " · "))
+	}
 }
 
 func (m Model) archivedInnerWidth() int {
@@ -868,6 +918,11 @@ func (notesSection) ApplyMessage(m Model, msg tea.Msg) (tea.Model, tea.Cmd, bool
 	case notesChangedMsg:
 		m.reportStoreError(msg.err)
 		notesSection{}.mergeNotes(&m, msg.notes)
+		changedNotes := make([]*model.Note, len(msg.notes))
+		for index := range msg.notes {
+			changedNotes[index] = &msg.notes[index]
+		}
+		m.reportInvalidWorkDates(changedNotes)
 		m.updateScrollOffset()
 		if m.mode == ViewPreview && m.previewingSearch() {
 			m.updatePreviewViewport()
@@ -935,6 +990,7 @@ func (notesSection) finishLoadedNotes(m Model, msg loadNotesMsg, refetchPrevious
 	if !storeResultUsable(msg.err) {
 		return m, refetchPreviousDay
 	}
+	m.reportInvalidWorkDates(m.notes)
 	return m, tea.Batch(refetchPreviousDay, refreshNotifyCmd(m.cfg.Root(), m.notes), m.closedThisWeekCmd())
 }
 
@@ -945,6 +1001,7 @@ func init() {
 		actionNewNote:                Model.newNote,
 		actionInlineEdit:             Model.inlineEditSelected,
 		actionToggleDone:             Model.toggleSelectedDone,
+		actionWorkOn:                 Model.toggleWorkOn,
 		actionOpenArchive:            Model.openArchive,
 		actionCloseArchive:           Model.closeArchive,
 		actionArchiveCursorDown:      Model.archiveCursorDown,
@@ -990,8 +1047,8 @@ func (section notesSection) Render(m Model, builder *dashboardBuilder, data dash
 
 	builder.board.WriteString("  " + m.renderSubSection("Pending, Carried Over", len(groups.carried), true, builder.selectedWithin(data.previousEnd, data.carriedEnd)) + "\n")
 	section.emitNotes(m, builder, groups.carried, "   (no carried over notes)")
-	builder.board.WriteString(sectionGap + "  " + m.renderSubSection("Added Today", len(groups.today), true, builder.selectedWithin(data.carriedEnd, data.addedEnd)) + "\n")
-	section.emitNotes(m, builder, groups.today, "   (no notes added today)")
+	builder.board.WriteString(sectionGap + "  " + m.renderSubSection("Active items for today", len(groups.today), true, builder.selectedWithin(data.carriedEnd, data.addedEnd)) + "\n")
+	section.emitNotes(m, builder, groups.today, "   (no active items today)")
 	builder.board.WriteString(sectionGap + "  " + m.renderSubSection("Closed Today", len(groups.todayDone), true, builder.selectedWithin(data.addedEnd, data.closedEnd)) + "\n")
 	section.emitNotes(m, builder, groups.todayDone, "   (no notes closed today)")
 }

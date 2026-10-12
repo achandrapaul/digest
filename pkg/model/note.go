@@ -44,6 +44,8 @@ type Note struct {
 
 	Automated string `yaml:"automated,omitempty"`
 
+	StartedWorkingOn []string `yaml:"started_working_on,omitempty"`
+
 	Body     string `yaml:"-"`
 	FilePath string `yaml:"-"`
 }

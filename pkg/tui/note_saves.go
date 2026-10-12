@@ -171,7 +171,9 @@ func mergeSavedFields(note *model.Note, before, after model.Note) {
 }
 
 func (m Model) applySavedNotes(msg notesSavedMsg) (tea.Model, tea.Cmd) {
+	var savedNotes []*model.Note
 	for _, saved := range msg.saved {
+		savedNotes = append(savedNotes, &saved.after)
 		browsedIndex := indexOfNote(m.notesUI.browsedNotes, saved.target, saved.before)
 		if browsedIndex >= 0 {
 			applySavedNote(m.notesUI.browsedNotes[browsedIndex], saved)
@@ -221,6 +223,7 @@ func (m Model) applySavedNotes(msg notesSavedMsg) (tea.Model, tea.Cmd) {
 	} else if len(msg.unlocked) > 0 {
 		m.postMessage(messageSourceNotes, messageError, strings.Join(msg.unlocked, " · "))
 	}
+	m.reportInvalidWorkDates(savedNotes)
 	if m.mode == ViewArchived {
 		m.refreshArchivedViewport()
 	}

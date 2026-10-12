@@ -63,7 +63,7 @@ func TestLaunchWithoutSelectionDefaultSelectsTheFirstItem(t *testing.T) {
 
 func TestLaunchSelectsFirstAddedTodayNote(t *testing.T) {
 	if got := selectedSummary(launchedWith(t, true, true)); got != "added-today" {
-		t.Errorf("launch should select the first Added Today note, got %q", got)
+		t.Errorf("launch should select the first Active items for today note, got %q", got)
 	}
 }
 

@@ -168,7 +168,7 @@ func TestFootersHideScrollKeysOutsideDashboard(t *testing.T) {
 	}
 }
 
-func TestNotePreviewHeaderKeepsBadgeAndTagRight(t *testing.T) {
+func TestNotePreviewHeaderShowsRowTagsWithSubjectBelow(t *testing.T) {
 	m := notePreviewModel(t, model.SourceManual, "body")
 	m.notes[0].Subject = "general"
 	m.updatePreviewViewport()
@@ -184,10 +184,11 @@ func TestNotePreviewHeaderKeepsBadgeAndTagRight(t *testing.T) {
 		t.Fatal("no header")
 	}
 	titleLine, tagLine := strings.TrimRight(strings.TrimSpace(lines[titleRow]), "│ "), strings.TrimRight(strings.TrimSpace(lines[titleRow+1]), "│ ")
-	if !strings.HasSuffix(titleLine, "DONE") {
-		t.Errorf("DONE not at right of title line: %q", lines[titleRow])
+	rowTags := stripANSI(joinTags(m.noteRowTags(m.notes[0])))
+	if !strings.HasSuffix(titleLine, rowTags) || !strings.Contains(rowTags, "#manual") || strings.Contains(titleLine, "DONE") {
+		t.Errorf("row tags %q not at right of title line: %q", rowTags, lines[titleRow])
 	}
-	if !strings.HasSuffix(tagLine, "#general") || runeColumn(lines[titleRow+1], "#general") != runeColumn(lines[titleRow], "DONE")+lipgloss.Width("DONE")-lipgloss.Width("#general") {
+	if !strings.HasSuffix(tagLine, "#general") || runeColumn(lines[titleRow+1], "#general")+lipgloss.Width("#general") != runeColumn(lines[titleRow], rowTags)+lipgloss.Width(rowTags) {
 		t.Errorf("tag not right-aligned: %q", lines[titleRow+1])
 	}
 	if lipgloss.Width(lines[titleRow]) != lipgloss.Width(lines[titleRow+2]) {

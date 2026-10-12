@@ -210,52 +210,60 @@ func (m Model) renderDraftRow(draft *JobDraft, selected bool, width int) string 
 	if draft.HasRunDryRun && draft.ExitCode == 0 {
 		icon = checkDone.Render()
 	}
-	var rightBlock string
-	if m.jobRunning(draft.Name) {
-		runningIndicator := m.renderJobRunningIndicator()
-		rightBlock = fmt.Sprintf("%s   %s", jobActiveTagStyle.Render("#job"), runningIndicator)
-	} else if draft.DryRunInFlight {
-		rightBlock = fmt.Sprintf("%s   %s", jobActiveTagStyle.Render("#job"), m.renderDryRunIndicator())
-	} else {
-		statusText := "act"
-		if draft.HasRunDryRun && draft.ExitCode == 0 {
-			statusText = "done"
-		}
+	return renderJobStyleRow(icon, draft.Name, m.draftRowTag(draft), selected, width)
+}
 
-		rightBlock = fmt.Sprintf("%s   %s", dimBlueText.Render("#job"), mutedStyle.Render(statusText))
+func (m Model) draftRowTag(draft *JobDraft) string {
+	if m.jobRunning(draft.Name) {
+		return fmt.Sprintf("%s   %s", jobActiveTagStyle.Render("#job"), m.renderJobRunningIndicator())
 	}
-	return renderJobStyleRow(icon, draft.Name, rightBlock, selected, width)
+	if draft.DryRunInFlight {
+		return fmt.Sprintf("%s   %s", jobActiveTagStyle.Render("#job"), m.renderDryRunIndicator())
+	}
+	statusText := "act"
+	if draft.HasRunDryRun && draft.ExitCode == 0 {
+		statusText = "done"
+	}
+	return fmt.Sprintf("%s   %s", dimBlueText.Render("#job"), mutedStyle.Render(statusText))
 }
 
 func (m Model) renderReviewRunRow(run review.ReviewRun, selected bool, width int) string {
-	rightBlock := stateStyle(review.StateFailed).Render("failed")
+	return renderJobStyleRow(amberDiamond.Render(), reviewRunLabel(run), m.reviewRunRowTag(run), selected, width)
+}
+
+func (m Model) reviewRunRowTag(run review.ReviewRun) string {
 	if run.Status == review.RunRunning {
-		rightBlock = m.renderReviewRunningIndicator()
+		return m.renderReviewRunningIndicator()
 	}
-	return renderJobStyleRow(amberDiamond.Render(), reviewRunLabel(run), rightBlock, selected, width)
+	return stateStyle(review.StateFailed).Render("failed")
 }
 
 func (m Model) renderBragRunRow(run brag.Run, selected bool, width int) string {
-	rightBlock := stateStyle(review.StateFailed).Render("failed")
+	return renderJobStyleRow(amberDiamond.Render(), bragRunLabel(run), m.bragRunRowTag(run), selected, width)
+}
+
+func (m Model) bragRunRowTag(run brag.Run) string {
 	if run.Status == brag.RunRunning {
-		rightBlock = m.renderPulseIndicator("bragging...")
+		return m.renderPulseIndicator("bragging...")
 	}
-	return renderJobStyleRow(amberDiamond.Render(), bragRunLabel(run), rightBlock, selected, width)
+	return stateStyle(review.StateFailed).Render("failed")
 }
 
 func (m Model) renderAutomationRunRow(run automation.Run, selected bool, width int) string {
-	var rightBlock string
+	return renderJobStyleRow(amberDiamond.Render(), m.automationJobLabel(run), m.automationRunRowTag(run), selected, width)
+}
+
+func (m Model) automationRunRowTag(run automation.Run) string {
 	switch {
 	case run.Status == automation.RunFailed:
-		rightBlock = stateStyle(review.StateFailed).Render("failed")
+		return stateStyle(review.StateFailed).Render("failed")
 	case run.Status == automation.RunNeedsReauth:
-		rightBlock = stateStyle(review.StateFailed).Render("needs re-auth")
+		return stateStyle(review.StateFailed).Render("needs re-auth")
 	case run.Meta.Phase == automation.PhaseDraft:
-		rightBlock = m.renderPulseIndicator("drafting...")
+		return m.renderPulseIndicator("drafting...")
 	default:
-		rightBlock = m.renderPulseIndicator("running...")
+		return m.renderPulseIndicator("running...")
 	}
-	return renderJobStyleRow(amberDiamond.Render(), m.automationJobLabel(run), rightBlock, selected, width)
 }
 
 func renderJobStyleRow(icon, label, rightBlock string, selected bool, width int) string {
