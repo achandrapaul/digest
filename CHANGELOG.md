@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.0.157 — 2026-10-12
+
+### Changes
+- [369a37d](https://github.com/achandrapaul/digest/commit/369a37dab1f0d48ec904da9b998b5a3bc0c10dcf) feat: secret redaction before AI sends, f to pull pending notes into today, preview headers show row tags
+  - Notes and brag facts sent to Claude are redacted (built-in patterns plus redact_patterns); "Added Today" is now "Active items for today" and f toggles started_working_on, with done recording the day and the preview listing worked-on dates under its header.
+  - Preview headers carry their row's tags (no #general fallback), the dashboard ctrl+c warning is a single centred line, and Pending, Carried Over sorts by source tag then newest created, both descending.
+
 ## v0.0.156 — 2026-10-11
 
 ### Changes
