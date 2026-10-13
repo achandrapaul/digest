@@ -14,6 +14,9 @@ type notesState struct {
 	archivedSelectedMap     map[int]bool
 	archivedViewport        viewport.Model
 	deleteTargetNotes       []*model.Note
+	pendingRangeAction      noteRangeAction
+	rangeAnchor             int
+	rangeActive             bool
 	selectAfterReload       string
 	awaitingNewNoteSave     bool
 	browsedNotes            []*model.Note

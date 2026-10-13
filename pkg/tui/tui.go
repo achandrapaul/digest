@@ -699,7 +699,10 @@ func (m Model) dashboardContent() (content string, selectedLine int) {
 }
 
 func (m Model) buildDashboardContent() (content string, selectedLine int) {
-	builder := &dashboardBuilder{selected: m.selected, innerWidth: m.width - 4, rowWidth: m.width - 3}
+	builder := &dashboardBuilder{selected: m.selected, innerWidth: m.width - 4, rowWidth: m.width - 3, rangeLow: m.selected, rangeHigh: m.selected}
+	if m.mode == ViewDashboard || m.mode == ViewDeleteConfirm {
+		builder.rangeLow, builder.rangeHigh, _ = m.noteRangeBounds()
+	}
 	if m.frames != nil {
 		builder.board.Grow(m.frames.lastContentLength + 1024)
 	}

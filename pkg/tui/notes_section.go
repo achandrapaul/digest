@@ -426,15 +426,23 @@ func (m *Model) afterPreviewArchive(returnMode ViewMode) {
 	}
 }
 
+func (m Model) toggleNoteDone(note *model.Note) {
+	if note.Status == model.StatusDone {
+		note.Status = model.StatusActive
+		return
+	}
+	note.Status = model.StatusDone
+	note.Updated = m.currentDate
+	note.RecordWorkedOn(m.currentDate)
+}
+
 func (m Model) toggleSelectedDone(tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if m.mode == ViewDashboard && m.notesUI.rangeActive {
+		targets, action := doneRangeTargets(m.rangeNotes())
+		return m.beginNoteRangeConfirm(action, targets)
+	}
 	if item, ok := m.selectedNavItem(); ok && item.Note != nil {
-		if item.Note.Status == model.StatusDone {
-			item.Note.Status = model.StatusActive
-		} else {
-			item.Note.Status = model.StatusDone
-			item.Note.Updated = m.currentDate
-			item.Note.RecordWorkedOn(m.currentDate)
-		}
+		m.toggleNoteDone(item.Note)
 		return m, m.saveNotesCmd(item.Note)
 	}
 	return m, nil
@@ -453,6 +461,10 @@ func (m Model) workOnLabel(n *model.Note) string {
 }
 
 func (m Model) toggleWorkOn(tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if m.mode == ViewDashboard && m.notesUI.rangeActive {
+		targets, action := m.workOnRangeTargets(m.rangeNotes(), time.Now())
+		return m.beginNoteRangeConfirm(action, targets)
+	}
 	item, ok := m.selectedNavItem()
 	if !ok || !m.canWorkOn(item.Note) {
 		return m, nil
@@ -1002,6 +1014,9 @@ func init() {
 		actionInlineEdit:             Model.inlineEditSelected,
 		actionToggleDone:             Model.toggleSelectedDone,
 		actionWorkOn:                 Model.toggleWorkOn,
+		actionExtendRangeDown:        Model.extendNoteRangeDown,
+		actionExtendRangeUp:          Model.extendNoteRangeUp,
+		actionCopyNoteRange:          Model.copyNoteRange,
 		actionOpenArchive:            Model.openArchive,
 		actionCloseArchive:           Model.closeArchive,
 		actionArchiveCursorDown:      Model.archiveCursorDown,
@@ -1058,7 +1073,7 @@ func (notesSection) emitNotes(m Model, builder *dashboardBuilder, notes []*model
 		builder.board.WriteString(mutedStyle.Render(emptyHint + "\n"))
 	}
 	for _, note := range notes {
-		builder.emitRow(func(selected bool) string { return m.renderRow(note, selected, builder.rowWidth) })
+		builder.emitNoteRow(func(selected bool) string { return m.renderRow(note, selected, builder.rowWidth) })
 	}
 }
 

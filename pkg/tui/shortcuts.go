@@ -22,6 +22,8 @@ const (
 var actionDescriptions = map[keyAction]string{
 	actionCursorDown:         "move down",
 	actionCursorUp:           "move up",
+	actionExtendRangeDown:    "J/K select several notes",
+	actionCopyNoteRange:      "copy the selected notes",
 	actionPreviousDay:        "previous day",
 	actionNextDay:            "next day",
 	actionToday:              "today",

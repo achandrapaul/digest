@@ -148,6 +148,7 @@ func (m *Model) clearPendingConfirms() {
 	m.jobs.jobConfirmError = ""
 	m.confirmTitle, m.confirmPrompt = "", ""
 	m.restoreOnConfirm = false
+	m.notesUI.pendingRangeAction = noteRangeNone
 }
 
 func (m Model) stopTargetName() string {

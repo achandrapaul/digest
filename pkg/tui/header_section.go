@@ -112,7 +112,11 @@ func init() {
 
 func (section headerSection) ApplyKeystrokes(m Model, binding keyBinding, msg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 	if binding.action == actionDismissErrors && !section.hasErrors(m) {
-		return m, nil, false
+		if !m.notesUI.rangeActive {
+			return m, nil, false
+		}
+		m.clearNoteRange()
+		return m, nil, true
 	}
 	return headerKeystrokes.apply(m, binding, msg)
 }
@@ -136,6 +140,7 @@ func (headerSection) dismissErrors(m Model) Model {
 }
 
 func (m Model) dismissHeaderErrors(tea.KeyMsg) (tea.Model, tea.Cmd) {
+	m.clearNoteRange()
 	m = headerSection{}.dismissErrors(m)
 	return m, m.ensureSyncPulse()
 }

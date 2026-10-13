@@ -33,6 +33,9 @@ const (
 	actionDeleteItem
 	actionToggleDone
 	actionWorkOn
+	actionExtendRangeDown
+	actionExtendRangeUp
+	actionCopyNoteRange
 	actionPreviousDay
 	actionNextDay
 	actionCursorDown
@@ -293,6 +296,9 @@ func (m Model) dashboardBindings() []keyBinding {
 			hiddenKeyBinding(actionOpenActions, "@", "."),
 			newKeyBinding(actionOpenPreview, []string{"tab"}, "tab", "preview"),
 			newKeyBinding(actionDeleteItem, []string{"d"}, "d", "delete"),
+			newKeyBinding(actionExtendRangeDown, []string{"J", "shift+down"}, "shift", "multiple selection"),
+			hiddenKeyBinding(actionExtendRangeUp, "K", "shift+up"),
+			newKeyBinding(actionCopyNoteRange, []string{"ctrl+y"}, "ctrl+y", "copy").shownWhen(m.notesUI.rangeActive),
 		)
 	}
 	bindings := append(rowBindings,

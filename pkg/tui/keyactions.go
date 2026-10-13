@@ -110,6 +110,7 @@ func (m Model) dashboardPageSize() int {
 }
 
 func (m Model) moveDashboardSelection(delta int) (tea.Model, tea.Cmd) {
+	m.clearNoteRange()
 	m.selected = max(min(m.selected+delta, len(m.allNavItems())-1), 0)
 	m.updateScrollOffset()
 	return m, nil
@@ -132,6 +133,7 @@ func (m Model) dashboardPageUp(tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) jumpToToday(tea.KeyMsg) (tea.Model, tea.Cmd) {
+	m.clearNoteRange()
 	if !isSameDay(m.currentDate, time.Now()) {
 		m.resetCommitsForDate()
 	}
@@ -176,6 +178,13 @@ func (m Model) deleteSelectedItem(tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if !ok {
 		return m, nil
 	}
+	targets := m.rangeNotes()
+	if len(targets) > 1 {
+		m.clearPendingConfirms()
+		m.notesUI.deleteTargetNotes = targets
+		m.pushMode(ViewDeleteConfirm)
+		return m, nil
+	}
 	if item.Note != nil {
 		m.beginNoteDelete(item.Note, ViewDashboard)
 	}
@@ -183,6 +192,7 @@ func (m Model) deleteSelectedItem(tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) previousDay(tea.KeyMsg) (tea.Model, tea.Cmd) {
+	m.clearNoteRange()
 	m.currentDate = m.currentDate.AddDate(0, 0, -1)
 	m.resetCommitsForDate()
 	m.selected = 0
@@ -191,6 +201,7 @@ func (m Model) previousDay(tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) nextDay(tea.KeyMsg) (tea.Model, tea.Cmd) {
+	m.clearNoteRange()
 	if !startOfDay(m.currentDate).Before(startOfDay(time.Now().AddDate(0, 0, 1))) {
 		return m, nil
 	}
@@ -202,6 +213,7 @@ func (m Model) nextDay(tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) dashboardCursorDown(tea.KeyMsg) (tea.Model, tea.Cmd) {
+	m.clearNoteRange()
 	navItems := m.allNavItems()
 	if len(navItems) > 0 && m.selected < len(navItems)-1 {
 		m.selected++
@@ -211,6 +223,7 @@ func (m Model) dashboardCursorDown(tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) dashboardCursorUp(tea.KeyMsg) (tea.Model, tea.Cmd) {
+	m.clearNoteRange()
 	if m.selected > 0 {
 		m.selected--
 		m.updateScrollOffset()
@@ -233,6 +246,7 @@ func (m Model) confirmDelete(tea.KeyMsg) (tea.Model, tea.Cmd) {
 	targets := m.notesUI.deleteTargetNotes
 	returnMode := m.popMode()
 	restoring := m.restoreOnConfirm
+	rangeAction := m.notesUI.pendingRangeAction
 	m.clearPendingConfirms()
 	m.notesUI.archivedSelectedMap = make(map[int]bool)
 	m.notesUI.deleteTargetNotes = nil
@@ -240,6 +254,12 @@ func (m Model) confirmDelete(tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.restoreArchivedNotes(targets)
 	}
 	m.mode = returnMode
+	if rangeAction != noteRangeNone {
+		return m.applyNoteRangeAction(rangeAction, targets)
+	}
+	if returnMode == ViewDashboard {
+		m.clearNoteRange()
+	}
 	if targets = m.dropUnsavedNotes(targets); len(targets) == 0 {
 		m.afterPreviewArchive(returnMode)
 		return m, nil
@@ -307,7 +327,7 @@ func (m Model) copyPreviewItem(tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if m.onDraftTab() {
 		textToCopy = m.draftText()
 	} else if item.Note != nil {
-		textToCopy = fmt.Sprintf("%s\n\n%s", item.Note.Summary, item.Note.Body)
+		textToCopy = noteCopyText(item.Note)
 	} else if item.Draft != nil {
 		textToCopy, _ = jobRuntime().LatestOutput(item.Draft.Name, m.jobDryRunOutputFor(item.Draft.Name))
 	} else if item.PendingGitPR != nil {

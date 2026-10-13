@@ -23,6 +23,7 @@ type dashboardFrameKey struct {
 	width          int
 	height         int
 	selected       int
+	rangeAnchor    int
 	mode           ViewMode
 }
 
@@ -48,6 +49,7 @@ func (m Model) dashboardFrameKey() dashboardFrameKey {
 		width:          m.width,
 		height:         m.height,
 		selected:       m.selected,
+		rangeAnchor:    m.noteRangeFrameAnchor(),
 		mode:           m.mode,
 	}
 }
@@ -68,7 +70,7 @@ func (m Model) currentDashboardFrame() *dashboardFrame {
 	cached, found := m.frames.frames[key]
 	if !found {
 		for existingKey := range m.frames.frames {
-			if existingKey.contentVersion != key.contentVersion || existingKey.width != key.width || existingKey.height != key.height || existingKey.selected != key.selected || existingKey.mode != key.mode || len(m.frames.frames) >= maxCachedFrames {
+			if existingKey.contentVersion != key.contentVersion || existingKey.width != key.width || existingKey.height != key.height || existingKey.selected != key.selected || existingKey.rangeAnchor != key.rangeAnchor || existingKey.mode != key.mode || len(m.frames.frames) >= maxCachedFrames {
 				clear(m.frames.frames)
 				break
 			}
@@ -127,6 +129,8 @@ type dashboardBuilder struct {
 	selectedLine int
 	innerWidth   int
 	rowWidth     int
+	rangeLow     int
+	rangeHigh    int
 }
 
 func (builder *dashboardBuilder) lineCount() int {
@@ -140,6 +144,11 @@ func (builder *dashboardBuilder) emitRow(render func(selected bool) string) {
 	}
 	builder.board.WriteString(render(selected))
 	builder.navIndex++
+}
+
+func (builder *dashboardBuilder) emitNoteRow(render func(selected bool) string) {
+	inRange := builder.navIndex >= builder.rangeLow && builder.navIndex <= builder.rangeHigh
+	builder.emitRow(func(selected bool) string { return render(selected || inRange) })
 }
 
 func (builder *dashboardBuilder) selectedWithin(start, end int) bool {
