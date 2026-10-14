@@ -43,6 +43,7 @@ var actionDescriptions = map[keyAction]string{
 	actionToggleSortField:    "sort field (pending PRs)",
 	actionToggleSortOrder:    "sort order (pending PRs)",
 	actionTogglePendingScope: "me only (pending PRs)",
+	actionToggleTagGroups:    "group notes by tag",
 	actionDismissErrors:      "dismiss errors",
 	actionOpenMessages:       "all messages",
 	actionOpenSetup:          "setup",

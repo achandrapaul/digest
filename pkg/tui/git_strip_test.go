@@ -93,6 +93,9 @@ func TestColumnKeysDoNothingInTheGitStrip(t *testing.T) {
 	}
 	for _, binding := range m.dashboardBindings() {
 		for _, name := range binding.binding.Keys() {
+			if name == "h" && binding.action == actionToggleTagGroups {
+				continue
+			}
 			if name == "h" || name == "l" || name == "left" || name == "right" {
 				t.Errorf("%q still bound to %v", name, binding.action)
 			}

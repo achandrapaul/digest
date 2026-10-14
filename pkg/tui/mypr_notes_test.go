@@ -59,7 +59,7 @@ func TestMyPRNoteCreatedWithLinkDescriptionAndUpdates(t *testing.T) {
 	})
 	msg := runMyPRNotes(t, noteStore, seenPath, []review.QueuedPR{pr}, nil, now)
 	note := onlyMyPRNote(t, noteStore)
-	if note.Ref != "org/console#4" || note.ID != store.NoteID(pr.CreatedAt) || !note.Created.Equal(pr.CreatedAt) || note.Summary != "NewPR: org:console:4: Fix picker" || note.Source != model.SourceMyPR || note.Status != model.StatusActive || note.Repo != "console" {
+	if note.Ref != "org/console#4" || note.ID != store.NoteID(pr.CreatedAt) || !note.Created.Equal(pr.CreatedAt) || note.Summary != "Own:OPEN:org:console:Fix picker" || note.Source != model.SourceMyPR || note.Status != model.StatusActive || note.Repo != "console" {
 		t.Errorf("note = %+v", note)
 	}
 	lines := strings.Split(note.Body, "\n")
@@ -121,7 +121,7 @@ func TestMyPRNoteAppendsNewestFirstAndReplacesDescription(t *testing.T) {
 	if note.Body != want {
 		t.Errorf("body =\n%s\nwant\n%s", note.Body, want)
 	}
-	if note.Summary != "NewPR: org:console:4: Fix picker for real" {
+	if note.Summary != "Own:OPEN:org:console:Fix picker for real" {
 		t.Errorf("summary = %q", note.Summary)
 	}
 }
@@ -132,8 +132,12 @@ func TestMyPRNoteClosedMarksDoneAndForgetsPR(t *testing.T) {
 	now := time.Date(2026, 10, 6, 10, 0, 0, 0, time.Local)
 	pr := myPR(4, nil)
 	runMyPRNotes(t, noteStore, seenPath, []review.QueuedPR{pr}, nil, now)
+	openID := onlyMyPRNote(t, noteStore).ID
 	msg := runMyPRNotes(t, noteStore, seenPath, nil, map[string]string{pr.Ref.URL: "MERGED"}, now.Add(time.Hour))
 	note := onlyMyPRNote(t, noteStore)
+	if note.Summary != "Own:MERGED:org:console:Fix picker" || note.ID != openID {
+		t.Errorf("summary = %q, id %q want %q", note.Summary, note.ID, openID)
+	}
 	if note.Status != model.StatusDone || !strings.Contains(note.Body, "## Updates\n\n- 2026-10-06 11:00 Merged\n- 2026-10-06 09:00 Opened") {
 		t.Errorf("status=%v body=\n%s", note.Status, note.Body)
 	}
@@ -193,5 +197,46 @@ func TestMyPRNoteKeepsPRsFromFailedHostsKnown(t *testing.T) {
 	msg, _ := myPRNotesCmd(noteStore, seenPath, nil, nil, []string{"github.com"}, now.Add(time.Hour))().(myPRNotesMsg)
 	if len(msg.known) != 1 {
 		t.Errorf("PR on a failed host was forgotten: %+v", msg.known)
+	}
+}
+
+func TestMyPRSummaryFollowsDraftOpenAndClosed(t *testing.T) {
+	noteStore := store.New(t.TempDir())
+	seenPath := filepath.Join(t.TempDir(), "seen.json")
+	now := time.Date(2026, 10, 6, 10, 0, 0, 0, time.Local)
+	draft := myPR(4, func(pr *review.QueuedPR) { pr.IsDraft = true })
+	runMyPRNotes(t, noteStore, seenPath, []review.QueuedPR{draft}, nil, now)
+	note := onlyMyPRNote(t, noteStore)
+	id, body := note.ID, note.Body
+	if note.Summary != "Own:DRAFT:org:console:Fix picker" {
+		t.Fatalf("draft summary = %q", note.Summary)
+	}
+	runMyPRNotes(t, noteStore, seenPath, []review.QueuedPR{myPR(4, nil)}, nil, now.Add(time.Hour))
+	note = onlyMyPRNote(t, noteStore)
+	if note.Summary != "Own:OPEN:org:console:Fix picker" || note.ID != id {
+		t.Fatalf("ready summary = %q id = %q", note.Summary, note.ID)
+	}
+	runMyPRNotes(t, noteStore, seenPath, nil, map[string]string{draft.Ref.URL: "CLOSED"}, now.Add(2*time.Hour))
+	note = onlyMyPRNote(t, noteStore)
+	if note.Summary != "Own:CLOSED:org:console:Fix picker" || note.ID != id {
+		t.Errorf("closed summary = %q id = %q", note.Summary, note.ID)
+	}
+	if head, _ := splitMyPRBody(note.Body); !strings.HasPrefix(body, head) {
+		t.Errorf("the body head should be unchanged:\n%s", note.Body)
+	}
+}
+
+func TestMyPRTitleReadsOwnAndOldSummaries(t *testing.T) {
+	ref := myPR(4, nil).Ref
+	cases := map[string]string{
+		"Own:OPEN:org:console:Fix: the picker":  "Fix: the picker",
+		"Own:MERGED:org:console:Fix picker":     "Fix picker",
+		"NewPR: org:console:4: Fix: the picker": "Fix: the picker",
+		"something else":                        "",
+	}
+	for summary, want := range cases {
+		if got := myPRTitle(summary, ref); got != want {
+			t.Errorf("myPRTitle(%q) = %q, want %q", summary, got, want)
+		}
 	}
 }

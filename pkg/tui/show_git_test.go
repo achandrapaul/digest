@@ -75,7 +75,7 @@ func TestGitOffHidesGitJobs(t *testing.T) {
 
 func TestGitOffDropsGitKeys(t *testing.T) {
 	m := gitOffModel(t)
-	gitKeys := map[string]bool{"g": true, "c": true, "h": true, "l": true, "left": true, "right": true, "s": true, "w": true, "m": true}
+	gitKeys := map[string]bool{"g": true, "c": true, "l": true, "left": true, "right": true, "s": true, "w": true, "m": true}
 	for _, binding := range m.dashboardBindings() {
 		for _, key := range binding.binding.Keys() {
 			if gitKeys[key] {

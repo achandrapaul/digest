@@ -119,6 +119,9 @@ func (m Model) groupNotes() noteGroups {
 		}
 		return b.Created.Compare(a.Created)
 	})
+	if m.appState.GroupByTag {
+		groups.today = gatherByTag(groups.today)
+	}
 	return groups
 }
 
@@ -1055,7 +1058,37 @@ func init() {
 		actionConfirmNotify:          Model.confirmNotify,
 		actionCancelNotify:           Model.cancelNotify,
 		actionReloadNotes:            Model.reloadViewedDay,
+		actionToggleTagGroups:        Model.toggleTagGroups,
 	}
+}
+
+func (m Model) toggleTagGroups(tea.KeyMsg) (tea.Model, tea.Cmd) {
+	selectedKey, selectedOccurrence := m.selectedNavKey()
+	m.appState.GroupByTag = !m.appState.GroupByTag
+	m.contentVersion++
+	m.restoreSelection(selectedKey, selectedOccurrence)
+	m.updateScrollOffset()
+	if !m.appStateKnown {
+		return m, nil
+	}
+	return m, saveAppStateCmd(m.cfg.Root(), m.appState)
+}
+
+func gatherByTag(notes []*model.Note) []*model.Note {
+	var tags []string
+	byTag := map[string][]*model.Note{}
+	for _, note := range notes {
+		tag := noteSourceText(note)
+		if _, seen := byTag[tag]; !seen {
+			tags = append(tags, tag)
+		}
+		byTag[tag] = append(byTag[tag], note)
+	}
+	gathered := make([]*model.Note, 0, len(notes))
+	for _, tag := range tags {
+		gathered = append(gathered, byTag[tag]...)
+	}
+	return gathered
 }
 
 func (notesSection) ApplyKeystrokes(m Model, binding keyBinding, msg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
@@ -1089,7 +1122,12 @@ func (notesSection) emitNotes(m Model, builder *dashboardBuilder, notes []*model
 	if len(notes) == 0 && emptyHint != "" {
 		builder.board.WriteString(mutedStyle.Render(emptyHint + "\n"))
 	}
+	previousTag := ""
 	for _, note := range notes {
+		if tag := noteSourceText(note); m.appState.GroupByTag && tag != previousTag {
+			builder.board.WriteString("    " + subSectionStyle.Render(tag) + "\n")
+			previousTag = tag
+		}
 		builder.emitNoteRow(func(selected bool) string { return m.renderRow(note, selected, builder.rowWidth) })
 	}
 }

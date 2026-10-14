@@ -50,8 +50,29 @@ func myPRNoteID(ref review.PRRef) string {
 	return fmt.Sprintf("MyPR:%s:%s:%d", ref.Owner, ref.Repo, ref.Number)
 }
 
-func myPRNoteSummary(ref review.PRRef, title string) string {
-	return fmt.Sprintf("NewPR: %s:%s:%d: %s", ref.Owner, ref.Repo, ref.Number, title)
+func myPRNoteSummary(ref review.PRRef, state, title string) string {
+	return fmt.Sprintf("Own:%s:%s:%s:%s", state, ref.Owner, ref.Repo, title)
+}
+
+func myPRSummaryState(pr review.QueuedPR) string {
+	if pr.IsDraft {
+		return "DRAFT"
+	}
+	return "OPEN"
+}
+
+func myPRTitle(summary string, ref review.PRRef) string {
+	if rest, isOwn := strings.CutPrefix(summary, "Own:"); isOwn {
+		if _, afterState, hasState := strings.Cut(rest, ":"); hasState {
+			if title, matches := strings.CutPrefix(afterState, ref.Owner+":"+ref.Repo+":"); matches {
+				return title
+			}
+		}
+	}
+	if title, isOld := strings.CutPrefix(summary, fmt.Sprintf("NewPR: %s:%s:%d: ", ref.Owner, ref.Repo, ref.Number)); isOld {
+		return title
+	}
+	return ""
 }
 
 func myPRsSeenPath(root string) string {
@@ -102,7 +123,7 @@ func seenFromNote(note *model.Note, pr review.QueuedPR) myPRSeen {
 	if description == "_No description._" {
 		description = ""
 	}
-	title, _ := strings.CutPrefix(note.Summary, myPRNoteSummary(pr.Ref, ""))
+	title := myPRTitle(note.Summary, pr.Ref)
 	seen := myPRSeen{Ref: pr.Ref, Title: title, Body: description, IsDraft: pr.IsDraft}
 	var newest time.Time
 	for _, update := range loggedMyPRUpdates(existingUpdates) {
@@ -310,7 +331,7 @@ func knownMyPRNotesCmd(noteStore *store.NoteStore, known prNoteIndex, seenPath s
 				if pr.CreatedAt.IsZero() {
 					created = now
 				}
-				note = &model.Note{Ref: ref, Created: created, Updated: now, Status: model.StatusActive, Source: model.SourceMyPR, Repo: pr.Ref.Repo, Summary: myPRNoteSummary(pr.Ref, pr.Title)}
+				note = &model.Note{Ref: ref, Created: created, Updated: now, Status: model.StatusActive, Source: model.SourceMyPR, Repo: pr.Ref.Repo, Summary: myPRNoteSummary(pr.Ref, myPRSummaryState(pr), pr.Title)}
 				note.Body = composeMyPRBody(myPRBodyHead(pr), "", myPRUpdates(nil, pr, now))
 			case !exists:
 				continue
@@ -321,7 +342,7 @@ func knownMyPRNotesCmd(noteStore *store.NoteStore, known prNoteIndex, seenPath s
 				}
 				_, existingUpdates := splitMyPRBody(note.Body)
 				body := composeMyPRBody(myPRBodyHead(pr), existingUpdates, myPRUpdates(previousSeen, pr, now))
-				summary := myPRNoteSummary(pr.Ref, pr.Title)
+				summary := myPRNoteSummary(pr.Ref, myPRSummaryState(pr), pr.Title)
 				if body == note.Body && summary == note.Summary {
 					continue
 				}
@@ -361,6 +382,13 @@ func knownMyPRNotesCmd(noteStore *store.NoteStore, known prNoteIndex, seenPath s
 				text = "Merged"
 			}
 			note.Body = composeMyPRBody(head, existingUpdates, []myPRUpdate{{at: now, text: text}})
+			title := entry.Title
+			if title == "" {
+				title = myPRTitle(note.Summary, entry.Ref)
+			}
+			if title != "" {
+				note.Summary = myPRNoteSummary(entry.Ref, state, title)
+			}
 			note.Status, note.Updated = model.StatusDone, now
 			if err := save(note); err != nil {
 				return myPRNotesMsg{known: knownMyPRRefs(seen), changed: changed, saved: len(changed) > 0, missing: errors.Join(missing...), err: err}

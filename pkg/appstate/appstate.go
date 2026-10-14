@@ -23,6 +23,7 @@ type State struct {
 	LastDoneDay      string    `json:"last_done_day,omitempty"`
 	ActionMenuOrder  []string  `json:"action_menu_order,omitempty"`
 	CalendarOffered  bool      `json:"calendar_offered,omitempty"`
+	GroupByTag       bool      `json:"group_by_tag,omitempty"`
 }
 
 func (s State) MarshalJSON() ([]byte, error) {

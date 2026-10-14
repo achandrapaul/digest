@@ -15,6 +15,7 @@ const (
 	actionDismissErrors
 	actionSync
 	actionToggleSortField
+	actionToggleTagGroups
 	actionToggleSortOrder
 	actionTogglePendingScope
 	actionRunSelectedJob
@@ -324,6 +325,7 @@ func (m Model) dashboardBindings() []keyBinding {
 		hiddenKeyBinding(actionToggleSortField, "s"),
 		hiddenKeyBinding(actionToggleSortOrder, "w"),
 		hiddenKeyBinding(actionTogglePendingScope, "m"),
+		hiddenKeyBinding(actionToggleTagGroups, "h"),
 		hiddenKeyBinding(actionDismissErrors, "esc"),
 	)
 	if m.cfg.DailyCommitsEnabled() {

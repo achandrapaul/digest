@@ -53,7 +53,7 @@ Dashboard: what you see
   requested, merged, closed, new comments, review requested and re-review, plus "PR opened" for a newly seen PR of yours. Every sync alerts, the first one too, on PRs that are new or whose state changed; unchanged PRs stay quiet.
 - Unreadable PR status file — if cache/pr-status.json is corrupt, the header shows the error once and the file starts fresh; that sync alerts like a first sync.
 - Automatic PR review notes — PRs you review create or update "#pr-review" notes; approved ones are closed, and they reopen if review is requested again.
-- Automatic My PR notes — each of your open PRs gets a "NewPR:" note with an "## Updates" log, closed with "Merged" or "Closed".
+- Automatic My PR notes — each of your open PRs gets a note summarised "Own:<state>:<org>:<repo>:<title>" with an "## Updates" log, closed with "Merged" or "Closed". The state is DRAFT or OPEN while the PR is open and becomes MERGED or CLOSED when it ends; the note keeps its id. Open notes switch to it on their next sync; notes for PRs closed before this keep their "NewPR:" summary.
 - Corrupt my-prs-seen.json — it is rebuilt from your open PRs and their existing notes, without duplicate notes.
 - Reminder cleanup — reminders are removed when their note is done or archived.
 - Git turned off — the strip and pending section are hidden, and g c s w m
@@ -96,6 +96,7 @@ Dashboard: keys
 - s (hidden) — switches the pending-PR sort between Updated and Created; saved.
 - w (hidden) — switches the pending-PR sort between descending and ascending; saved.
 - m (hidden) — shows only PRs that ask for you by name; not saved.
+- h (hidden) — turns tag headers on or off for Yesterday, Pending, Active items for today and Closed Today: a header line with the tag (#manual, #my-pr …) sits above each run of notes with that tag. Sorting is unchanged, except that Active items for today gathers each tag together in the order the tags first appear. Saved as group_by_tag in .app.state.json.
 - esc (hidden) — hides header errors and git sync failures; does nothing when there are none.
 
 Dashboard: keys on specific rows

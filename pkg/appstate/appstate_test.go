@@ -165,3 +165,22 @@ func TestActionMenuOrderRoundTripsAndStaysOptional(t *testing.T) {
 		t.Errorf("an empty order should not be written: %s", data)
 	}
 }
+
+func TestGroupByTagRoundTripsAndStaysOptional(t *testing.T) {
+	root := t.TempDir()
+	if err := Save(root, State{GroupByTag: true}); err != nil {
+		t.Fatal(err)
+	}
+	if loaded, _, err := Load(root); err != nil || !loaded.GroupByTag {
+		t.Fatalf("loaded = %+v, %v", loaded, err)
+	}
+	if data, _ := os.ReadFile(Path(root)); !strings.Contains(string(data), `"group_by_tag": true`) && !strings.Contains(string(data), `"group_by_tag":true`) {
+		t.Errorf("group_by_tag should be written: %s", data)
+	}
+	if err := Save(root, State{Streak: 1}); err != nil {
+		t.Fatal(err)
+	}
+	if data, _ := os.ReadFile(Path(root)); strings.Contains(string(data), "group_by_tag") {
+		t.Errorf("grouping off should not be written: %s", data)
+	}
+}
