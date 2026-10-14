@@ -25,7 +25,7 @@ func stubOpenURL(t *testing.T) *[]string {
 func notePreviewModel(t *testing.T, source model.Source, body string) Model {
 	t.Helper()
 	m := selectionTestModel(t)
-	m.notes = []*model.Note{{ID: "console:7", Summary: "Approved: thing", Source: source, Body: body, Status: model.StatusDone, Created: m.currentDate, Updated: m.currentDate}}
+	m.notes = []*model.Note{{ID: "control:7", Summary: "Approved: thing", Source: source, Body: body, Status: model.StatusDone, Created: m.currentDate, Updated: m.currentDate}}
 	found := false
 	for index, item := range m.allNavItems() {
 		if item.Note != nil {
@@ -43,7 +43,7 @@ func notePreviewModel(t *testing.T, source model.Source, body string) Model {
 
 func TestEnterEditsPRReviewNoteInsteadOfOpeningTheLink(t *testing.T) {
 	opened := stubOpenURL(t)
-	m := notePreviewModel(t, model.SourcePRReview, "https://github.com/acme/console/pull/19162")
+	m := notePreviewModel(t, model.SourcePRReview, "https://github.com/acme/control/pull/19162")
 	m = press(t, m, tea.KeyMsg{Type: tea.KeyEnter})
 	if m.mode != ViewEdit || len(*opened) != 0 {
 		t.Errorf("mode=%v opened=%v", m.mode, *opened)
@@ -52,12 +52,12 @@ func TestEnterEditsPRReviewNoteInsteadOfOpeningTheLink(t *testing.T) {
 
 func TestOOpensPRReviewNoteLink(t *testing.T) {
 	opened := stubOpenURL(t)
-	m := notePreviewModel(t, model.SourcePRReview, "https://github.com/acme/console/pull/19162")
+	m := notePreviewModel(t, model.SourcePRReview, "https://github.com/acme/control/pull/19162")
 	m = press(t, m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("o")})
 	if m.mode != ViewPreview {
 		t.Errorf("mode = %v", m.mode)
 	}
-	if len(*opened) != 1 || (*opened)[0] != "https://github.com/acme/console/pull/19162" {
+	if len(*opened) != 1 || (*opened)[0] != "https://github.com/acme/control/pull/19162" {
 		t.Errorf("opened %v", *opened)
 	}
 }

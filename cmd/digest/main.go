@@ -19,6 +19,7 @@ import (
 	"github.com/achandrapaul/digest/pkg/brag"
 	"github.com/achandrapaul/digest/pkg/config"
 	"github.com/achandrapaul/digest/pkg/doctor"
+	"github.com/achandrapaul/digest/pkg/focus"
 	"github.com/achandrapaul/digest/pkg/habit"
 	"github.com/achandrapaul/digest/pkg/install"
 	"github.com/achandrapaul/digest/pkg/jobs"
@@ -217,6 +218,19 @@ func runNoteCommand(cfg *config.Config, args []string) int {
 	return 0
 }
 
+func runFocusCommand(cfg *config.Config, args []string) int {
+	selector, err := focus.Parse(strings.Join(args, " "))
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "Usage: digest focus <org>:<repo>:<pr title>")
+		return 1
+	}
+	if err := focus.Run(cfg, selector); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		return 1
+	}
+	return 0
+}
+
 func printUsage(out io.Writer) {
 	usage := []string{
 		"Usage: digest [flags] [command] [command flags]",
@@ -239,6 +253,8 @@ func printUsage(out io.Writer) {
 		"  install spotlight        Add an \"Add Digest Note\" Apple Shortcut for Spotlight and the menu bar (one Add click in Shortcuts)",
 		"  uninstall spotlight      Remove its files; delete the shortcut in the Shortcuts app",
 		"  note add <text>  Add a manual note for today; the first line is its summary, the rest its body",
+		"  focus <org>:<repo>:<pr title>",
+		"                 Bring the running digest's tmux pane or terminal forward and select that PR",
 		"  doctor         Check that every tool digest needs is installed",
 		"  setup          Walk through the friendly setup again (git, work days, summaries, hints, notifications)",
 		"  init           Write the default config.yaml into the config directory; --force backs up an existing one and rewrites it, --automations backs it up and replaces only its automations",
@@ -307,7 +323,7 @@ func withoutDryRun(args []string) []string {
 
 func dryRunUnsupported(command string, args []string) (string, bool) {
 	switch command {
-	case "pr-review", "brag", "automation", "notify-due", "init", "bootstrap", "note":
+	case "pr-review", "brag", "automation", "notify-due", "init", "bootstrap", "note", "focus":
 		return command, true
 	case "install", "uninstall":
 		words := []string{command}
@@ -605,6 +621,9 @@ func main() {
 
 	case "note":
 		os.Exit(runNoteCommand(cfg, parseCommandFlags(newCommandFlags("note"), subArgs)))
+
+	case "focus":
+		os.Exit(runFocusCommand(cfg, parseCommandFlags(newCommandFlags("focus"), subArgs)))
 
 	case "doctor":
 		parseCommandFlags(newCommandFlags("doctor"), subArgs)

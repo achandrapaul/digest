@@ -15,8 +15,8 @@ func myPRStripModel(t *testing.T) Model {
 	t.Helper()
 	m := gitStripTestModel(t)
 	m.git.myPRs = []review.QueuedPR{
-		myOpenPR("console", 4, "fix/a", "SUCCESS"),
-		myOpenPR("console", 3, "feat/b", "FAILURE"),
+		myOpenPR("control", 4, "fix/a", "SUCCESS"),
+		myOpenPR("control", 3, "feat/b", "FAILURE"),
 		myOpenPR("digest", 9, "main-ui", "PENDING"),
 	}
 	sortMyPRs(m.git.myPRs)
@@ -42,7 +42,7 @@ func TestMyPRBlockSitsBelowDaysAtFullWidth(t *testing.T) {
 			t.Errorf("block missing %q:\n%s", want, body)
 		}
 	}
-	sharedLine, titleLine, consoleRow, firstPRRow, todayLine := -1, -1, -1, -1, -1
+	sharedLine, titleLine, controlRow, firstPRRow, todayLine := -1, -1, -1, -1, -1
 	for index, line := range lines {
 		inner := strings.TrimSpace(strings.TrimSuffix(strings.TrimPrefix(line, "│"), "│"))
 		switch {
@@ -50,8 +50,8 @@ func TestMyPRBlockSitsBelowDaysAtFullWidth(t *testing.T) {
 			sharedLine = index
 		case strings.Contains(line, "M Y   P R ( S )"):
 			titleLine = index
-		case consoleRow < 0 && inner == "console":
-			consoleRow = index
+		case controlRow < 0 && inner == "control":
+			controlRow = index
 		case firstPRRow < 0 && strings.Contains(line, "#4"):
 			firstPRRow = index
 			if strings.Contains(inner, "│") {
@@ -61,8 +61,8 @@ func TestMyPRBlockSitsBelowDaysAtFullWidth(t *testing.T) {
 			todayLine = index
 		}
 	}
-	if todayLine < 0 || sharedLine < todayLine || titleLine < sharedLine || consoleRow < titleLine || firstPRRow != consoleRow+1 {
-		t.Errorf("shared %d title %d console %d first PR %d today %d:\n%s", sharedLine, titleLine, consoleRow, firstPRRow, todayLine, body)
+	if todayLine < 0 || sharedLine < todayLine || titleLine < sharedLine || controlRow < titleLine || firstPRRow != controlRow+1 {
+		t.Errorf("shared %d title %d control %d first PR %d today %d:\n%s", sharedLine, titleLine, controlRow, firstPRRow, todayLine, body)
 	}
 }
 

@@ -88,11 +88,11 @@ func TestMigrateRenamesReIDsAndFillsRefs(t *testing.T) {
 	f.writeNote(t, "2026/09/01M3P3RDCCFE87NP9MRHHGRVKT-twin.md", "id: 01M3P3RDCCFE87NP9MRHHGRVKT\ncreated: "+ulidCreated.Format(time.RFC3339Nano)+"\nupdated: "+ulidCreated.Format(time.RFC3339Nano)+"\nstatus: archived\nsource: manual\nsummary: ulid twin\n", "")
 	f.writeNote(t, "2026/10/no-id.md", "created: "+activeCreated.Add(2*time.Minute).Format(time.RFC3339Nano)+"\nstatus: inbox\nsummary: without id\n", "")
 	syncTime := time.Date(2026, 10, 8, 20, 22, 26, 0, time.Local)
-	f.writeNote(t, "2026/10/08-10-2026-1791471146280.md", "id: MyPR:flex:flex-console:449\ncreated: "+syncTime.Format(time.RFC3339Nano)+"\nupdated: "+syncTime.Format(time.RFC3339Nano)+"\nstatus: active\nsource: my-pr\nsummary: mine\n",
-		"https://github.com/flex/flex-console/pull/449\n\n## Updates\n\n- 2026-10-08 20:22 CI passing\n- 2026-10-05 11:15 Opened")
+	f.writeNote(t, "2026/10/08-10-2026-1791471146280.md", "id: MyPR:flex:flex-control:449\ncreated: "+syncTime.Format(time.RFC3339Nano)+"\nupdated: "+syncTime.Format(time.RFC3339Nano)+"\nstatus: active\nsource: my-pr\nsummary: mine\n",
+		"https://github.com/flex/flex-control/pull/449\n\n## Updates\n\n- 2026-10-08 20:22 CI passing\n- 2026-10-05 11:15 Opened")
 	reviewCreated := time.Date(2026, 9, 30, 10, 0, 0, 0, time.Local)
-	f.lookups["https://github.com/o/console/pull/7"] = reviewCreated
-	f.writeNote(t, "2026/10/07-10-2026-1791394547610.md", "id: console:7\ncreated: "+syncTime.Format(time.RFC3339Nano)+"\nupdated: "+syncTime.Format(time.RFC3339Nano)+"\nstatus: done\nsource: pr-review\nsummary: reviewed\n", "https://github.com/o/console/pull/7")
+	f.lookups["https://github.com/o/control/pull/7"] = reviewCreated
+	f.writeNote(t, "2026/10/07-10-2026-1791394547610.md", "id: control:7\ncreated: "+syncTime.Format(time.RFC3339Nano)+"\nupdated: "+syncTime.Format(time.RFC3339Nano)+"\nstatus: done\nsource: pr-review\nsummary: reviewed\n", "https://github.com/o/control/pull/7")
 	f.writeNote(t, "2026/10/07-10-2026-1791394547611.md", "id: web:3\ncreated: "+syncTime.Format(time.RFC3339Nano)+"\nupdated: "+syncTime.Format(time.RFC3339Nano)+"\nstatus: active\nsource: pr-review\nsummary: orphan\n", "no link here")
 	if err := notify.Save(f.root, notify.Entry{NoteID: "01M3P3RDCCFE87NP9MRHHGRVKS", Summary: "ulid one", Interval: "1h"}); err != nil {
 		t.Fatal(err)
@@ -134,10 +134,10 @@ func TestMigrateRenamesReIDsAndFillsRefs(t *testing.T) {
 		t.Errorf("note without id should get one: %+v", note)
 	}
 	opened := time.Date(2026, 10, 5, 11, 15, 0, 0, time.Local)
-	if note := byKey["flex/flex-console#449"]; note == nil || !note.Created.Equal(opened) || note.ID != store.NoteID(opened) {
+	if note := byKey["flex/flex-control#449"]; note == nil || !note.Created.Equal(opened) || note.ID != store.NoteID(opened) {
 		t.Errorf("my-PR note should take the Opened time: %+v", note)
 	}
-	if note := byKey["o/console#7"]; note == nil || !note.Created.Equal(reviewCreated) || note.ID != store.NoteID(reviewCreated) {
+	if note := byKey["o/control#7"]; note == nil || !note.Created.Equal(reviewCreated) || note.ID != store.NoteID(reviewCreated) {
 		t.Errorf("review note should take the PR created time from gh: %+v", note)
 	}
 	if note := byKey["owner/web#3"]; note == nil || !note.Created.Equal(syncTime) {

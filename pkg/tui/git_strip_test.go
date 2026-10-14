@@ -127,7 +127,7 @@ func TestGitStripColumnsStayAlignedWhenNarrow(t *testing.T) {
 	m := gitStripTestModel(t)
 	m.width = 80
 	m.git.yesterdayGitRepo = []*GitRepoStat{{Name: "digest", Commits: 5, Reviewed: 1, Assigned: 2}, {Name: "a-very-long-repository-name", Commits: 7}}
-	m.git.todayGitRepos = []*GitRepoStat{{Name: "web-console", Commits: 1}}
+	m.git.todayGitRepos = []*GitRepoStat{{Name: "web-control", Commits: 1}}
 	lines, _ := m.renderGitStrip(m.width-4, false, m.groupNotes())
 	dividerColumn := -1
 	for _, line := range lines[2:] {
@@ -144,7 +144,7 @@ func TestGitStripColumnsStayAlignedWhenNarrow(t *testing.T) {
 			t.Errorf("divider at %d, want %d: %q", column, dividerColumn, string(plain))
 		}
 	}
-	if row := stripANSI(m.renderGitRepoRow(m.git.todayGitRepos[0], false, 36)); !strings.Contains(row, "web-console ") {
+	if row := stripANSI(m.renderGitRepoRow(m.git.todayGitRepos[0], false, 36)); !strings.Contains(row, "web-control ") {
 		t.Errorf("name and stats need a gap: %q", row)
 	}
 }

@@ -110,7 +110,7 @@ func TestClaimRunRefusesOtherLiveRun(t *testing.T) {
 
 func TestRunRefusedWhileAnotherRuns(t *testing.T) {
 	root := t.TempDir()
-	ref := PRRef{Repo: "console", Number: 8, URL: "https://github.com/o/console/pull/8"}
+	ref := PRRef{Repo: "control", Number: 8, URL: "https://github.com/o/control/pull/8"}
 	other := exec.Command("sleep", "30")
 	if err := other.Start(); err != nil {
 		t.Fatal(err)
@@ -132,7 +132,7 @@ func TestRunRefusedWhileAnotherRuns(t *testing.T) {
 
 func TestStopKillsProcessGroupAndClearsPID(t *testing.T) {
 	root := t.TempDir()
-	ref := PRRef{Repo: "console", Number: 9, URL: "https://github.com/o/console/pull/9"}
+	ref := PRRef{Repo: "control", Number: 9, URL: "https://github.com/o/control/pull/9"}
 	leader := exec.Command("sh", "-c", "sleep 30 & wait")
 	leader.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 	if err := leader.Start(); err != nil {
@@ -225,7 +225,7 @@ func TestBackgroundChildClaimsThePIDItsLauncherWrote(t *testing.T) {
 
 func TestStoppedRunLeavesNoExitCode(t *testing.T) {
 	root := t.TempDir()
-	ref := PRRef{Repo: "console", Number: 11, URL: "https://github.com/o/console/pull/11"}
+	ref := PRRef{Repo: "control", Number: 11, URL: "https://github.com/o/control/pull/11"}
 	stubParentPID(t, 1)
 	originalPrepare := prepareClone
 	prepareClone = func(ctx context.Context, ref PRRef, root string, logger *log.Logger, output io.Writer) (string, error) {
@@ -254,7 +254,7 @@ func TestStopKillsAGroupThatIgnoresTerm(t *testing.T) {
 	stopGracePeriod = 200 * time.Millisecond
 	t.Cleanup(func() { stopGracePeriod = original })
 	root := t.TempDir()
-	ref := PRRef{Repo: "console", Number: 10, URL: "https://github.com/o/console/pull/10"}
+	ref := PRRef{Repo: "control", Number: 10, URL: "https://github.com/o/control/pull/10"}
 	stubborn := exec.Command("sh", "-c", `trap "" TERM; sleep 30 & wait`)
 	stubborn.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 	if err := stubborn.Start(); err != nil {
@@ -277,7 +277,7 @@ func TestStopKillsAGroupThatIgnoresTerm(t *testing.T) {
 
 func TestStoppedReviewStaysListedAsFailed(t *testing.T) {
 	root := t.TempDir()
-	ref := PRRef{Repo: "console", Number: 12, URL: "https://github.com/o/console/pull/12"}
+	ref := PRRef{Repo: "control", Number: 12, URL: "https://github.com/o/control/pull/12"}
 	dir := StateDir(root, ref)
 	if err := WriteMeta(dir, Meta{Ref: ref, Title: "Fix"}); err != nil {
 		t.Fatal(err)

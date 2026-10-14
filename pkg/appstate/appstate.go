@@ -18,12 +18,20 @@ const (
 )
 
 type State struct {
-	FirstNoteCreated time.Time `json:"first_note_created"`
-	Streak           int       `json:"streak"`
-	LastDoneDay      string    `json:"last_done_day,omitempty"`
-	ActionMenuOrder  []string  `json:"action_menu_order,omitempty"`
-	CalendarOffered  bool      `json:"calendar_offered,omitempty"`
-	GroupByTag       bool      `json:"group_by_tag,omitempty"`
+	FirstNoteCreated time.Time    `json:"first_note_created"`
+	Streak           int          `json:"streak"`
+	LastDoneDay      string       `json:"last_done_day,omitempty"`
+	ActionMenuOrder  []string     `json:"action_menu_order,omitempty"`
+	CalendarOffered  bool         `json:"calendar_offered,omitempty"`
+	GroupByTag       bool         `json:"group_by_tag,omitempty"`
+	TUILocation      *TUILocation `json:"tui_location,omitempty"`
+}
+
+type TUILocation struct {
+	PID        int    `json:"pid"`
+	TmuxSocket string `json:"tmux_socket,omitempty"`
+	TmuxPane   string `json:"tmux_pane,omitempty"`
+	Terminal   string `json:"terminal,omitempty"`
 }
 
 func (s State) MarshalJSON() ([]byte, error) {
@@ -57,8 +65,25 @@ func IsCorrupt(err error) bool {
 	return errors.As(err, &syntaxErr) || errors.As(err, &typeErr)
 }
 
+func lockPath(root string) string {
+	return filepath.Join(root, ".state", "app.state.lock")
+}
+
 func Save(root string, state State) error {
-	return system.WriteJSON(Path(root), state)
+	return system.LockedUpdate(lockPath(root), func() error {
+		return system.WriteJSON(Path(root), state)
+	})
+}
+
+func Update(root string, mutate func(*State)) error {
+	return system.LockedUpdate(lockPath(root), func() error {
+		state, _, err := Load(root)
+		if err != nil {
+			return err
+		}
+		mutate(&state)
+		return system.WriteJSON(Path(root), state)
+	})
 }
 
 func dayOf(moment time.Time) string {

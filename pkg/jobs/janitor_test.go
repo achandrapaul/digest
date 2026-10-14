@@ -29,9 +29,9 @@ func seedReviewClone(t *testing.T, root string, ref review.PRRef) {
 
 func TestReapReviewClones(t *testing.T) {
 	root := t.TempDir()
-	merged := review.PRRef{Repo: "console", Number: 1, URL: "u-merged"}
-	closed := review.PRRef{Repo: "console", Number: 2, URL: "u-closed"}
-	open := review.PRRef{Repo: "web-console", Number: 1, URL: "u-open"}
+	merged := review.PRRef{Repo: "control", Number: 1, URL: "u-merged"}
+	closed := review.PRRef{Repo: "control", Number: 2, URL: "u-closed"}
+	open := review.PRRef{Repo: "web-control", Number: 1, URL: "u-open"}
 	for _, ref := range []review.PRRef{merged, closed, open} {
 		seedReviewClone(t, root, ref)
 	}
@@ -89,7 +89,7 @@ func TestReapReviewClonesMissingRoot(t *testing.T) {
 
 func TestReapReviewClonesKeepsClonesWhenLookupFails(t *testing.T) {
 	root := t.TempDir()
-	ref := review.PRRef{Repo: "console", Number: 9, URL: "u-9"}
+	ref := review.PRRef{Repo: "control", Number: 9, URL: "u-9"}
 	seedReviewClone(t, root, ref)
 	original := lookupPRStates
 	lookupPRStates = func(ctx context.Context, refs []review.PRRef) (map[string]string, error) {
@@ -107,7 +107,7 @@ func TestReapReviewClonesKeepsClonesWhenLookupFails(t *testing.T) {
 
 func TestReapReviewClonesReportsMissingState(t *testing.T) {
 	root := t.TempDir()
-	ref := review.PRRef{Repo: "console", Number: 9, URL: "u-9"}
+	ref := review.PRRef{Repo: "control", Number: 9, URL: "u-9"}
 	seedReviewClone(t, root, ref)
 	original := lookupPRStates
 	lookupPRStates = func(ctx context.Context, refs []review.PRRef) (map[string]string, error) {
@@ -122,7 +122,7 @@ func TestReapReviewClonesReportsMissingState(t *testing.T) {
 
 func TestReapReviewClonesSkipsRunningReviews(t *testing.T) {
 	root := t.TempDir()
-	ref := review.PRRef{Repo: "console", Number: 3, URL: "u-running"}
+	ref := review.PRRef{Repo: "control", Number: 3, URL: "u-running"}
 	seedReviewClone(t, root, ref)
 	if err := os.WriteFile(filepath.Join(review.StateDir(root, ref), "review.pid"), []byte(strconv.Itoa(os.Getpid())), 0644); err != nil {
 		t.Fatal(err)
@@ -159,9 +159,9 @@ func ageReviewClone(t *testing.T, root string, ref review.PRRef, age time.Durati
 
 func TestReapReviewClonesRemovesIdleClonesWhateverTheirState(t *testing.T) {
 	root := t.TempDir()
-	idle := review.PRRef{Repo: "console", Number: 4, URL: "u-idle"}
-	fresh := review.PRRef{Repo: "console", Number: 5, URL: "u-fresh"}
-	running := review.PRRef{Repo: "console", Number: 6, URL: "u-running"}
+	idle := review.PRRef{Repo: "control", Number: 4, URL: "u-idle"}
+	fresh := review.PRRef{Repo: "control", Number: 5, URL: "u-fresh"}
+	running := review.PRRef{Repo: "control", Number: 6, URL: "u-running"}
 	for _, ref := range []review.PRRef{idle, fresh, running} {
 		seedReviewClone(t, root, ref)
 	}
@@ -205,8 +205,8 @@ func seedPartialClone(t *testing.T, root string, ref review.PRRef) string {
 
 func TestReapReviewClonesRemovesLeftoverPartialClones(t *testing.T) {
 	root := t.TempDir()
-	withoutState := seedPartialClone(t, root, review.PRRef{Repo: "console", Number: 7})
-	stoppedRef := review.PRRef{Repo: "console", Number: 8, URL: "u-stopped"}
+	withoutState := seedPartialClone(t, root, review.PRRef{Repo: "control", Number: 7})
+	stoppedRef := review.PRRef{Repo: "control", Number: 8, URL: "u-stopped"}
 	if err := review.WriteMeta(review.StateDir(root, stoppedRef), review.Meta{Ref: stoppedRef}); err != nil {
 		t.Fatal(err)
 	}
@@ -240,7 +240,7 @@ func TestReapReviewClonesRemovesLeftoverPartialClones(t *testing.T) {
 
 func TestReapReviewClonesKeepsThePartialCloneOfARunningReview(t *testing.T) {
 	root := t.TempDir()
-	ref := review.PRRef{Repo: "console", Number: 3, URL: "u-running"}
+	ref := review.PRRef{Repo: "control", Number: 3, URL: "u-running"}
 	if err := review.WriteMeta(review.StateDir(root, ref), review.Meta{Ref: ref}); err != nil {
 		t.Fatal(err)
 	}
@@ -256,7 +256,7 @@ func TestReapReviewClonesKeepsThePartialCloneOfARunningReview(t *testing.T) {
 
 func TestReapingAReviewCloneRemovesItsPartialFolder(t *testing.T) {
 	root := t.TempDir()
-	ref := review.PRRef{Repo: "console", Number: 1, URL: "u-merged"}
+	ref := review.PRRef{Repo: "control", Number: 1, URL: "u-merged"}
 	seedReviewClone(t, root, ref)
 	partialDir := seedPartialClone(t, root, ref)
 	if action, failure := (reviewFolders{ref: ref, stateDir: review.StateDir(root, ref), cloneDir: review.CloneDir(root, ref)}).remove("merged", false); action == "" || failure != "" {
@@ -269,12 +269,12 @@ func TestReapingAReviewCloneRemovesItsPartialFolder(t *testing.T) {
 
 func TestReapReviewClonesHandlesLegacyFolderNames(t *testing.T) {
 	root := t.TempDir()
-	ref := review.PRRef{Owner: "o", Repo: "console", Number: 1, URL: "u-merged-legacy"}
-	legacyClone := filepath.Join(root, "console_1")
+	ref := review.PRRef{Owner: "o", Repo: "control", Number: 1, URL: "u-merged-legacy"}
+	legacyClone := filepath.Join(root, "control_1")
 	if err := os.MkdirAll(filepath.Join(legacyClone, ".git"), 0755); err != nil {
 		t.Fatal(err)
 	}
-	if err := review.WriteMeta(filepath.Join(root, ".state", "console_1"), review.Meta{Ref: ref}); err != nil {
+	if err := review.WriteMeta(filepath.Join(root, ".state", "control_1"), review.Meta{Ref: ref}); err != nil {
 		t.Fatal(err)
 	}
 	original := lookupPRStates
@@ -285,7 +285,7 @@ func TestReapReviewClonesHandlesLegacyFolderNames(t *testing.T) {
 	if actions, failures := reapReviewClones(root, false); len(actions) != 1 || len(failures) != 0 {
 		t.Fatalf("actions=%v failures=%v", actions, failures)
 	}
-	for _, leftover := range []string{legacyClone, review.CloneDir(root, ref), filepath.Join(root, ".state", "console_1")} {
+	for _, leftover := range []string{legacyClone, review.CloneDir(root, ref), filepath.Join(root, ".state", "control_1")} {
 		if _, err := os.Stat(leftover); err == nil {
 			t.Errorf("%s left behind", leftover)
 		}
@@ -314,11 +314,11 @@ func snapshotTree(t *testing.T, root string) map[string]string {
 
 func TestJanitorDryRunLeavesReviewFoldersUntouched(t *testing.T) {
 	root := t.TempDir()
-	legacy := review.PRRef{Owner: "o", Repo: "console", Number: 1, URL: "u-legacy"}
-	if err := os.MkdirAll(filepath.Join(root, "console_1", ".git"), 0755); err != nil {
+	legacy := review.PRRef{Owner: "o", Repo: "control", Number: 1, URL: "u-legacy"}
+	if err := os.MkdirAll(filepath.Join(root, "control_1", ".git"), 0755); err != nil {
 		t.Fatal(err)
 	}
-	if err := review.WriteMeta(filepath.Join(root, ".state", "console_1"), review.Meta{Ref: legacy}); err != nil {
+	if err := review.WriteMeta(filepath.Join(root, ".state", "control_1"), review.Meta{Ref: legacy}); err != nil {
 		t.Fatal(err)
 	}
 	stale := review.PRRef{Owner: "o", Repo: "api", Number: 2, URL: "u-stale"}
@@ -350,7 +350,7 @@ func TestJanitorDryRunLeavesReviewFoldersUntouched(t *testing.T) {
 		}
 	}
 	report := strings.Join(actions, "\n")
-	for _, want := range []string{filepath.Join(root, "console_1"), review.CloneDir(root, stale)} {
+	for _, want := range []string{filepath.Join(root, "control_1"), review.CloneDir(root, stale)} {
 		if !strings.Contains(report, "would remove review clone "+want+" (merged)") {
 			t.Errorf("dry run should report %s as merged:\n%s", want, report)
 		}

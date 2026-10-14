@@ -14,14 +14,14 @@ import (
 func TestApprovalNotesCreatedOnceWithRepoPRID(t *testing.T) {
 	noteStore := store.New(t.TempDir())
 	approvedAt := time.Date(2026, 10, 1, 15, 30, 0, 0, time.Local)
-	existing := &model.Note{Ref: "o/console#5", Summary: "Approved: Old", Status: model.StatusDone, Source: model.SourcePRReview}
+	existing := &model.Note{Ref: "o/control#5", Summary: "Approved: Old", Status: model.StatusDone, Source: model.SourcePRReview}
 	if err := noteStore.Save(existing); err != nil {
 		t.Fatal(err)
 	}
 	approvals := []review.ActivityPR{
-		{Number: 5, Title: "Old", URL: "https://github.com/o/console/pull/5", Repository: "console", State: "APPROVED", ReviewedAt: approvedAt},
-		{Number: 6, Title: "Fix date picker", URL: "https://github.com/o/console/pull/6", Repository: "console", State: "APPROVED", ReviewedAt: approvedAt},
-		{Number: 6, Title: "Fix date picker", URL: "https://github.com/o/console/pull/6", Repository: "console", State: "APPROVED", ReviewedAt: approvedAt},
+		{Number: 5, Title: "Old", URL: "https://github.com/o/control/pull/5", Repository: "control", State: "APPROVED", ReviewedAt: approvedAt},
+		{Number: 6, Title: "Fix date picker", URL: "https://github.com/o/control/pull/6", Repository: "control", State: "APPROVED", ReviewedAt: approvedAt},
+		{Number: 6, Title: "Fix date picker", URL: "https://github.com/o/control/pull/6", Repository: "control", State: "APPROVED", ReviewedAt: approvedAt},
 	}
 	known := indexPRNotes([]*model.Note{existing}, "")
 	for attempt := range 2 {
@@ -39,34 +39,34 @@ func TestApprovalNotesCreatedOnceWithRepoPRID(t *testing.T) {
 	}
 	var created *model.Note
 	for _, note := range notes {
-		if note.Ref == "o/console#6" {
+		if note.Ref == "o/control#6" {
 			created = note
 		}
 	}
 	if created == nil {
-		t.Fatalf("no o/console#6 note")
+		t.Fatalf("no o/control#6 note")
 	}
-	if created.ID == "console:6" || !strings.HasPrefix(filepath.Base(created.FilePath), created.ID) {
+	if created.ID == "control:6" || !strings.HasPrefix(filepath.Base(created.FilePath), created.ID) {
 		t.Errorf("new review note should get a timestamp id that names its file: id=%q file=%q", created.ID, created.FilePath)
 	}
-	if created.Summary != "Approved:console:6 Fix date picker" || created.Status != model.StatusDone || created.Source != model.SourcePRReview || created.Repo != "console" {
+	if created.Summary != "Approved:control:6 Fix date picker" || created.Status != model.StatusDone || created.Source != model.SourcePRReview || created.Repo != "control" {
 		t.Errorf("note = %+v", created)
 	}
-	if !created.Updated.Equal(approvedAt) || created.Body != "https://github.com/o/console/pull/6" {
+	if !created.Updated.Equal(approvedAt) || created.Body != "https://github.com/o/control/pull/6" {
 		t.Errorf("updated=%v body=%q", created.Updated, created.Body)
 	}
 }
 
 func TestApprovalNotesExactIDMatch(t *testing.T) {
 	noteStore := store.New(t.TempDir())
-	if err := noteStore.Save(&model.Note{ID: "console:19162", Summary: "x", Status: model.StatusDone}); err != nil {
+	if err := noteStore.Save(&model.Note{ID: "control:19162", Summary: "x", Status: model.StatusDone}); err != nil {
 		t.Fatal(err)
 	}
-	approvals := []review.ActivityPR{{Number: 1, Title: "One", URL: "https://github.com/o/console/pull/1", Repository: "console", State: "APPROVED", ReviewedAt: time.Now()}}
+	approvals := []review.ActivityPR{{Number: 1, Title: "One", URL: "https://github.com/o/control/pull/1", Repository: "control", State: "APPROVED", ReviewedAt: time.Now()}}
 	reviewNotesCmd(noteStore, approvals)()
 	notes, _ := noteStore.List()
 	if len(notes) != 2 {
-		t.Errorf("console:1 was treated as existing; notes = %d", len(notes))
+		t.Errorf("control:1 was treated as existing; notes = %d", len(notes))
 	}
 }
 
@@ -78,12 +78,12 @@ func TestApprovalNotesNothingToDo(t *testing.T) {
 
 func TestReviewNoteSummaryIncludesRepoAndNumber(t *testing.T) {
 	cases := map[string]string{
-		"APPROVED":          "Approved:console:6 Fix",
-		"CHANGES_REQUESTED": "Reviewed: RequestedChanges:console:6 Fix",
-		"COMMENTED":         "Reviewed: Commented:console:6 Fix",
+		"APPROVED":          "Approved:control:6 Fix",
+		"CHANGES_REQUESTED": "Reviewed: RequestedChanges:control:6 Fix",
+		"COMMENTED":         "Reviewed: Commented:control:6 Fix",
 	}
 	for state, want := range cases {
-		if got := reviewNoteSummary(state, "console", 6, "Fix"); got != want {
+		if got := reviewNoteSummary(state, "control", 6, "Fix"); got != want {
 			t.Errorf("%s: got %q, want %q", state, got, want)
 		}
 	}
@@ -93,15 +93,15 @@ func TestReopenApprovedNotesMatchesNewAndLegacySummary(t *testing.T) {
 	noteStore := store.New(t.TempDir())
 	approvedAt := time.Now().Add(-time.Hour)
 	approved := []*model.Note{
-		{Ref: prNoteRef("", "console", 7), Summary: "Approved:console:7 New", Status: model.StatusDone, Source: model.SourcePRReview, Updated: approvedAt},
-		{Ref: prNoteRef("", "console", 8), Summary: "Approved: Legacy", Status: model.StatusDone, Source: model.SourcePRReview, Updated: approvedAt},
+		{Ref: prNoteRef("", "control", 7), Summary: "Approved:control:7 New", Status: model.StatusDone, Source: model.SourcePRReview, Updated: approvedAt},
+		{Ref: prNoteRef("", "control", 8), Summary: "Approved: Legacy", Status: model.StatusDone, Source: model.SourcePRReview, Updated: approvedAt},
 	}
 	for _, note := range approved {
 		if err := noteStore.Save(note); err != nil {
 			t.Fatal(err)
 		}
 	}
-	pending := []GitPRItem{{Number: 7, Repository: "console"}, {Number: 8, Repository: "console"}}
+	pending := []GitPRItem{{Number: 7, Repository: "control"}, {Number: 8, Repository: "control"}}
 	msg := knownReopenApprovedNotesCmd(noteStore, indexPRNotes(approved, ""), pending, time.Now())()
 	loaded, ok := msg.(notesChangedMsg)
 	if !ok || loaded.err != nil {

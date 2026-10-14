@@ -9,7 +9,7 @@ import (
 
 func TestDismissClearsAFailedRunButNotARunningOne(t *testing.T) {
 	root := t.TempDir()
-	ref := PRRef{Host: "github.com", Owner: "o", Repo: "console", Number: 1, URL: "https://github.com/o/console/pull/1"}
+	ref := PRRef{Host: "github.com", Owner: "o", Repo: "control", Number: 1, URL: "https://github.com/o/control/pull/1"}
 	dir := StateDir(root, ref)
 	if err := WriteMeta(dir, Meta{Ref: ref}); err != nil {
 		t.Fatal(err)

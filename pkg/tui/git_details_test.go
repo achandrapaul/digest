@@ -17,9 +17,9 @@ func mixedGitDetailsModel(t *testing.T) Model {
 	t.Helper()
 	m := gitDetailsModel(t, 0)
 	m.git.gitPopupRepo.Items = []GitPRItem{
-		{Title: "reviewed", Kind: "Reviewed", URL: "https://github.com/o/console/pull/1"},
-		{Title: "assigned", Kind: "Assigned", URL: "https://github.com/o/console/pull/2"},
-		{Title: "commit", Kind: "Commit", URL: "https://github.com/o/console/commit/abc"},
+		{Title: "reviewed", Kind: "Reviewed", URL: "https://github.com/o/control/pull/1"},
+		{Title: "assigned", Kind: "Assigned", URL: "https://github.com/o/control/pull/2"},
+		{Title: "commit", Kind: "Commit", URL: "https://github.com/o/control/commit/abc"},
 	}
 	return m
 }
@@ -54,7 +54,7 @@ func TestGitDetailsUpMovesTheCursorAndEnterOpensTheItem(t *testing.T) {
 		t.Fatalf("selected = %d, want 0", m.git.gitPopupCursor.selected)
 	}
 	m = press(t, m, tea.KeyMsg{Type: tea.KeyEnter})
-	if len(*opened) != 1 || (*opened)[0] != "https://github.com/o/console/pull/1" {
+	if len(*opened) != 1 || (*opened)[0] != "https://github.com/o/control/pull/1" {
 		t.Fatalf("opened = %v", *opened)
 	}
 	m.git.gitPopupRepo.Items = nil

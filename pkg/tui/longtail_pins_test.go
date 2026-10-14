@@ -87,7 +87,7 @@ func TestRefreshingRemindersReportsListAndRemoveFailures(t *testing.T) {
 func TestStaleGitSectionsAreIgnored(t *testing.T) {
 	m := syncTestModel(t)
 	m.git.ghReviewedToday = nil
-	m.applyGitDay(gitDaySectionMsg{generation: m.git.fetchGeneration + 1, reviewed: []GitPRItem{reviewedItem("console", 1)}})
+	m.applyGitDay(gitDaySectionMsg{generation: m.git.fetchGeneration + 1, reviewed: []GitPRItem{reviewedItem("control", 1)}})
 	m.applyMyPRs(gitMyPRsMsg{generation: m.git.fetchGeneration + 1, partOfSync: true, prs: []review.QueuedPR{myPR(4, nil)}})
 	if len(m.git.ghReviewedToday) != 0 || len(m.git.myPRs) != 0 {
 		t.Fatal("stale sections should not apply")
@@ -104,13 +104,13 @@ func TestMyPRsFromAFailedHostAreKept(t *testing.T) {
 
 func TestReviewedItemsWithoutARepoGoUnderGeneral(t *testing.T) {
 	m := syncTestModel(t)
-	m.git.ghReviewedToday = []GitPRItem{{Title: "x", Kind: "Reviewed", URL: "https://github.com/o/r/pull/1"}, reviewedItem("console", 2)}
+	m.git.ghReviewedToday = []GitPRItem{{Title: "x", Kind: "Reviewed", URL: "https://github.com/o/r/pull/1"}, reviewedItem("control", 2)}
 	m.rebuildGitRepoStats()
 	var names []string
 	for _, stat := range m.git.todayGitRepos {
 		names = append(names, stat.Name)
 	}
-	if strings.Join(names, ",") != "console,general" {
+	if strings.Join(names, ",") != "control,general" {
 		t.Fatalf("repos = %v", names)
 	}
 }

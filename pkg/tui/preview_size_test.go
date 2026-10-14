@@ -32,9 +32,9 @@ func modalHeight(t *testing.T, view string) int {
 func gitDetailsModel(t *testing.T, itemCount int) Model {
 	t.Helper()
 	m := selectionTestModel(t)
-	repo := &GitRepoStat{Name: "console"}
+	repo := &GitRepoStat{Name: "control"}
 	for index := range itemCount {
-		repo.Items = append(repo.Items, GitPRItem{Title: fmt.Sprintf("item-%02d", index), Kind: "Reviewed", URL: fmt.Sprintf("https://github.com/o/console/pull/%d", index)})
+		repo.Items = append(repo.Items, GitPRItem{Title: fmt.Sprintf("item-%02d", index), Kind: "Reviewed", URL: fmt.Sprintf("https://github.com/o/control/pull/%d", index)})
 	}
 	m.git.gitPopupRepo = repo
 	m.git.gitPopupTab = 0

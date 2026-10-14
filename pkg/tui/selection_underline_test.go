@@ -82,7 +82,7 @@ func TestSelectedRowsUnderlineTheWholeRightBlock(t *testing.T) {
 	assertUnderlinedRightBlock(t, "pending", m.renderPendingGitRow(&pending, true, 100), m.renderPendingGitRow(&pending, false, 100), stripANSI(joinTags(m.prTags(&pending, true))))
 	m.cfg.ShowTags = previousShowTags
 
-	repo := &GitRepoStat{Name: "console", Reviewed: 2, Assigned: 1}
+	repo := &GitRepoStat{Name: "control", Reviewed: 2, Assigned: 1}
 	wantStats := "1 assigned · 2 reviewed"
 	if m.cfg.DailyCommitsEnabled() {
 		wantStats += " · 0 commits"

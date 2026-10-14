@@ -303,18 +303,18 @@ func fakeTmuxOnPath(t *testing.T, script string) {
 func TestOpenInNvimRunsTmuxNewWindow(t *testing.T) {
 	argsFile := filepath.Join(t.TempDir(), "args")
 	fakeTmuxOnPath(t, `echo "$@" > `+argsFile)
-	if err := realOpenInNvim("/clone/dir", review.PRRef{Repo: "console", Number: 7}); err != nil {
+	if err := realOpenInNvim("/clone/dir", review.PRRef{Repo: "control", Number: 7}); err != nil {
 		t.Fatal(err)
 	}
 	args, _ := os.ReadFile(argsFile)
-	if strings.TrimSpace(string(args)) != "new-window -c /clone/dir -n console#7 nvim ." {
+	if strings.TrimSpace(string(args)) != "new-window -c /clone/dir -n control#7 nvim ." {
 		t.Fatalf("tmux args = %q", args)
 	}
 }
 
 func TestOpenInNvimReportsTmuxOutputOnFailure(t *testing.T) {
 	fakeTmuxOnPath(t, `echo "no server running"; exit 1`)
-	err := realOpenInNvim("/clone/dir", review.PRRef{Repo: "console", Number: 7})
+	err := realOpenInNvim("/clone/dir", review.PRRef{Repo: "control", Number: 7})
 	if err == nil || err.Error() != "tmux new-window: no server running" {
 		t.Fatalf("err = %v", err)
 	}

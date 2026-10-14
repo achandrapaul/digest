@@ -190,7 +190,7 @@ func TestGitCacheIsWrittenOncePerSyncOffTheUIThread(t *testing.T) {
 	for _, msg := range []tea.Msg{
 		gitDaySectionMsg{generation: generation, day: gitDayYesterday},
 		gitPendingMsg{generation: generation, pending: []GitPRItem{pendingItem(1)}},
-		gitDaySectionMsg{generation: generation, day: gitDayToday, date: today, reviewed: []GitPRItem{reviewedItem("console", 2)}},
+		gitDaySectionMsg{generation: generation, day: gitDayToday, date: today, reviewed: []GitPRItem{reviewedItem("control", 2)}},
 		gitMyPRsMsg{generation: generation, partOfSync: true},
 		commitsLoadedMsg{generation: m.git.commitsGeneration},
 	} {

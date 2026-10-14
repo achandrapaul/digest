@@ -4,6 +4,7 @@ import (
 	"os"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -182,5 +183,58 @@ func TestGroupByTagRoundTripsAndStaysOptional(t *testing.T) {
 	}
 	if data, _ := os.ReadFile(Path(root)); strings.Contains(string(data), "group_by_tag") {
 		t.Errorf("grouping off should not be written: %s", data)
+	}
+}
+
+func TestUpdateKeepsFieldsItDoesNotTouch(t *testing.T) {
+	root := t.TempDir()
+	if err := Save(root, State{Streak: 3, GroupByTag: true}); err != nil {
+		t.Fatal(err)
+	}
+	location := TUILocation{PID: 42, TmuxSocket: "/tmp/tmux-501/default", TmuxPane: "%3", Terminal: "com.mitchellh.ghostty"}
+	if err := Update(root, func(state *State) { state.TUILocation = &location }); err != nil {
+		t.Fatal(err)
+	}
+	loaded, _, err := Load(root)
+	if err != nil || loaded.Streak != 3 || !loaded.GroupByTag || loaded.TUILocation == nil || *loaded.TUILocation != location {
+		t.Fatalf("loaded = %+v, %v", loaded, err)
+	}
+	if err := Update(root, func(state *State) { state.TUILocation = nil }); err != nil {
+		t.Fatal(err)
+	}
+	content, _ := os.ReadFile(Path(root))
+	if strings.Contains(string(content), "tui_location") {
+		t.Errorf("cleared location still saved:\n%s", content)
+	}
+}
+
+func TestConcurrentUpdatesAreQueued(t *testing.T) {
+	root := t.TempDir()
+	if err := Save(root, State{}); err != nil {
+		t.Fatal(err)
+	}
+	const writers = 30
+	var group sync.WaitGroup
+	for range writers {
+		group.Go(func() {
+			if err := Update(root, func(state *State) { state.Streak++ }); err != nil {
+				t.Error(err)
+			}
+		})
+	}
+	group.Wait()
+	if loaded, _, _ := Load(root); loaded.Streak != writers {
+		t.Errorf("streak = %d, want %d", loaded.Streak, writers)
+	}
+}
+
+func TestUpdateRefusesACorruptFile(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(Path(root), []byte("{"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	called := false
+	if err := Update(root, func(*State) { called = true }); !IsCorrupt(err) || called {
+		t.Errorf("err = %v, called = %v", err, called)
 	}
 }

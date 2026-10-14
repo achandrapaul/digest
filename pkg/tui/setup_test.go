@@ -163,7 +163,7 @@ func TestSetupTakesAPastedListOfManyRoots(t *testing.T) {
 	m, _ = pressKey(t, m, "y")
 	m.setupInput.SetValue("")
 	var pastedLines, want []string
-	for _, repo := range []string{"team/admin-api", "team/console-e2e-tests", "team/monorepo", "team/monkey-service", "acme/php-service", "acme/console-gateway", "acme/accounts-service", "acme/recovery-service"} {
+	for _, repo := range []string{"team/admin-api", "team/control-e2e-tests", "team/monorepo", "team/monkey-service", "acme/php-service", "acme/control-gateway", "acme/accounts-service", "acme/recovery-service"} {
 		root := "~/Projects/git.example.com/" + repo + "/"
 		want = append(want, root)
 		pastedLines = append(pastedLines, "- "+root)

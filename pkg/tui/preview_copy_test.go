@@ -208,7 +208,7 @@ func TestCtrlYInPRPreviewCopiesTitleURLAndFindings(t *testing.T) {
 	if len(*copied) != 1 {
 		t.Fatalf("copied = %q", *copied)
 	}
-	for _, want := range []string{"Fix\nhttps://github.com/o/console/pull/7", "## Review findings", "C1", "H1"} {
+	for _, want := range []string{"Fix\nhttps://github.com/o/control/pull/7", "## Review findings", "C1", "H1"} {
 		if !strings.Contains((*copied)[0], want) {
 			t.Errorf("copy missing %q: %q", want, (*copied)[0])
 		}
@@ -221,7 +221,7 @@ func TestCtrlYInSearchPreviewCopiesTheNote(t *testing.T) {
 	m = press(t, m, tea.KeyMsg{Type: tea.KeyTab})
 	m = press(t, m, runes("n"))
 	press(t, m, tea.KeyMsg{Type: tea.KeyCtrlY})
-	if len(*copied) != 1 || (*copied)[0] != "Standup notes\n\nretried the Flaky console test twice" {
+	if len(*copied) != 1 || (*copied)[0] != "Standup notes\n\nretried the Flaky control test twice" {
 		t.Errorf("copied = %q", *copied)
 	}
 }

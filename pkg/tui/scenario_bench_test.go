@@ -66,7 +66,7 @@ func fixtureNote(index int, now time.Time) *model.Note {
 	created := now.Add(-time.Duration(index) * 17 * time.Minute)
 	body := fmt.Sprintf("Details for note %d.\nSome context about the work that was done today.", index)
 	if index%5 == 0 {
-		body += fmt.Sprintf("\nhttps://github.com/acme/console/pull/%d\nhttps://jira.example.com/browse/PROJ-%d", index, index)
+		body += fmt.Sprintf("\nhttps://github.com/acme/control/pull/%d\nhttps://jira.example.com/browse/PROJ-%d", index, index)
 	}
 	return &model.Note{
 		Created: created,
@@ -192,7 +192,7 @@ func BenchmarkScenarioLoadReviews(b *testing.B) {
 		root := b.TempDir()
 		var refs []review.PRRef
 		for number := 1; number <= reviews; number++ {
-			ref := review.PRRef{Host: "github.com", Owner: "acme", Repo: "console", Number: number, URL: fmt.Sprintf("https://github.com/acme/console/pull/%d", number)}
+			ref := review.PRRef{Host: "github.com", Owner: "acme", Repo: "control", Number: number, URL: fmt.Sprintf("https://github.com/acme/control/pull/%d", number)}
 			stateDir := review.StateDir(root, ref)
 			if err := review.WriteMeta(stateDir, review.Meta{Ref: ref, HeadSHA: "abc"}); err != nil {
 				b.Fatal(err)

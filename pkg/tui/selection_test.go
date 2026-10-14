@@ -28,7 +28,7 @@ func selectNavItem(t *testing.T, m *Model, key string) {
 }
 
 func pendingItem(number int) GitPRItem {
-	ref := review.PRRef{Host: "github.com", Owner: "o", Repo: "console", Number: number, URL: "https://github.com/o/console/pull/" + string(rune('0'+number))}
+	ref := review.PRRef{Host: "github.com", Owner: "o", Repo: "control", Number: number, URL: "https://github.com/o/control/pull/" + string(rune('0'+number))}
 	return sourcecontrol.NewPRItem(review.QueuedPR{Ref: ref, Title: "t", CIState: "SUCCESS"}, "Pending Review")
 }
 

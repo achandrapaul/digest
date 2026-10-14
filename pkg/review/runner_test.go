@@ -11,25 +11,27 @@ import (
 	"testing"
 	"time"
 
+	"github.com/achandrapaul/digest/pkg/notify"
+	"github.com/achandrapaul/digest/pkg/system"
 	"github.com/achandrapaul/digest/pkg/system/process"
 	"github.com/charmbracelet/log"
 )
 
 func TestRunWritesFindingsAndNotifies(t *testing.T) {
 	root := t.TempDir()
-	ref := PRRef{Host: "github.com", Owner: "o", Repo: "console", Number: 4, URL: "https://github.com/o/console/pull/4"}
+	ref := PRRef{Host: "github.com", Owner: "o", Repo: "control", Number: 4, URL: "https://github.com/o/control/pull/4"}
 
-	originalPrepare, originalNotify := prepareClone, sendNotification
+	originalPrepare, originalNotify := prepareClone, sendReviewNotification
 	prepareClone = func(ctx context.Context, ref PRRef, root string, logger *log.Logger, output io.Writer) (string, error) {
 		dir := CloneDir(root, ref)
 		return dir, os.MkdirAll(dir, 0755)
 	}
 	var notified []string
-	sendNotification = func(title, message, openURL string) error {
-		notified = append(notified, title)
+	sendReviewNotification = func(notification notify.Notification) error {
+		notified = append(notified, notification.Title)
 		return nil
 	}
-	defer func() { prepareClone, sendNotification = originalPrepare, originalNotify }()
+	defer func() { prepareClone, sendReviewNotification = originalPrepare, originalNotify }()
 
 	t.Setenv("GH_TOKEN", "secret-gh")
 	template := `test -z "$GH_TOKEN" && test "$(pwd -P)" = "$(cd {clone} && pwd -P)" && echo {url} && printf '{"recommendation":"COMMENT","findings":[{"severity":"high","title":"t"}]}'`
@@ -53,17 +55,17 @@ func TestRunWritesFindingsAndNotifies(t *testing.T) {
 
 func TestRunFailsWithoutFindings(t *testing.T) {
 	root := t.TempDir()
-	ref := PRRef{Repo: "console", Number: 5, URL: "u"}
-	originalPrepare, originalNotify := prepareClone, sendNotification
+	ref := PRRef{Repo: "control", Number: 5, URL: "u"}
+	originalPrepare, originalNotify := prepareClone, sendReviewNotification
 	prepareClone = func(ctx context.Context, ref PRRef, root string, logger *log.Logger, output io.Writer) (string, error) {
 		return root, nil
 	}
 	var notified []string
-	sendNotification = func(title, message, openURL string) error {
-		notified = append(notified, title)
+	sendReviewNotification = func(notification notify.Notification) error {
+		notified = append(notified, notification.Title)
 		return nil
 	}
-	defer func() { prepareClone, sendNotification = originalPrepare, originalNotify }()
+	defer func() { prepareClone, sendReviewNotification = originalPrepare, originalNotify }()
 
 	if err := Run(context.Background(), ref, root, "true", log.New(os.Stderr)); err == nil {
 		t.Errorf("expected error when findings are missing")
@@ -78,7 +80,7 @@ func TestRunFailsWithoutFindings(t *testing.T) {
 
 func TestReviewCommandStopsAtItsTimeout(t *testing.T) {
 	root := t.TempDir()
-	ref := PRRef{Repo: "console", Number: 6, URL: "u"}
+	ref := PRRef{Repo: "control", Number: 6, URL: "u"}
 	originalPrepare, originalNotify, originalTimeout := prepareClone, sendNotification, reviewCommandTimeout
 	prepareClone = func(ctx context.Context, ref PRRef, root string, logger *log.Logger, output io.Writer) (string, error) {
 		return root, nil
@@ -97,7 +99,7 @@ func TestReviewCommandStopsAtItsTimeout(t *testing.T) {
 
 func TestCancelledRunStopsTheReviewCommand(t *testing.T) {
 	root := t.TempDir()
-	ref := PRRef{Repo: "console", Number: 7, URL: "u"}
+	ref := PRRef{Repo: "control", Number: 7, URL: "u"}
 	originalPrepare, originalNotify := prepareClone, sendNotification
 	prepareClone = func(ctx context.Context, ref PRRef, root string, logger *log.Logger, output io.Writer) (string, error) {
 		return root, nil
@@ -114,7 +116,7 @@ func TestCancelledRunStopsTheReviewCommand(t *testing.T) {
 
 func TestCloneAndInstallStopAtTheirTimeout(t *testing.T) {
 	root := t.TempDir()
-	ref := PRRef{Repo: "console", Number: 8, URL: "u"}
+	ref := PRRef{Repo: "control", Number: 8, URL: "u"}
 	originalPrepare, originalNotify, originalTimeout := prepareClone, sendNotification, cloneTimeout
 	prepareClone = func(ctx context.Context, ref PRRef, root string, logger *log.Logger, output io.Writer) (string, error) {
 		<-ctx.Done()
@@ -178,7 +180,7 @@ func stubReviewSideEffects(t *testing.T) {
 func TestRunSavesTheFindingsJSONPrintedOnStdout(t *testing.T) {
 	stubReviewSideEffects(t)
 	root := t.TempDir()
-	ref := PRRef{Repo: "console", Number: 12, URL: "u"}
+	ref := PRRef{Repo: "control", Number: 12, URL: "u"}
 	var streamed strings.Builder
 	template := `printf '\n  {"recommendation":"APPROVE","findings":[{"severity":"low","title":"nit"}]}\n'`
 	if err := run(context.Background(), ref, root, template, log.New(io.Discard), &streamed, io.Discard); err != nil {
@@ -199,7 +201,7 @@ func TestRunSavesTheFindingsJSONPrintedOnStdout(t *testing.T) {
 func TestRunTakesTheOutermostObjectFromChattyStdout(t *testing.T) {
 	stubReviewSideEffects(t)
 	root := t.TempDir()
-	ref := PRRef{Repo: "console", Number: 13, URL: "u"}
+	ref := PRRef{Repo: "control", Number: 13, URL: "u"}
 	template := `echo 'Here are the findings:'; printf '{"recommendation":"COMMENT","findings":[{"severity":"high","title":"t","body":"{x}"}]}'; echo ' done'`
 	if err := run(context.Background(), ref, root, template, log.New(io.Discard), io.Discard, io.Discard); err != nil {
 		t.Fatal(err)
@@ -213,7 +215,7 @@ func TestRunTakesTheOutermostObjectFromChattyStdout(t *testing.T) {
 func TestRunRejectsStdoutWithoutFindingsJSON(t *testing.T) {
 	stubReviewSideEffects(t)
 	root := t.TempDir()
-	ref := PRRef{Repo: "console", Number: 14, URL: "u"}
+	ref := PRRef{Repo: "control", Number: 14, URL: "u"}
 	err := run(context.Background(), ref, root, "echo 'review complete, no json here {oops'", log.New(io.Discard), io.Discard, io.Discard)
 	if !errors.Is(err, ErrNoFindingsJSON) || err.Error() != "review produced no findings JSON" {
 		t.Errorf("err = %v", err)
@@ -243,12 +245,34 @@ func TestReviewCommandDropsTheLegacyFindingsTarget(t *testing.T) {
 func TestRunWithLegacyTemplateStillSavesStdoutFindings(t *testing.T) {
 	stubReviewSideEffects(t)
 	root := t.TempDir()
-	ref := PRRef{Repo: "console", Number: 15, URL: "u"}
+	ref := PRRef{Repo: "control", Number: 15, URL: "u"}
 	template := `test -z "$(echo --emit-to {findings})" && printf '{"recommendation":"COMMENT","findings":[]}'`
 	if err := run(context.Background(), ref, root, template, log.New(io.Discard), io.Discard, io.Discard); err != nil {
 		t.Fatal(err)
 	}
 	if report, err := Load(StateDir(root, ref)); err != nil || report.Recommendation != "COMMENT" {
 		t.Errorf("report = %+v err = %v", report, err)
+	}
+}
+
+func TestReviewNotificationClickFocusesTheRunningDigest(t *testing.T) {
+	root := t.TempDir()
+	ref := PRRef{Host: "github.com", Owner: "acme", Repo: "control", Number: 4, URL: "https://github.com/acme/control/pull/4"}
+	if err := WriteMeta(StateDir(root, ref), Meta{Ref: ref, Title: "fix: Bob's header"}); err != nil {
+		t.Fatal(err)
+	}
+	executable, _ := os.Executable()
+	notification := reviewNotification("PR reviewed", "done", ref, root)
+	want := system.ShellQuote(executable) + " focus " + system.ShellQuote("acme:control:fix: Bob's header")
+	if notification.Execute != want || notification.OpenURL != "" {
+		t.Errorf("notification = %+v, want Execute %q", notification, want)
+	}
+}
+
+func TestReviewNotificationWithoutATitleOpensThePR(t *testing.T) {
+	ref := PRRef{Owner: "o", Repo: "control", Number: 4, URL: "https://github.com/o/control/pull/4"}
+	notification := reviewNotification("PR review failed", "boom", ref, t.TempDir())
+	if notification.OpenURL != ref.URL || notification.Execute != "" {
+		t.Errorf("notification = %+v", notification)
 	}
 }

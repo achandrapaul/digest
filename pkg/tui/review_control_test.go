@@ -99,7 +99,7 @@ func TestDOnRunningReviewRowStopsIt(t *testing.T) {
 	if m.mode != ViewReviewRunConfirm {
 		t.Fatalf("mode=%v", m.mode)
 	}
-	if !strings.Contains(m.View(), "console:1") {
+	if !strings.Contains(m.View(), "control:1") {
 		t.Errorf("confirm dialog does not name the review")
 	}
 	m = press(t, m, tea.KeyMsg{Type: tea.KeyEnter})

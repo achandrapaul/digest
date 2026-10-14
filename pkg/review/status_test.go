@@ -9,7 +9,7 @@ import (
 
 func TestStateOf(t *testing.T) {
 	root := t.TempDir()
-	ref := PRRef{Repo: "console", Number: 1, URL: "u1"}
+	ref := PRRef{Repo: "control", Number: 1, URL: "u1"}
 	pr := QueuedPR{Ref: ref}
 	if StateOf(pr, root) != StatePending {
 		t.Errorf("want pending")
@@ -62,7 +62,7 @@ func TestNotifyApprovedTransitions(t *testing.T) {
 
 func TestStateOfFailed(t *testing.T) {
 	root := t.TempDir()
-	ref := PRRef{Repo: "console", Number: 2, URL: "u2"}
+	ref := PRRef{Repo: "control", Number: 2, URL: "u2"}
 	pr := QueuedPR{Ref: ref}
 	writeFile(t, filepath.Join(StateDir(root, ref), exitFile), "1")
 	if StateOf(pr, root) != StateFailed {

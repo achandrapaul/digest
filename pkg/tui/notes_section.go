@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/achandrapaul/digest/pkg/appstate"
 	"github.com/achandrapaul/digest/pkg/automation"
 	"github.com/achandrapaul/digest/pkg/model"
 	"github.com/achandrapaul/digest/pkg/store"
@@ -1071,7 +1072,8 @@ func (m Model) toggleTagGroups(tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if !m.appStateKnown {
 		return m, nil
 	}
-	return m, saveAppStateCmd(m.cfg.Root(), m.appState)
+	groupByTag := m.appState.GroupByTag
+	return m, saveAppStateCmd(m.cfg.Root(), func(stored *appstate.State) { stored.GroupByTag = groupByTag })
 }
 
 func gatherByTag(notes []*model.Note) []*model.Note {

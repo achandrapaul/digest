@@ -9,7 +9,7 @@ import (
 )
 
 func pendingCreatedOn(number int, created time.Time) GitPRItem {
-	return sourcecontrol.NewPRItem(review.QueuedPR{Ref: prRef("console", number), CreatedAt: created, UpdatedAt: created}, "Pending Review")
+	return sourcecontrol.NewPRItem(review.QueuedPR{Ref: prRef("control", number), CreatedAt: created, UpdatedAt: created}, "Pending Review")
 }
 
 func outOfOrderPending() []GitPRItem {

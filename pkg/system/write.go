@@ -14,7 +14,10 @@ import (
 	"github.com/achandrapaul/digest/pkg/paths"
 )
 
-const logExtension = ".log"
+const (
+	logExtension  = ".log"
+	lockExtension = ".lock"
+)
 
 var (
 	ErrUnlock     = errors.New("could not unlock file")
@@ -59,7 +62,7 @@ func Protected(path string) bool {
 		return false
 	}
 	path = cleanRoot(path)
-	if !within(path, protection.root) || strings.HasSuffix(path, logExtension) {
+	if !within(path, protection.root) || strings.HasSuffix(path, logExtension) || strings.HasSuffix(path, lockExtension) {
 		return false
 	}
 	for _, folder := range protection.except {

@@ -1,6 +1,11 @@
 #!/bin/sh
 unset $(git rev-parse --local-env-vars) GIT_AUTHOR_NAME GIT_AUTHOR_EMAIL GIT_AUTHOR_DATE
+
+if ! mise run lint; then
+	printf '\033[31m✗\033[0m linting failed, commit aborted\n' >&2
+	exit 1
+fi
 if ! mise run test; then
-	printf '\033[31m✗\033[0m tests failed, commit aborted (git commit --no-verify skips this check)\n' >&2
+	printf '\033[31m✗\033[0m tests failed, commit aborted\n' >&2
 	exit 1
 fi

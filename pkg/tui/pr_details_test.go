@@ -17,7 +17,7 @@ func detailedPRModel(t *testing.T) Model {
 	pr.CIState = "FAILURE"
 	pr.JiraKey = "PROJ-42"
 	pr.CodeOwner = true
-	pr.OwnerTeams = []string{"@o/console-team", "@o/platform"}
+	pr.OwnerTeams = []string{"@o/control-team", "@o/platform"}
 	pr.Additions, pr.Deletions, pr.ChangedFiles = 12, 3, 2
 	pr.RequestedAt = time.Now().Add(-2 * time.Hour)
 	m.cfg.JiraBaseURL = "https://jira.example.com/browse/"
@@ -34,7 +34,7 @@ func TestPRDetailsTabShowsAuthorCIJiraAndOwners(t *testing.T) {
 		"**Author:** octocat",
 		"**CI:** FAILURE",
 		"**Jira:** [PROJ-42](https://jira.example.com/browse/PROJ-42)",
-		"**Code owners requested:** @o/console-team, @o/platform",
+		"**Code owners requested:** @o/control-team, @o/platform",
 		"+12 / -3 in 2 files",
 	} {
 		if !strings.Contains(details, want) {
@@ -42,7 +42,7 @@ func TestPRDetailsTabShowsAuthorCIJiraAndOwners(t *testing.T) {
 		}
 	}
 	view := stripANSI(m.View())
-	for _, want := range []string{"octocat", "FAILURE", "PROJ-42", "@o/console-team"} {
+	for _, want := range []string{"octocat", "FAILURE", "PROJ-42", "@o/control-team"} {
 		if !strings.Contains(view, want) {
 			t.Errorf("rendered Details tab missing %q", want)
 		}

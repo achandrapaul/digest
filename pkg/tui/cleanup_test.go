@@ -101,7 +101,7 @@ func TestNewPendingPRsReadTheirReviewStateOnce(t *testing.T) {
 		return original(stateDir)
 	}
 	t.Cleanup(func() { readLocalReview = original })
-	fresh := []GitPRItem{m.git.ghPendingPRs[0], sourcecontrol.NewPRItem(review.QueuedPR{Ref: prRef("console", 8), Title: "New"}, "Pending Review")}
+	fresh := []GitPRItem{m.git.ghPendingPRs[0], sourcecontrol.NewPRItem(review.QueuedPR{Ref: prRef("control", 8), Title: "New"}, "Pending Review")}
 	m.applyGitPending(gitPendingMsg{generation: m.git.fetchGeneration, pending: fresh})
 	m.View()
 	if reads != 2 {
@@ -192,7 +192,7 @@ func writeBragExit(t *testing.T, m Model, id, code string) {
 func TestRecordedReviewNotesSkipReloadingTheStore(t *testing.T) {
 	m := syncTestModel(t)
 	reviewedAt := time.Now().Add(-time.Hour)
-	approval := []review.ActivityPR{{Number: 4, Title: "Same", URL: prRef("console", 4).URL, Repository: "console", State: "APPROVED", ReviewedAt: reviewedAt}}
+	approval := []review.ActivityPR{{Number: 4, Title: "Same", URL: prRef("control", 4).URL, Repository: "control", State: "APPROVED", ReviewedAt: reviewedAt}}
 	if changed, ok := reviewNotesCmd(m.store, approval)().(notesChangedMsg); !ok || len(changed.notes) != 1 {
 		t.Fatal("a new review should send back only the note it saved")
 	}

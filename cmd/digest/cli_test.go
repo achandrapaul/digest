@@ -222,3 +222,24 @@ func TestNoteAddRejectsEmptyTextAndUnknownSubcommands(t *testing.T) {
 		}
 	}
 }
+
+func TestFocusRejectsABadSelector(t *testing.T) {
+	configPath, _ := writeTestConfig(t, "")
+	for _, args := range [][]string{{"focus"}, {"focus", "org:repo"}} {
+		output, code := runDigest(t, nil, append([]string{"--config", configPath}, args...)...)
+		if code != 1 || !strings.Contains(output, "Usage: digest focus <org>:<repo>:<pr title>") {
+			t.Errorf("%v: exit %d:\n%s", args, code, output)
+		}
+	}
+}
+
+func TestFocusWithoutARunningDigestWritesNoFocusFile(t *testing.T) {
+	configPath, digestRoot := writeTestConfig(t, "")
+	t.Cleanup(func() { _ = system.UnlockTree(digestRoot) })
+	if output, code := runDigest(t, nil, "--config", configPath, "focus", "o:r:fix: a title"); code != 0 {
+		t.Fatalf("exit %d:\n%s", code, output)
+	}
+	if system.Exists(filepath.Join(digestRoot, ".state", "focus.json")) {
+		t.Error("focus file written without a running digest")
+	}
+}

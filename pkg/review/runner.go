@@ -14,6 +14,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/achandrapaul/digest/pkg/focus"
+	"github.com/achandrapaul/digest/pkg/notify"
 	"github.com/achandrapaul/digest/pkg/system"
 	"github.com/achandrapaul/digest/pkg/system/process"
 
@@ -58,9 +60,27 @@ func findingsJSON(output []byte) ([]byte, error) {
 func Run(ctx context.Context, ref PRRef, root, commandTemplate string, logger *log.Logger) error {
 	err := run(ctx, ref, root, commandTemplate, logger, os.Stdout, os.Stderr)
 	if err != nil {
-		_ = sendNotification("PR review failed", fmt.Sprintf("%s #%d: %v", ref.Repo, ref.Number, err), ref.URL)
+		_ = sendReviewNotification(reviewNotification("PR review failed", fmt.Sprintf("%s #%d: %v", ref.Repo, ref.Number, err), ref, root))
 	}
 	return err
+}
+
+var sendReviewNotification = notify.Send
+
+func reviewNotification(title, message string, ref PRRef, root string) notify.Notification {
+	notification := notify.Notification{Title: title, Message: message, OpenURL: ref.URL}
+	meta, err := ReadMeta(StateDir(root, ref))
+	if err != nil || meta.Title == "" {
+		return notification
+	}
+	selector, err := focus.Parse(ref.Owner + ":" + ref.Repo + ":" + meta.Title)
+	executable, executableErr := os.Executable()
+	if err != nil || executableErr != nil {
+		return notification
+	}
+	notification.OpenURL = ""
+	notification.Execute = system.ShellQuote(executable) + " focus " + system.ShellQuote(selector.String())
+	return notification
 }
 
 var parentPID = os.Getppid
@@ -172,7 +192,7 @@ func run(ctx context.Context, ref PRRef, root, commandTemplate string, logger *l
 	}
 	logger.Info("Review finished", "findings", len(report.Findings), "recommendation", report.Recommendation)
 	message := fmt.Sprintf("%s #%d: %d findings, %s", ref.Repo, ref.Number, len(report.Findings), report.Recommendation)
-	if err := sendNotification("PR reviewed", message, ref.URL); err != nil {
+	if err := sendReviewNotification(reviewNotification("PR reviewed", message, ref, root)); err != nil {
 		logger.Warn("Notification failed", "err", err)
 	}
 	return nil

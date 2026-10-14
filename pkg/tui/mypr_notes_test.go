@@ -15,7 +15,7 @@ import (
 
 func myPR(number int, mutate func(*review.QueuedPR)) review.QueuedPR {
 	pr := review.QueuedPR{
-		Ref:       review.PRRef{Host: "github.com", Owner: "org", Repo: "console", Number: number, URL: "https://github.com/org/console/pull/" + string(rune('0'+number))},
+		Ref:       review.PRRef{Host: "github.com", Owner: "org", Repo: "control", Number: number, URL: "https://github.com/org/control/pull/" + string(rune('0'+number))},
 		Title:     "Fix picker",
 		Body:      "Fixes the date picker",
 		Author:    "me",
@@ -59,7 +59,7 @@ func TestMyPRNoteCreatedWithLinkDescriptionAndUpdates(t *testing.T) {
 	})
 	msg := runMyPRNotes(t, noteStore, seenPath, []review.QueuedPR{pr}, nil, now)
 	note := onlyMyPRNote(t, noteStore)
-	if note.Ref != "org/console#4" || note.ID != store.NoteID(pr.CreatedAt) || !note.Created.Equal(pr.CreatedAt) || note.Summary != "Own:OPEN:org:console:Fix picker" || note.Source != model.SourceMyPR || note.Status != model.StatusActive || note.Repo != "console" {
+	if note.Ref != "org/control#4" || note.ID != store.NoteID(pr.CreatedAt) || !note.Created.Equal(pr.CreatedAt) || note.Summary != "Own:OPEN:org:control:Fix picker" || note.Source != model.SourceMyPR || note.Status != model.StatusActive || note.Repo != "control" {
 		t.Errorf("note = %+v", note)
 	}
 	lines := strings.Split(note.Body, "\n")
@@ -121,7 +121,7 @@ func TestMyPRNoteAppendsNewestFirstAndReplacesDescription(t *testing.T) {
 	if note.Body != want {
 		t.Errorf("body =\n%s\nwant\n%s", note.Body, want)
 	}
-	if note.Summary != "Own:OPEN:org:console:Fix picker for real" {
+	if note.Summary != "Own:OPEN:org:control:Fix picker for real" {
 		t.Errorf("summary = %q", note.Summary)
 	}
 }
@@ -135,7 +135,7 @@ func TestMyPRNoteClosedMarksDoneAndForgetsPR(t *testing.T) {
 	openID := onlyMyPRNote(t, noteStore).ID
 	msg := runMyPRNotes(t, noteStore, seenPath, nil, map[string]string{pr.Ref.URL: "MERGED"}, now.Add(time.Hour))
 	note := onlyMyPRNote(t, noteStore)
-	if note.Summary != "Own:MERGED:org:console:Fix picker" || note.ID != openID {
+	if note.Summary != "Own:MERGED:org:control:Fix picker" || note.ID != openID {
 		t.Errorf("summary = %q, id %q want %q", note.Summary, note.ID, openID)
 	}
 	if note.Status != model.StatusDone || !strings.Contains(note.Body, "## Updates\n\n- 2026-10-06 11:00 Merged\n- 2026-10-06 09:00 Opened") {
@@ -208,17 +208,17 @@ func TestMyPRSummaryFollowsDraftOpenAndClosed(t *testing.T) {
 	runMyPRNotes(t, noteStore, seenPath, []review.QueuedPR{draft}, nil, now)
 	note := onlyMyPRNote(t, noteStore)
 	id, body := note.ID, note.Body
-	if note.Summary != "Own:DRAFT:org:console:Fix picker" {
+	if note.Summary != "Own:DRAFT:org:control:Fix picker" {
 		t.Fatalf("draft summary = %q", note.Summary)
 	}
 	runMyPRNotes(t, noteStore, seenPath, []review.QueuedPR{myPR(4, nil)}, nil, now.Add(time.Hour))
 	note = onlyMyPRNote(t, noteStore)
-	if note.Summary != "Own:OPEN:org:console:Fix picker" || note.ID != id {
+	if note.Summary != "Own:OPEN:org:control:Fix picker" || note.ID != id {
 		t.Fatalf("ready summary = %q id = %q", note.Summary, note.ID)
 	}
 	runMyPRNotes(t, noteStore, seenPath, nil, map[string]string{draft.Ref.URL: "CLOSED"}, now.Add(2*time.Hour))
 	note = onlyMyPRNote(t, noteStore)
-	if note.Summary != "Own:CLOSED:org:console:Fix picker" || note.ID != id {
+	if note.Summary != "Own:CLOSED:org:control:Fix picker" || note.ID != id {
 		t.Errorf("closed summary = %q id = %q", note.Summary, note.ID)
 	}
 	if head, _ := splitMyPRBody(note.Body); !strings.HasPrefix(body, head) {
@@ -229,9 +229,9 @@ func TestMyPRSummaryFollowsDraftOpenAndClosed(t *testing.T) {
 func TestMyPRTitleReadsOwnAndOldSummaries(t *testing.T) {
 	ref := myPR(4, nil).Ref
 	cases := map[string]string{
-		"Own:OPEN:org:console:Fix: the picker":  "Fix: the picker",
-		"Own:MERGED:org:console:Fix picker":     "Fix picker",
-		"NewPR: org:console:4: Fix: the picker": "Fix: the picker",
+		"Own:OPEN:org:control:Fix: the picker":  "Fix: the picker",
+		"Own:MERGED:org:control:Fix picker":     "Fix picker",
+		"NewPR: org:control:4: Fix: the picker": "Fix: the picker",
 		"something else":                        "",
 	}
 	for summary, want := range cases {

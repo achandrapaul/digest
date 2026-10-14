@@ -18,8 +18,8 @@ func searchTestModel(t *testing.T) Model {
 	now := time.Now()
 	m.notes = []*model.Note{
 		{ID: "a", Summary: "Fix flaky test", Source: model.SourceManual, Status: model.StatusActive, Updated: now},
-		{ID: "b", Summary: "Standup notes", Body: "retried the Flaky console test twice", Source: model.SourceStandup, Status: model.StatusDone, Updated: now.Add(-48 * time.Hour)},
-		{ID: "c", Summary: "Approved: console#12", Source: model.SourcePRReview, Subject: "console", Status: model.StatusDone, Updated: now.Add(-24 * time.Hour)},
+		{ID: "b", Summary: "Standup notes", Body: "retried the Flaky control test twice", Source: model.SourceStandup, Status: model.StatusDone, Updated: now.Add(-48 * time.Hour)},
+		{ID: "c", Summary: "Approved: control#12", Source: model.SourcePRReview, Subject: "control", Status: model.StatusDone, Updated: now.Add(-24 * time.Hour)},
 		{ID: "d", Summary: "Archived flaky", Source: model.SourceManual, Status: model.StatusArchived, Updated: now},
 		{ID: "e", Summary: "Inbox flaky", Source: model.SourceManual, Status: model.StatusArchived, Updated: now},
 	}
@@ -57,9 +57,9 @@ func TestSearchResultsFilterAndSort(t *testing.T) {
 		"flaky":              "a,b",
 		"tag:pr-review":      "c",
 		"tag:manual":         "a",
-		"tag:console":        "c",
+		"tag:control":        "c",
 		"flaky tag:standup":  "b",
-		"console tag:manual": "",
+		"control tag:manual": "",
 	} {
 		m.searchInput.SetValue(query)
 		if got := resultIDs(m.searchResults()); got != want {
@@ -102,7 +102,7 @@ func TestSearchModalRows(t *testing.T) {
 		t.Errorf("modal not near top:\n%s", strings.Join(lines[:4], "\n"))
 	}
 	view := strings.Join(lines, "\n")
-	for _, want := range []string{"today", "Fix flaky test", "#manual", "2 days ago", "#standup", "DONE", "retried the Flaky console test twice"} {
+	for _, want := range []string{"today", "Fix flaky test", "#manual", "2 days ago", "#standup", "DONE", "retried the Flaky control test twice"} {
 		if !strings.Contains(view, want) {
 			t.Errorf("missing %q:\n%s", want, view)
 		}
@@ -168,7 +168,7 @@ func TestSearchPreviewCycleAndEdit(t *testing.T) {
 	}
 	m = press(t, m, runes("n"))
 	view := stripANSI(m.View())
-	if m.searchPreviewNote().ID != "b" || !strings.Contains(view, "PREVIEW NOTE") || strings.Contains(view, "SEARCH PREVIEW") || !strings.Contains(view, "retried the Flaky console test") {
+	if m.searchPreviewNote().ID != "b" || !strings.Contains(view, "PREVIEW NOTE") || strings.Contains(view, "SEARCH PREVIEW") || !strings.Contains(view, "retried the Flaky control test") {
 		t.Fatalf("after n = %s:\n%s", m.searchPreviewNote().ID, view)
 	}
 	m = press(t, m, runes("n"))

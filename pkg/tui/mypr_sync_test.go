@@ -15,7 +15,7 @@ func myOpenPR(repo string, number int, branch, ci string) review.QueuedPR {
 func TestMyPRsSectionListsPRsAndCreatesNotes(t *testing.T) {
 	m := syncTestModel(t)
 	m.beginGitFetch()
-	next, cmd := m.Update(gitMyPRsMsg{generation: m.git.fetchGeneration, partOfSync: true, prs: []review.QueuedPR{myOpenPR("console", 4, "fix/a", "SUCCESS")}})
+	next, cmd := m.Update(gitMyPRsMsg{generation: m.git.fetchGeneration, partOfSync: true, prs: []review.QueuedPR{myOpenPR("control", 4, "fix/a", "SUCCESS")}})
 	m = next.(Model)
 	if len(m.git.myPRs) != 1 || m.git.myPRs[0].Ref.Number != 4 {
 		t.Fatalf("myPRs = %+v", m.git.myPRs)
@@ -39,7 +39,7 @@ func TestMyPRsSectionListsPRsAndCreatesNotes(t *testing.T) {
 	}
 	found := false
 	for _, note := range m.notes {
-		found = found || (note.Ref == "o/console#4" && note.Source == model.SourceMyPR)
+		found = found || (note.Ref == "o/control#4" && note.Source == model.SourceMyPR)
 	}
 	if !found {
 		t.Errorf("note missing from model: %+v", m.notes)
@@ -48,7 +48,7 @@ func TestMyPRsSectionListsPRsAndCreatesNotes(t *testing.T) {
 
 func TestMyPRsFailedFetchKeepsRows(t *testing.T) {
 	m := syncTestModel(t)
-	m.git.myPRs = []review.QueuedPR{myOpenPR("console", 4, "fix/a", "SUCCESS")}
+	m.git.myPRs = []review.QueuedPR{myOpenPR("control", 4, "fix/a", "SUCCESS")}
 	next, _ := m.Update(gitMyPRsMsg{generation: m.git.fetchGeneration, err: errors.New("offline"), failedHosts: []string{"github.com"}})
 	m = next.(Model)
 	if len(m.git.myPRs) != 1 || m.git.syncErrors[sectionMyPRs] == "" {
@@ -59,7 +59,7 @@ func TestMyPRsFailedFetchKeepsRows(t *testing.T) {
 func TestMyPRsCachedAndAlwaysRefetchedOnStartup(t *testing.T) {
 	m := syncTestModel(t)
 	m.applyGitPending(gitPendingMsg{generation: m.git.fetchGeneration, pending: []GitPRItem{pendingItem(1)}})
-	m.applyMyPRs(gitMyPRsMsg{generation: m.git.fetchGeneration, prs: []review.QueuedPR{myOpenPR("console", 4, "fix/a", "SUCCESS")}})
+	m.applyMyPRs(gitMyPRsMsg{generation: m.git.fetchGeneration, prs: []review.QueuedPR{myOpenPR("control", 4, "fix/a", "SUCCESS")}})
 	saveCacheNow(t, m)
 	fresh := NewModel(m.cfg, nil)
 	if len(fresh.git.myPRs) != 1 || fresh.git.myPRs[0].Body != "desc" {

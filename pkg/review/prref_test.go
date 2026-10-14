@@ -7,7 +7,7 @@ func TestParsePRURL(t *testing.T) {
 		raw  string
 		want PRRef
 	}{
-		{"https://github.com/acme/console/pull/19162", PRRef{Host: "github.com", Owner: "acme", Repo: "console", Number: 19162, URL: "https://github.com/acme/console/pull/19162"}},
+		{"https://github.com/acme/control/pull/19162", PRRef{Host: "github.com", Owner: "acme", Repo: "control", Number: 19162, URL: "https://github.com/acme/control/pull/19162"}},
 		{"https://git.example.com/team/monkey/pull/7/files", PRRef{Host: "git.example.com", Owner: "team", Repo: "monkey", Number: 7, URL: "https://git.example.com/team/monkey/pull/7"}},
 	}
 	for _, c := range cases {
@@ -30,14 +30,14 @@ func TestParsePRURLRejectsInvalid(t *testing.T) {
 }
 
 func TestPRRefNames(t *testing.T) {
-	ref := PRRef{Host: "github.com", Owner: "o", Repo: "console", Number: 12}
-	if ref.DirName() != "o_console_12" {
+	ref := PRRef{Host: "github.com", Owner: "o", Repo: "control", Number: 12}
+	if ref.DirName() != "o_control_12" {
 		t.Errorf("DirName = %q", ref.DirName())
 	}
-	if ref.NameWithOwner() != "o/console" {
+	if ref.NameWithOwner() != "o/control" {
 		t.Errorf("NameWithOwner = %q", ref.NameWithOwner())
 	}
-	if ref.CloneSpec() != "github.com/o/console" {
+	if ref.CloneSpec() != "github.com/o/control" {
 		t.Errorf("CloneSpec = %q", ref.CloneSpec())
 	}
 	ghe := PRRef{Host: "git.example.com", Owner: "team", Repo: "monkey", Number: 1}

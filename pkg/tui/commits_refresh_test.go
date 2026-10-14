@@ -19,7 +19,7 @@ func stubDayCommits(t *testing.T) *[]string {
 		var results []map[string][]GitPRItem
 		for _, date := range dates {
 			days = append(days, date.Format("2006-01-02"))
-			results = append(results, map[string][]GitPRItem{"console": {commitItem("console")}})
+			results = append(results, map[string][]GitPRItem{"control": {commitItem("control")}})
 		}
 		return results
 	}
@@ -42,7 +42,7 @@ func TestCommitsLoadWithoutGitSync(t *testing.T) {
 	}
 	next, _ := m.Update(msg)
 	updated := next.(Model)
-	if len(updated.git.localCommitsToday["console"]) != 1 || len(updated.git.localCommitsYesterday["console"]) != 1 {
+	if len(updated.git.localCommitsToday["control"]) != 1 || len(updated.git.localCommitsYesterday["control"]) != 1 {
 		t.Errorf("commits not applied: %+v %+v", updated.git.localCommitsToday, updated.git.localCommitsYesterday)
 	}
 	if updated.git.fetchGeneration != m.git.fetchGeneration {

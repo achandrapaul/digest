@@ -42,7 +42,7 @@ func TestWriteSearchCSV(t *testing.T) {
 	dir := t.TempDir()
 	updated := time.Date(2026, 10, 2, 9, 14, 0, 0, time.Local)
 	notes := []*model.Note{
-		{Summary: "Fix, flaky", Body: "line one\nline \"two\"", Source: model.SourcePRReview, Subject: "console", Status: model.StatusDone, Updated: updated, Created: updated.Add(-time.Hour)},
+		{Summary: "Fix, flaky", Body: "line one\nline \"two\"", Source: model.SourcePRReview, Subject: "control", Status: model.StatusDone, Updated: updated, Created: updated.Add(-time.Hour)},
 		{Summary: "Plain", Source: model.SourceManual, Status: model.StatusActive},
 	}
 	exportPath, err := writeSearchCSV(dir, notes, updated)
@@ -66,7 +66,7 @@ func TestWriteSearchCSV(t *testing.T) {
 	}
 	want := [][]string{
 		searchCSVHeader,
-		{"2026-10-02 09:14", "2026-10-02 08:14", "done", "pr-review;console", "Fix, flaky", "line one\nline \"two\""},
+		{"2026-10-02 09:14", "2026-10-02 08:14", "done", "pr-review;control", "Fix, flaky", "line one\nline \"two\""},
 		{"", "", "active", "manual", "Plain", ""},
 	}
 	if len(records) != len(want) {

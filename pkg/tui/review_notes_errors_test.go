@@ -45,8 +45,8 @@ func TestReviewNotesKeepGoingWhenLockingFails(t *testing.T) {
 
 func TestReviewNotesReportAKnownNoteWhoseFileIsGone(t *testing.T) {
 	noteStore := store.New(t.TempDir())
-	ref := prNoteRef("", "console", 7)
-	gone := &model.Note{Ref: ref, Summary: "Reviewed: Commented:console:7 Fix", Source: model.SourcePRReview, Status: model.StatusActive, Updated: time.Now().Add(-time.Hour)}
+	ref := prNoteRef("", "control", 7)
+	gone := &model.Note{Ref: ref, Summary: "Reviewed: Commented:control:7 Fix", Source: model.SourcePRReview, Status: model.StatusActive, Updated: time.Now().Add(-time.Hour)}
 	if err := noteStore.Save(gone); err != nil {
 		t.Fatal(err)
 	}
@@ -62,7 +62,7 @@ func TestReviewNotesReportAKnownNoteWhoseFileIsGone(t *testing.T) {
 
 func TestReviewNotesGiveALegacyNoteItsRef(t *testing.T) {
 	noteStore := store.New(t.TempDir())
-	legacy := &model.Note{ID: reviewNoteID("console", 7), Summary: "Reviewed: Commented:console:7 Fix", Source: model.SourcePRReview, Status: model.StatusActive, Updated: time.Now().Add(-time.Hour)}
+	legacy := &model.Note{ID: reviewNoteID("control", 7), Summary: "Reviewed: Commented:control:7 Fix", Source: model.SourcePRReview, Status: model.StatusActive, Updated: time.Now().Add(-time.Hour)}
 	if err := noteStore.Save(legacy); err != nil {
 		t.Fatal(err)
 	}
@@ -101,7 +101,7 @@ func TestIsRepeatOfLatestNeedsTheSameSummary(t *testing.T) {
 func approvedNoteIn(t *testing.T, noteStore *store.NoteStore) {
 	t.Helper()
 	approvedAt := time.Now().Add(-48 * time.Hour)
-	note := &model.Note{Ref: prNoteRef("", "console", 6), Created: approvedAt, Updated: approvedAt, Status: model.StatusDone, Source: model.SourcePRReview, Summary: "Approved:console:6 Fix"}
+	note := &model.Note{Ref: prNoteRef("", "control", 6), Created: approvedAt, Updated: approvedAt, Status: model.StatusDone, Source: model.SourcePRReview, Summary: "Approved:control:6 Fix"}
 	if err := noteStore.Save(note); err != nil {
 		t.Fatal(err)
 	}
@@ -123,7 +123,7 @@ func TestReopenApprovedNotesStopsOnASaveFailure(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { os.Chmod(monthDir, 0o700) })
-	msg, ok := reopenApprovedNotesCmd(noteStore, []GitPRItem{{Number: 6, Repository: "console"}}, time.Now())().(notesChangedMsg)
+	msg, ok := reopenApprovedNotesCmd(noteStore, []GitPRItem{{Number: 6, Repository: "control"}}, time.Now())().(notesChangedMsg)
 	if !ok || msg.err == nil || errors.Is(msg.err, store.ErrLockNote) {
 		t.Fatalf("msg = %#v", msg)
 	}
@@ -133,7 +133,7 @@ func TestReopenApprovedNotesKeepGoingWhenLockingFails(t *testing.T) {
 	m := lockedNoteModel(t)
 	approvedNoteIn(t, m.store)
 	failNoteFlagChanges(t, func(flags int) bool { return flags&unix.UF_IMMUTABLE != 0 })
-	pending := []GitPRItem{{Number: 6, Repository: "console", PR: &review.QueuedPR{}}}
+	pending := []GitPRItem{{Number: 6, Repository: "control", PR: &review.QueuedPR{}}}
 	msg, ok := reopenApprovedNotesCmd(m.store, pending, time.Now())().(notesChangedMsg)
 	if !ok || !errors.Is(msg.err, store.ErrLockNote) || len(msg.notes) != 1 || msg.notes[0].Status != model.StatusActive {
 		t.Fatalf("msg = %#v", msg)

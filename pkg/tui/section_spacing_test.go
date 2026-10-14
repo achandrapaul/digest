@@ -35,7 +35,7 @@ func TestSectionsAreEquallySpaced(t *testing.T) {
 		{Summary: "carried-note", Created: m.currentDate.AddDate(0, 0, -3)},
 	}
 	m.git.ghPendingPRs = []GitPRItem{
-		sourcecontrol.NewPRItem(review.QueuedPR{Ref: prRef("console", 1), Title: "One", CIState: "SUCCESS"}, "Pending Review"),
+		sourcecontrol.NewPRItem(review.QueuedPR{Ref: prRef("control", 1), Title: "One", CIState: "SUCCESS"}, "Pending Review"),
 		sourcecontrol.NewPRItem(review.QueuedPR{Ref: prRef("digest", 2), Title: "Two", CIState: "SUCCESS"}, "Pending Review"),
 	}
 	m.rebuildGitRepoStats()

@@ -24,7 +24,7 @@ func writeHugeLog(t *testing.T, path string) {
 
 func TestRunPreviewsReadOnlyTheLogTail(t *testing.T) {
 	root := t.TempDir()
-	ref := prRef("console", 7)
+	ref := prRef("control", 7)
 	writeHugeLog(t, filepath.Join(review.StateDir(root, ref), review.LogFile))
 	reviewPreview := reviewRunPreview(root, review.ReviewRun{Meta: review.Meta{Ref: ref}, Status: review.RunRunning})
 	writeHugeLog(t, filepath.Join(brag.StateDir(root, "2026-W40"), brag.RunLogFile))

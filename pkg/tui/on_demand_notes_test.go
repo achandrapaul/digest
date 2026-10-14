@@ -181,10 +181,10 @@ func TestHeaderCountsNotesClosedEarlierThisWeek(t *testing.T) {
 }
 
 func TestPRNoteFinderReadsNotesThatAreNotInMemory(t *testing.T) {
-	m := noteSaveModel(t, &model.Note{Summary: "Review console#6", Ref: "acme/console#6", Status: model.StatusDone, Source: model.SourcePRReview, Repo: "console", Created: time.Now().AddDate(0, -2, 0), Updated: time.Now().AddDate(0, -2, 0)})
+	m := noteSaveModel(t, &model.Note{Summary: "Review control#6", Ref: "acme/control#6", Status: model.StatusDone, Source: model.SourcePRReview, Repo: "control", Created: time.Now().AddDate(0, -2, 0), Updated: time.Now().AddDate(0, -2, 0)})
 	finder := newPRNoteFinder(m.store, "", m.prNoteSnapshot(""))
-	note, found, err := finder.find("acme/console#6", "console", 6, reviewNoteID("console", 6))
-	if err != nil || !found || note.Summary != "Review console#6" {
+	note, found, err := finder.find("acme/control#6", "control", 6, reviewNoteID("control", 6))
+	if err != nil || !found || note.Summary != "Review control#6" {
 		t.Errorf("finder should read old PR notes from disk: %+v %v %v", note, found, err)
 	}
 }

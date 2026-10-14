@@ -264,7 +264,7 @@ func TestReviewFolderRemovalReportsFailures(t *testing.T) {
 
 func TestReapPartialClonesReportsFailures(t *testing.T) {
 	root := t.TempDir()
-	partial := filepath.Join(root, "console_1"+review.PartialCloneSuffix)
+	partial := filepath.Join(root, "control_1"+review.PartialCloneSuffix)
 	if err := os.MkdirAll(filepath.Join(partial, "inner"), 0755); err != nil {
 		t.Fatal(err)
 	}
@@ -309,7 +309,7 @@ func TestJanitorReportsAFileThatVanishesBeforeItIsQuarantined(t *testing.T) {
 
 func TestJanitorRunLogsReviewClonesItRemoves(t *testing.T) {
 	reviewRoot := t.TempDir()
-	merged := review.PRRef{Repo: "console", Number: 1, URL: "u-merged"}
+	merged := review.PRRef{Repo: "control", Number: 1, URL: "u-merged"}
 	seedReviewClone(t, reviewRoot, merged)
 	original := lookupPRStates
 	lookupPRStates = func(ctx context.Context, refs []review.PRRef) (map[string]string, error) {
@@ -336,7 +336,7 @@ func TestJanitorRunLogsReviewClonesItRemoves(t *testing.T) {
 
 func TestReapReviewClonesReportsAnIdleCloneItCannotRemove(t *testing.T) {
 	root := t.TempDir()
-	ref := review.PRRef{Repo: "console", Number: 4, URL: "u-idle"}
+	ref := review.PRRef{Repo: "control", Number: 4, URL: "u-idle"}
 	seedReviewClone(t, root, ref)
 	inner := filepath.Join(review.CloneDir(root, ref), "inner")
 	if err := os.MkdirAll(inner, 0755); err != nil {

@@ -41,7 +41,7 @@ func TestSaveKeepsAnEditMadeWhileSaving(t *testing.T) {
 func approvedReviewNote(t *testing.T, m Model) *model.Note {
 	t.Helper()
 	approvedAt := time.Now().Add(-48 * time.Hour)
-	note := &model.Note{Ref: prNoteRef("", "console", 6), Created: approvedAt, Updated: approvedAt, Status: model.StatusDone, Source: model.SourcePRReview, Summary: "Approved:console:6 Fix", Body: "from memory"}
+	note := &model.Note{Ref: prNoteRef("", "control", 6), Created: approvedAt, Updated: approvedAt, Status: model.StatusDone, Source: model.SourcePRReview, Summary: "Approved:control:6 Fix", Body: "from memory"}
 	if err := m.store.Save(note); err != nil {
 		t.Fatal(err)
 	}
@@ -57,7 +57,7 @@ func TestBackgroundWriterOpensTheMatchedNoteByID(t *testing.T) {
 	if err := m.store.Save(onDisk); err != nil {
 		t.Fatal(err)
 	}
-	pending := []GitPRItem{{Number: 6, Repository: "console"}}
+	pending := []GitPRItem{{Number: 6, Repository: "control"}}
 	msg, ok := m.reopenApprovedNotesCmd(pending, time.Now())().(notesChangedMsg)
 	if !ok || msg.err != nil || len(msg.notes) != 1 {
 		t.Fatalf("msg = %#v", msg)
@@ -79,7 +79,7 @@ func TestBackgroundWriterReportsAGoneFile(t *testing.T) {
 	if err := m.store.Delete(onDisk); err != nil {
 		t.Fatal(err)
 	}
-	msg, _ := m.reopenApprovedNotesCmd([]GitPRItem{{Number: 6, Repository: "console"}}, time.Now())().(notesChangedMsg)
+	msg, _ := m.reopenApprovedNotesCmd([]GitPRItem{{Number: 6, Repository: "control"}}, time.Now())().(notesChangedMsg)
 	if !errors.Is(msg.err, os.ErrNotExist) || !strings.Contains(msg.err.Error(), inMemory.Ref) || len(msg.notes) != 0 {
 		t.Fatalf("a gone file should be reported with its ref and not recreated, got %#v", msg)
 	}
@@ -94,7 +94,7 @@ func TestBackgroundWriterReportsAGoneFile(t *testing.T) {
 
 func TestBackgroundWriterFindsANoteItWroteEarlier(t *testing.T) {
 	m := syncTestModel(t)
-	approval := []review.ActivityPR{{Number: 3, Title: "Once", URL: prRef("console", 3).URL, Repository: "console", State: "APPROVED", ReviewedAt: time.Now().Add(-time.Hour)}}
+	approval := []review.ActivityPR{{Number: 3, Title: "Once", URL: prRef("control", 3).URL, Repository: "control", State: "APPROVED", ReviewedAt: time.Now().Add(-time.Hour)}}
 	first, second := m.reviewNotesCmd(approval), m.reviewNotesCmd(approval)
 	first()
 	second()

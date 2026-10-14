@@ -25,7 +25,7 @@ func stubGraphQL(t *testing.T, respond func(host, query string) string) *[]strin
 }
 
 const samplePRNode = `{
-	"number": 6, "title": "PROJ-12 Fix date picker", "url": "https://github.com/o/console/pull/6", "state": "OPEN", "isDraft": false,
+	"number": 6, "title": "PROJ-12 Fix date picker", "url": "https://github.com/o/control/pull/6", "state": "OPEN", "isDraft": false,
 	"createdAt": "2026-10-01T10:00:00Z", "updatedAt": "2026-10-02T10:00:00Z", "additions": 3, "deletions": 1, "changedFiles": 1,
 	"headRefOid": "abc", "headRefName": "fix", "reviewDecision": "REVIEW_REQUIRED", "author": {"login": "dev"},
 	"commits": {"nodes": [{"commit": {"committedDate": "2026-10-02T09:00:00Z", "statusCheckRollup": {"contexts": {"nodes": [
@@ -40,13 +40,13 @@ const samplePRNode = `{
 
 func TestBuildSearchQuery(t *testing.T) {
 	query := buildSearchQuery([]PRSearch{
-		{Key: "pending0", Query: "is:pr review-requested:@me repo:o/console", First: 15, Details: true},
-		{Key: "direct0", Query: "is:pr user-review-requested:@me repo:o/console", First: 15},
+		{Key: "pending0", Query: "is:pr review-requested:@me repo:o/control", First: 15, Details: true},
+		{Key: "direct0", Query: "is:pr user-review-requested:@me repo:o/control", First: 15},
 	})
 	for _, want := range []string{
 		"fragment PRFields on PullRequest",
-		`pending0: search(type: ISSUE, first: 15, query: "is:pr review-requested:@me repo:o/console") { nodes { ... on PullRequest { ...PRFields } } }`,
-		`direct0: search(type: ISSUE, first: 15, query: "is:pr user-review-requested:@me repo:o/console") { nodes { ... on PullRequest { url } } }`,
+		`pending0: search(type: ISSUE, first: 15, query: "is:pr review-requested:@me repo:o/control") { nodes { ... on PullRequest { ...PRFields } } }`,
+		`direct0: search(type: ISSUE, first: 15, query: "is:pr user-review-requested:@me repo:o/control") { nodes { ... on PullRequest { url } } }`,
 		"viewer { login }",
 	} {
 		if !strings.Contains(query, want) {
@@ -63,7 +63,7 @@ func TestRunPRSearchesMapsDetails(t *testing.T) {
 	stubGraphQL(t, func(host, query string) string {
 		return `{"data": {"viewer": {"login": "me"},
 			"pending0": {"nodes": [` + samplePRNode + `]},
-			"direct0": {"nodes": [{"url": "https://github.com/o/console/pull/6"}, {}]}}}`
+			"direct0": {"nodes": [{"url": "https://github.com/o/control/pull/6"}, {}]}}}`
 	})
 	results, err := RunPRSearches(context.Background(), "github.com", []PRSearch{
 		{Key: "pending0", Kind: "pending", Query: "q", First: 15, Details: true},
@@ -77,7 +77,7 @@ func TestRunPRSearchesMapsDetails(t *testing.T) {
 		t.Fatalf("pending = %+v", pending)
 	}
 	pr := pending.PRs[0]
-	if pr.Ref.URL != "https://github.com/o/console/pull/6" || pr.CIState != "SUCCESS" || pr.JiraKey != "PROJ-12" || pr.Author != "dev" {
+	if pr.Ref.URL != "https://github.com/o/control/pull/6" || pr.CIState != "SUCCESS" || pr.JiraKey != "PROJ-12" || pr.Author != "dev" {
 		t.Errorf("pr = %+v", pr)
 	}
 	if pr.MyLastReviewState != "COMMENTED" || pr.LastReplyAt.IsZero() || pr.LastCommitAt.IsZero() {
@@ -202,8 +202,8 @@ func TestFetchPRStatesBatchesPerHost(t *testing.T) {
 		}
 		return `{"data": {"pr0": {"pullRequest": {"state": "OPEN"}}}}`
 	})
-	merged, _ := ParsePRURL("https://github.com/o/console/pull/1")
-	missing, _ := ParsePRURL("https://github.com/o/console/pull/2")
+	merged, _ := ParsePRURL("https://github.com/o/control/pull/1")
+	missing, _ := ParsePRURL("https://github.com/o/control/pull/2")
 	open, _ := ParsePRURL("https://git.example.com/team/svc/pull/3")
 	states, err := FetchPRStates(context.Background(), []PRRef{merged, missing, open})
 	if err != nil {
@@ -215,7 +215,7 @@ func TestFetchPRStatesBatchesPerHost(t *testing.T) {
 	if len(*queries) != 2 {
 		t.Errorf("requests = %d, want one per host", len(*queries))
 	}
-	if !strings.Contains(strings.Join(*queries, "\n"), `pr0: repository(owner: "o", name: "console") { pullRequest(number: 1) { state } }`) {
+	if !strings.Contains(strings.Join(*queries, "\n"), `pr0: repository(owner: "o", name: "control") { pullRequest(number: 1) { state } }`) {
 		t.Errorf("queries = %v", *queries)
 	}
 }
@@ -232,7 +232,7 @@ func TestParsePRDetailsFlagsExplicitViewerRequest(t *testing.T) {
 		{"someone else", []reviewRequestNode{{Typename: "User", Login: "mate"}}, false},
 	}
 	for _, c := range cases {
-		raw, _ := json.Marshal(prDetails{URL: "https://github.com/o/console/pull/6", ReviewRequests: c.requests})
+		raw, _ := json.Marshal(prDetails{URL: "https://github.com/o/control/pull/6", ReviewRequests: c.requests})
 		pr, err := ParsePRDetails(raw, "me")
 		if err != nil || pr.DirectRequest != c.want {
 			t.Errorf("%s: DirectRequest=%v want %v err=%v", c.name, pr.DirectRequest, c.want, err)

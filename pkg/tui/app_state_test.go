@@ -200,3 +200,19 @@ func TestBragListsWeeksFromTheStoredFirstNoteDate(t *testing.T) {
 		t.Errorf("brag should reach back to %d before notes finish loading, last row year %d", first.Year(), rows[len(rows)-1].year)
 	}
 }
+
+func TestAppStateSavesKeepFieldsOtherProcessesWrote(t *testing.T) {
+	now := time.Now()
+	m := appStateModel(t, &appstate.State{Streak: 1}, twoActiveNotes(now)...)
+	location := appstate.TUILocation{PID: 7, TmuxPane: "%9"}
+	if err := appstate.Update(m.cfg.Root(), func(state *appstate.State) { state.TUILocation = &location }); err != nil {
+		t.Fatal(err)
+	}
+	m = markDone(t, m, "first")
+	next, cmd := m.toggleTagGroups(tea.KeyMsg{})
+	applyAllMessages(next.(Model), cmd)
+	saved, _, err := appstate.Load(m.cfg.Root())
+	if err != nil || saved.TUILocation == nil || *saved.TUILocation != location || !saved.GroupByTag || saved.LastDoneDay != now.Format("2006-01-02") {
+		t.Fatalf("saved = %+v, %v", saved, err)
+	}
+}

@@ -197,6 +197,7 @@ type Model struct {
 	scrollPending      bool
 	frames             *dashboardFrameCache
 	selected           int
+	focusPending       bool
 	scrollOffset       int
 	ctrlCCount         int
 	ctrlCPressSequence int
@@ -533,6 +534,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if !isAnimationTick(msg) {
 		m.contentVersion++
 	}
+	if _, isFocusSignal := msg.(focusSignalMsg); isFocusSignal {
+		m.focusPending = true
+	}
 	next, cmd := m.handleMsg(msg)
 	updated, isModel := next.(Model)
 	if !isModel {
@@ -541,6 +545,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	updated.clearScreenErrorOffScreen()
 	if updated.mode == ViewDashboard {
 		updated.modeStack = nil
+	}
+	if updated.focusPending && !updated.editing() {
+		updated.focusPending = false
+		updated.applyFocusRequest()
 	}
 	if updated.scrollPending {
 		updated.settleScroll()
@@ -767,7 +775,13 @@ func Run(cfg *config.Config, startupErr error, configPath string, startInSetup b
 		return err
 	}
 	defer release()
+	if err := recordLocation(cfg.Root()); err != nil {
+		model.showError("STATE ERROR", err)
+	}
+	defer func() { _ = clearLocation(cfg.Root()) }()
 	p := tea.NewProgram(model, tea.WithAltScreen())
+	stopFocusSignal := listenFocusSignal(p)
+	defer stopFocusSignal()
 	_, err = p.Run()
 	return err
 }

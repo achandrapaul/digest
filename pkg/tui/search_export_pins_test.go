@@ -41,9 +41,9 @@ func TestSearchByDateHighlightsTheDateColumn(t *testing.T) {
 
 func TestSearchRowsShowUnmatchedTagsPlainly(t *testing.T) {
 	m := searchTestModel(t)
-	note := &model.Note{Summary: "Review", Source: model.SourcePRReview, Subject: "console", Status: model.StatusActive, Updated: time.Now()}
-	row := m.renderSearchRow(note, false, parseSearchQuery("tag:console"), 10, 80)
-	if !strings.Contains(row, tagStyle.Render("#pr-review")) || !strings.Contains(row, searchHighlightStyle.Render("#console")) {
+	note := &model.Note{Summary: "Review", Source: model.SourcePRReview, Subject: "control", Status: model.StatusActive, Updated: time.Now()}
+	row := m.renderSearchRow(note, false, parseSearchQuery("tag:control"), 10, 80)
+	if !strings.Contains(row, tagStyle.Render("#pr-review")) || !strings.Contains(row, searchHighlightStyle.Render("#control")) {
 		t.Fatalf("row = %q", row)
 	}
 }

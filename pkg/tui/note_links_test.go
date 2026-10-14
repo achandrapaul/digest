@@ -12,7 +12,7 @@ import (
 
 const (
 	docsLink   = "https://docs.example.com/guide"
-	pullLink   = "https://github.com/acme/console/pull/7"
+	pullLink   = "https://github.com/acme/control/pull/7"
 	ticketLink = "https://jira.example.com/browse/PROJ-1"
 )
 

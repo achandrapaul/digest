@@ -14,7 +14,7 @@ import (
 
 func locallyReviewedItem(t *testing.T, m *Model, number int, finishedAt time.Time, kind string, pr review.QueuedPR) GitPRItem {
 	t.Helper()
-	pr.Ref = prRef("console", number)
+	pr.Ref = prRef("control", number)
 	pr.CIState = "SUCCESS"
 	if !finishedAt.IsZero() {
 		dir := review.StateDir(m.reviewRoot(), pr.Ref)
@@ -88,7 +88,7 @@ func TestPRStatusTagText(t *testing.T) {
 
 func TestCachedPRKeepsMyReviewState(t *testing.T) {
 	m := syncTestModel(t)
-	pending := sourcecontrol.NewPRItem(review.QueuedPR{Ref: prRef("console", 5), CIState: "SUCCESS", MyLastReviewState: "COMMENTED", MyLastReviewAt: time.Now()}, "Pending Review")
+	pending := sourcecontrol.NewPRItem(review.QueuedPR{Ref: prRef("control", 5), CIState: "SUCCESS", MyLastReviewState: "COMMENTED", MyLastReviewAt: time.Now()}, "Pending Review")
 	m.applyGitPending(gitPendingMsg{generation: m.git.fetchGeneration, pending: []GitPRItem{pending}})
 	saveCacheNow(t, m)
 	fresh := NewModel(m.cfg, nil)
@@ -108,7 +108,7 @@ func TestFailedLocalReviewThenMyGitHubReview(t *testing.T) {
 		{failedAt.Add(-time.Hour), review.StateFailed},
 		{failedAt.Add(time.Hour), review.StateApproved},
 	} {
-		pr := review.QueuedPR{Ref: prRef("console", 300), CIState: "SUCCESS"}
+		pr := review.QueuedPR{Ref: prRef("control", 300), CIState: "SUCCESS"}
 		if !c.reviewedAt.IsZero() {
 			pr.MyLastReviewState, pr.MyLastReviewAt = "APPROVED", c.reviewedAt
 		}

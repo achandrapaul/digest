@@ -20,13 +20,13 @@ func makeRepo(t *testing.T, path string) string {
 
 func TestConfiguredRepoNames(t *testing.T) {
 	base := t.TempDir()
-	oneConsole := makeRepo(t, filepath.Join(base, "github.com", "o", "web-console"))
+	oneControl := makeRepo(t, filepath.Join(base, "github.com", "o", "web-control"))
 	makeRepo(t, filepath.Join(base, "github.com", "o", "unlisted"))
 	projects := filepath.Join(base, "projects")
 	makeRepo(t, filepath.Join(projects, "monkey"))
-	cfg := &config.Config{GitRepositoryRoots: []string{oneConsole + "/", projects}}
+	cfg := &config.Config{GitRepositoryRoots: []string{oneControl + "/", projects}}
 	names := ConfiguredRepoNames(cfg)
-	if !names["web-console"] || !names["monkey"] || names["unlisted"] || len(names) != 2 {
+	if !names["web-control"] || !names["monkey"] || names["unlisted"] || len(names) != 2 {
 		t.Errorf("names = %v", names)
 	}
 	if ConfiguredRepoNames(&config.Config{}) != nil {
@@ -35,15 +35,15 @@ func TestConfiguredRepoNames(t *testing.T) {
 }
 
 func TestFilterPRItemsAndApprovals(t *testing.T) {
-	allowed := map[string]bool{"console": true}
-	items := []PRItem{{Repository: "console"}, {Repository: "monkey"}, {Repository: "acme/console"}}
-	if kept := FilterPRItems(items, allowed); len(kept) != 2 || kept[0].Repository != "console" || kept[1].Repository != "acme/console" {
+	allowed := map[string]bool{"control": true}
+	items := []PRItem{{Repository: "control"}, {Repository: "monkey"}, {Repository: "acme/control"}}
+	if kept := FilterPRItems(items, allowed); len(kept) != 2 || kept[0].Repository != "control" || kept[1].Repository != "acme/control" {
 		t.Errorf("kept = %+v", kept)
 	}
 	if kept := FilterPRItems(items, nil); len(kept) != 3 {
 		t.Errorf("nil filter dropped items: %d", len(kept))
 	}
-	approvals := []review.ActivityPR{{Repository: "console", Number: 1}, {Repository: "monkey", Number: 2}}
+	approvals := []review.ActivityPR{{Repository: "control", Number: 1}, {Repository: "monkey", Number: 2}}
 	if kept := FilterReviewRecords(approvals, allowed); len(kept) != 1 || kept[0].Number != 1 {
 		t.Errorf("approvals = %+v", kept)
 	}
@@ -67,13 +67,13 @@ func TestLocalRepoPathsUsesOnlyRoots(t *testing.T) {
 }
 
 func TestDayResultOutsideRootsIsFiltered(t *testing.T) {
-	cfg := &config.Config{GitRepositoryRoots: []string{makeRepo(t, filepath.Join(t.TempDir(), "console"))}}
+	cfg := &config.Config{GitRepositoryRoots: []string{makeRepo(t, filepath.Join(t.TempDir(), "control"))}}
 	result := filterDayResult(DayResult{
 		Day:      Today,
-		Reviewed: []PRItem{{Repository: "console", Kind: ReviewedKind}, {Repository: "monkey", Kind: ReviewedKind}},
-		Reviews:  []review.ActivityPR{{Number: 1, Repository: "console", State: "APPROVED", ReviewedAt: time.Now()}, {Number: 2, Repository: "monkey", State: "APPROVED", ReviewedAt: time.Now()}},
+		Reviewed: []PRItem{{Repository: "control", Kind: ReviewedKind}, {Repository: "monkey", Kind: ReviewedKind}},
+		Reviews:  []review.ActivityPR{{Number: 1, Repository: "control", State: "APPROVED", ReviewedAt: time.Now()}, {Number: 2, Repository: "monkey", State: "APPROVED", ReviewedAt: time.Now()}},
 	}, ConfiguredRepoNames(cfg))
-	if len(result.Reviewed) != 1 || len(result.Reviews) != 1 || result.Reviews[0].Repository != "console" {
+	if len(result.Reviewed) != 1 || len(result.Reviews) != 1 || result.Reviews[0].Repository != "control" {
 		t.Errorf("filtered = %+v", result)
 	}
 }

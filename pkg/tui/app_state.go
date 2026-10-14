@@ -16,9 +16,9 @@ type appStateSavedMsg struct {
 	err error
 }
 
-func saveAppStateCmd(root string, state appstate.State) tea.Cmd {
+func saveAppStateCmd(root string, mutate func(*appstate.State)) tea.Cmd {
 	return func() tea.Msg {
-		return appStateSavedMsg{err: appstate.Save(root, state)}
+		return appStateSavedMsg{err: appstate.Update(root, mutate)}
 	}
 }
 
@@ -67,5 +67,7 @@ func (m *Model) appStateAfterSaves(saved []savedNoteResult) tea.Cmd {
 		return nil
 	}
 	m.appState = state
-	return saveAppStateCmd(m.cfg.Root(), state)
+	return saveAppStateCmd(m.cfg.Root(), func(stored *appstate.State) {
+		stored.FirstNoteCreated, stored.Streak, stored.LastDoneDay = state.FirstNoteCreated, state.Streak, state.LastDoneDay
+	})
 }

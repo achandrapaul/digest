@@ -22,7 +22,7 @@ func TestPlainTextRemovesTerminalControlSequences(t *testing.T) {
 
 func TestParsePRDetailsStripsControlSequences(t *testing.T) {
 	raw, _ := json.Marshal(map[string]any{
-		"number": 5, "title": hostileText, "body": hostileText, "url": "https://github.com/o/console/pull/5",
+		"number": 5, "title": hostileText, "body": hostileText, "url": "https://github.com/o/control/pull/5",
 		"headRefName": "feat/\x1b[2Jx", "author": map[string]any{"login": "a"},
 	})
 	pr, err := ParsePRDetails(raw, "me")

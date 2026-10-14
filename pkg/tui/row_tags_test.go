@@ -31,7 +31,7 @@ func assertOrder(t *testing.T, row string, parts ...string) {
 }
 
 func tagTestPR() *GitPRItem {
-	return &GitPRItem{Title: "Add trial state", Repository: "console", Number: 7, PR: &review.QueuedPR{
+	return &GitPRItem{Title: "Add trial state", Repository: "control", Number: 7, PR: &review.QueuedPR{
 		RequestedAt: time.Now().Add(-49 * time.Hour), Additions: 100, Deletions: 20, CodeOwner: true,
 	}}
 }

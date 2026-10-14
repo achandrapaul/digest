@@ -34,7 +34,7 @@ func reviewRunsModel(t *testing.T) (Model, review.PRRef, review.PRRef) {
 	t.Helper()
 	cfg := &config.Config{DigestRoot: t.TempDir(), GreenOnly: true, Jobs: []config.JobSpec{{Name: "janitor"}}}
 	root := cfg.ReviewRootDir()
-	running, failed := prRef("console", 1), prRef("web-console", 2)
+	running, failed := prRef("control", 1), prRef("web-control", 2)
 	seedReviewState(t, root, running, map[string]string{"review.pid": strconv.Itoa(os.Getpid())})
 	seedReviewState(t, root, failed, map[string]string{"review.exit": "1", "review.log": "boom: install failed"})
 	m := NewModel(cfg, nil)
@@ -54,7 +54,7 @@ func TestReviewRunsListedUnderJobsOnStartup(t *testing.T) {
 		t.Fatalf("nav keys = %s", joined)
 	}
 	body := m.renderDashboardBody()
-	for _, text := range []string{"console:1", "web-console:2", "reviewing...", "failed"} {
+	for _, text := range []string{"control:1", "web-control:2", "reviewing...", "failed"} {
 		if !strings.Contains(body, text) {
 			t.Errorf("dashboard missing %q", text)
 		}
@@ -94,7 +94,7 @@ func TestPRRowTagsFollowReviewState(t *testing.T) {
 	m, running, failed := reviewRunsModel(t)
 	runningPR := review.QueuedPR{Ref: running, CIState: "SUCCESS"}
 	failedPR := review.QueuedPR{Ref: failed, CIState: "SUCCESS"}
-	reReviewPR := review.QueuedPR{Ref: prRef("console", 3), CIState: "SUCCESS", MyLastReviewState: "APPROVED", MyLastReviewAt: time.Now()}
+	reReviewPR := review.QueuedPR{Ref: prRef("control", 3), CIState: "SUCCESS", MyLastReviewState: "APPROVED", MyLastReviewAt: time.Now()}
 	items := []GitPRItem{sourcecontrol.NewPRItem(runningPR, "Pending Review"), sourcecontrol.NewPRItem(failedPR, "Pending Review"), sourcecontrol.NewPRItem(reReviewPR, sourcecontrol.ReReviewKind)}
 	if !strings.Contains(m.renderPRTag(&items[0], false), "reviewing...") {
 		t.Errorf("running PR tag = %q", m.renderPRTag(&items[0], false))
@@ -109,12 +109,12 @@ func TestPRRowTagsFollowReviewState(t *testing.T) {
 
 func TestReReviewsFollowPendingInRepoGroup(t *testing.T) {
 	m := selectionTestModel(t)
-	pending := sourcecontrol.NewPRItem(review.QueuedPR{Ref: prRef("console", 10), CIState: "SUCCESS"}, "Pending Review")
-	otherRepo := sourcecontrol.NewPRItem(review.QueuedPR{Ref: prRef("web-console", 11), CIState: "SUCCESS"}, "Pending Review")
-	reReview := sourcecontrol.NewPRItem(review.QueuedPR{Ref: prRef("console", 12), CIState: "SUCCESS"}, sourcecontrol.ReReviewKind)
+	pending := sourcecontrol.NewPRItem(review.QueuedPR{Ref: prRef("control", 10), CIState: "SUCCESS"}, "Pending Review")
+	otherRepo := sourcecontrol.NewPRItem(review.QueuedPR{Ref: prRef("web-control", 11), CIState: "SUCCESS"}, "Pending Review")
+	reReview := sourcecontrol.NewPRItem(review.QueuedPR{Ref: prRef("control", 12), CIState: "SUCCESS"}, sourcecontrol.ReReviewKind)
 	m.applyGitPending(gitPendingMsg{generation: m.git.fetchGeneration, pending: []GitPRItem{pending, otherRepo, reReview}})
 	groups := m.getPendingGitGroups()
-	if len(groups) != 2 || groups[0].Name != "console" || len(groups[0].Items) != 2 || groups[0].Items[1].URL != reReview.URL {
+	if len(groups) != 2 || groups[0].Name != "control" || len(groups[0].Items) != 2 || groups[0].Items[1].URL != reReview.URL {
 		t.Fatalf("groups = %+v", groups)
 	}
 }

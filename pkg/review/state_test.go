@@ -10,11 +10,11 @@ import (
 )
 
 func TestDirs(t *testing.T) {
-	ref := PRRef{Repo: "console", Number: 5}
-	if CloneDir("/r", ref) != "/r/console_5" {
+	ref := PRRef{Repo: "control", Number: 5}
+	if CloneDir("/r", ref) != "/r/control_5" {
 		t.Errorf("CloneDir = %q", CloneDir("/r", ref))
 	}
-	if StateDir("/r", ref) != "/r/.state/console_5" {
+	if StateDir("/r", ref) != "/r/.state/control_5" {
 		t.Errorf("StateDir = %q", StateDir("/r", ref))
 	}
 }
@@ -63,7 +63,7 @@ func TestStatusDoneWithoutExitFile(t *testing.T) {
 
 func TestMetaRoundTrip(t *testing.T) {
 	dir := t.TempDir()
-	meta := Meta{Ref: PRRef{Repo: "console", Number: 3, URL: "u"}, HeadSHA: "abc"}
+	meta := Meta{Ref: PRRef{Repo: "control", Number: 3, URL: "u"}, HeadSHA: "abc"}
 	if err := WriteMeta(dir, meta); err != nil {
 		t.Fatal(err)
 	}
@@ -93,10 +93,10 @@ func seedRun(t *testing.T, root string, ref PRRef, files map[string]string, star
 func TestListRunsRunningAndFailedOnly(t *testing.T) {
 	root := t.TempDir()
 	base := time.Date(2026, 10, 1, 10, 0, 0, 0, time.UTC)
-	running := PRRef{Repo: "console", Number: 1, URL: "u1"}
-	failedOld := PRRef{Repo: "console", Number: 2, URL: "u2"}
-	failedNew := PRRef{Repo: "web-console", Number: 3, URL: "u3"}
-	done := PRRef{Repo: "console", Number: 4, URL: "u4"}
+	running := PRRef{Repo: "control", Number: 1, URL: "u1"}
+	failedOld := PRRef{Repo: "control", Number: 2, URL: "u2"}
+	failedNew := PRRef{Repo: "web-control", Number: 3, URL: "u3"}
+	done := PRRef{Repo: "control", Number: 4, URL: "u4"}
 	seedRun(t, root, failedOld, map[string]string{exitFile: "1"}, base)
 	seedRun(t, root, running, map[string]string{pidFile: strconv.Itoa(os.Getpid())}, base)
 	seedRun(t, root, failedNew, map[string]string{exitFile: "2"}, base.Add(time.Hour))
@@ -178,7 +178,7 @@ func TestSameRepoNameFromTwoOwnersGetsTwoFolders(t *testing.T) {
 
 func TestAdoptLegacyDirsMovesAMatchingReview(t *testing.T) {
 	root := t.TempDir()
-	ref := PRRef{Owner: "o", Repo: "console", Number: 9, URL: "https://github.com/o/console/pull/9"}
+	ref := PRRef{Owner: "o", Repo: "control", Number: 9, URL: "https://github.com/o/control/pull/9"}
 	legacyClone, legacyState := seedLegacyReview(t, root, ref)
 	AdoptLegacyDirs(root, ref)
 	if !CloneExists(root, ref) {

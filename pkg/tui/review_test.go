@@ -17,7 +17,7 @@ func reviewTestModel(t *testing.T) Model {
 	t.Helper()
 	cfg := &config.Config{DigestRoot: t.TempDir(), GreenOnly: true}
 	root := cfg.ReviewRootDir()
-	ref := review.PRRef{Host: "github.com", Owner: "o", Repo: "console", Number: 7, URL: "https://github.com/o/console/pull/7"}
+	ref := review.PRRef{Host: "github.com", Owner: "o", Repo: "control", Number: 7, URL: "https://github.com/o/control/pull/7"}
 	stateDir := review.StateDir(root, ref)
 	if err := os.MkdirAll(stateDir, 0755); err != nil {
 		t.Fatal(err)

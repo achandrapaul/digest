@@ -16,13 +16,13 @@ func makeRepo(t *testing.T, path string) string {
 
 func TestOldCacheIsFilteredOnLoad(t *testing.T) {
 	m := syncTestModel(t)
-	m.cfg.GitRepositoryRoots = []string{makeRepo(t, filepath.Join(t.TempDir(), "console"))}
-	cache := gitSyncCache{Date: m.currentDate.Format("2006-01-02"), Pending: []cachedGitItem{{Item: GitPRItem{Repository: "console"}}, {Item: GitPRItem{Repository: "monkey"}}}}
+	m.cfg.GitRepositoryRoots = []string{makeRepo(t, filepath.Join(t.TempDir(), "control"))}
+	cache := gitSyncCache{Date: m.currentDate.Format("2006-01-02"), Pending: []cachedGitItem{{Item: GitPRItem{Repository: "control"}}, {Item: GitPRItem{Repository: "monkey"}}}}
 	if err := saveGitCache(cache); err != nil {
 		t.Fatal(err)
 	}
 	fresh := NewModel(m.cfg, nil)
-	if len(fresh.git.ghPendingPRs) != 1 || fresh.git.ghPendingPRs[0].Repository != "console" {
+	if len(fresh.git.ghPendingPRs) != 1 || fresh.git.ghPendingPRs[0].Repository != "control" {
 		t.Errorf("pending = %+v", fresh.git.ghPendingPRs)
 	}
 }

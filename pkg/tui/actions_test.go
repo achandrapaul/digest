@@ -309,13 +309,13 @@ func TestRunningAutomationsDoNotHideTheMenuItems(t *testing.T) {
 func TestNotifyEntryRemembersThePRLinkOrTheTerminal(t *testing.T) {
 	t.Setenv("__CFBundleIdentifier", "com.example.terminal")
 	m, _ := actionsTestModel(t)
-	prNote := &model.Note{ID: "pr-note", Summary: "Review console #7", Body: "Review https://github.com/acme/console/pull/7 today", Created: m.currentDate, Source: model.SourcePRReview}
+	prNote := &model.Note{ID: "pr-note", Summary: "Review control #7", Body: "Review https://github.com/acme/control/pull/7 today", Created: m.currentDate, Source: model.SourcePRReview}
 	m.notes = append(m.notes, prNote)
 	selectNote(t, &m, "pr-note")
 	m = setNotify(t, m, "1")
 	selectNote(t, &m, "note-2")
 	m = setNotify(t, m, "1")
-	if entry, _ := notify.Load(m.cfg.Root(), "pr-note"); entry.OpenURL != "https://github.com/acme/console/pull/7" {
+	if entry, _ := notify.Load(m.cfg.Root(), "pr-note"); entry.OpenURL != "https://github.com/acme/control/pull/7" {
 		t.Errorf("pr note entry = %+v", entry)
 	}
 	if entry, _ := notify.Load(m.cfg.Root(), "note-2"); entry.OpenURL != "" || entry.Terminal != "com.example.terminal" {
@@ -407,7 +407,7 @@ func TestActionsKeyIsOnlyInTheShortcutsHelp(t *testing.T) {
 
 func TestNotifyEditStaysVisibleOnALongSummary(t *testing.T) {
 	m, _ := actionsTestModel(t)
-	long := "Gathered a new requirement. Need to create a ticket for 1console taskrouter search needs to be updated. EPIC: https://example.atlassian.net/browse/X-1"
+	long := "Gathered a new requirement. Need to create a ticket for 1control taskrouter search needs to be updated. EPIC: https://example.atlassian.net/browse/X-1"
 	m.notes = append(m.notes, &model.Note{ID: "long", Summary: long, Created: m.currentDate, Source: model.SourceManual})
 	selectNote(t, &m, "long")
 	m, _ = pressKey(t, m, "@")

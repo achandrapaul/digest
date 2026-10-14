@@ -14,7 +14,7 @@ import (
 
 func TestPrepareFreshClone(t *testing.T) {
 	root := t.TempDir()
-	ref := PRRef{Host: "github.com", Owner: "o", Repo: "console", Number: 9}
+	ref := PRRef{Host: "github.com", Owner: "o", Repo: "control", Number: 9}
 	stale := filepath.Join(CloneDir(root, ref), "stale.txt")
 	writeFile(t, stale, "old")
 
@@ -43,7 +43,7 @@ func TestPrepareFreshClone(t *testing.T) {
 		t.Fatalf("calls = %v", calls)
 	}
 	partial := dir + PartialCloneSuffix
-	if !strings.HasPrefix(calls[0], root+"|gh repo clone github.com/o/console "+partial) {
+	if !strings.HasPrefix(calls[0], root+"|gh repo clone github.com/o/control "+partial) {
 		t.Errorf("clone call = %q", calls[0])
 	}
 	if calls[1] != partial+"|gh pr checkout 9" {
@@ -56,7 +56,7 @@ func TestPrepareFreshClone(t *testing.T) {
 
 func TestCloneExistsOnlyAfterCheckoutSucceeds(t *testing.T) {
 	root := t.TempDir()
-	ref := PRRef{Host: "github.com", Owner: "o", Repo: "console", Number: 9}
+	ref := PRRef{Host: "github.com", Owner: "o", Repo: "control", Number: 9}
 	if CloneExists(root, ref) {
 		t.Fatal("no clone yet")
 	}
@@ -91,7 +91,7 @@ func TestCloneExistsOnlyAfterCheckoutSucceeds(t *testing.T) {
 
 func TestFreshCloneClearsALeftoverPartialFolder(t *testing.T) {
 	root := t.TempDir()
-	ref := PRRef{Host: "github.com", Owner: "o", Repo: "console", Number: 9}
+	ref := PRRef{Host: "github.com", Owner: "o", Repo: "control", Number: 9}
 	leftover := filepath.Join(CloneDir(root, ref)+PartialCloneSuffix, "leftover.txt")
 	writeFile(t, leftover, "old")
 	recordSteps(t, "")
@@ -124,7 +124,7 @@ func recordSteps(t *testing.T, failOn string) *[]string {
 
 func TestPrepareReusesAnExistingClone(t *testing.T) {
 	root := t.TempDir()
-	ref := PRRef{Host: "github.com", Owner: "o", Repo: "console", Number: 9}
+	ref := PRRef{Host: "github.com", Owner: "o", Repo: "control", Number: 9}
 	kept := filepath.Join(CloneDir(root, ref), "node_modules", "kept.txt")
 	writeFile(t, kept, "deps")
 	writeFile(t, filepath.Join(CloneDir(root, ref), ".git", "HEAD"), "ref")
@@ -149,7 +149,7 @@ func TestPrepareReusesAnExistingClone(t *testing.T) {
 
 func TestPrepareFallsBackToAFreshCloneWhenReuseFails(t *testing.T) {
 	root := t.TempDir()
-	ref := PRRef{Host: "github.com", Owner: "o", Repo: "console", Number: 9}
+	ref := PRRef{Host: "github.com", Owner: "o", Repo: "control", Number: 9}
 	writeFile(t, filepath.Join(CloneDir(root, ref), ".git", "HEAD"), "ref")
 	calls := recordSteps(t, "git reset")
 

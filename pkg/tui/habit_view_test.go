@@ -14,7 +14,7 @@ import (
 func tagRowsModel(t *testing.T) Model {
 	t.Helper()
 	m, _ := actionsTestModel(t)
-	review := &model.Note{ID: "note-review", Summary: "Review console#7", Created: m.currentDate.AddDate(0, 0, -12), Source: model.SourcePRReview}
+	review := &model.Note{ID: "note-review", Summary: "Review control#7", Created: m.currentDate.AddDate(0, 0, -12), Source: model.SourcePRReview}
 	if err := m.store.Save(review); err != nil {
 		t.Fatal(err)
 	}
@@ -52,7 +52,7 @@ func TestSelectedNoteTagsTakeOnlyTheirOwnWidth(t *testing.T) {
 
 func TestPRReviewNotesAndAlwaysModeShowEveryTag(t *testing.T) {
 	m := tagRowsModel(t)
-	if line := noteLine(m, "Review console#7"); !strings.Contains(line, "#pr-review") || !strings.Contains(line, "12d ago") {
+	if line := noteLine(m, "Review control#7"); !strings.Contains(line, "#pr-review") || !strings.Contains(line, "12d ago") {
 		t.Errorf("PR review notes always show their tags: %q", line)
 	}
 	always := tagRowsModel(t)

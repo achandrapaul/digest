@@ -56,19 +56,19 @@ func TestIntervalLabel(t *testing.T) {
 }
 
 func TestArgsGroupUnderDigest(t *testing.T) {
-	withURL := strings.Join(Args(Notification{Title: "PR reviewed", Message: "console #1", OpenURL: "https://x/pull/1"}), " ")
-	if withURL != "-title digest -subtitle PR reviewed -message console #1 -open https://x/pull/1" {
+	withURL := strings.Join(Args(Notification{Title: "PR reviewed", Message: "control #1", OpenURL: "https://x/pull/1"}), " ")
+	if withURL != "-title digest -subtitle PR reviewed -message control #1 -open https://x/pull/1" {
 		t.Errorf("with url = %q", withURL)
 	}
-	withoutURL := strings.Join(Args(Notification{Title: "PR reviewed", Message: "console #1"}), " ")
-	if withoutURL != "-title digest -subtitle PR reviewed -message console #1" {
+	withoutURL := strings.Join(Args(Notification{Title: "PR reviewed", Message: "control #1"}), " ")
+	if withoutURL != "-title digest -subtitle PR reviewed -message control #1" {
 		t.Errorf("without url = %q", withoutURL)
 	}
 }
 
 func TestArgsGroupRepeatsAndOpenURL(t *testing.T) {
-	args := strings.Join(Args(Notification{Title: "PR reviewed", Message: "console #1", OpenURL: "https://x/pull/1", Group: "note-1"}), " ")
-	if !strings.Contains(args, "-title digest -subtitle PR reviewed -message console #1") || !strings.Contains(args, "-open https://x/pull/1") || !strings.Contains(args, "-group note-1") {
+	args := strings.Join(Args(Notification{Title: "PR reviewed", Message: "control #1", OpenURL: "https://x/pull/1", Group: "note-1"}), " ")
+	if !strings.Contains(args, "-title digest -subtitle PR reviewed -message control #1") || !strings.Contains(args, "-open https://x/pull/1") || !strings.Contains(args, "-group note-1") {
 		t.Errorf("args = %q", args)
 	}
 	if bare := strings.Join(Args(Notification{Title: "t", Message: "m"}), " "); strings.Contains(bare, "-open") || strings.Contains(bare, "-group") {

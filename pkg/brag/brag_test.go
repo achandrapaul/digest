@@ -67,7 +67,7 @@ func TestBragFileRoundTrip(t *testing.T) {
 	root := t.TempDir()
 	week := WeekOf(localDate(2026, 10, 1))
 	created := localDate(2026, 10, 5)
-	entry := &Brag{Period: week, Created: created, Updated: created, SummarizedAt: created, Facts: "### PR reviews\n- Approved:console:6 Fix", Summary: "- Unblocked the date picker"}
+	entry := &Brag{Period: week, Created: created, Updated: created, SummarizedAt: created, Facts: "### PR reviews\n- Approved:control:6 Fix", Summary: "- Unblocked the date picker"}
 	if err := entry.Save(root); err != nil {
 		t.Fatal(err)
 	}
@@ -107,21 +107,21 @@ func TestBuildFacts(t *testing.T) {
 		{Summary: "Draft RFC", Status: model.StatusActive, Source: model.SourceManual, Created: inWeek, Updated: inWeek},
 		{Summary: "Synced repos", Status: model.StatusDone, Source: model.SourceRepoSync, Updated: inWeek},
 		{
-			Summary: "Approved:console:6 Fix date picker", Status: model.StatusDone, Source: model.SourcePRReview, Updated: inWeek,
-			Body: "2026-09-29 10:00 Reviewed: Commented:console:6 Fix date picker\n2026-09-10 09:00 Reviewed: Commented:console:6 Old\nhttps://github.com/o/console/pull/6",
+			Summary: "Approved:control:6 Fix date picker", Status: model.StatusDone, Source: model.SourcePRReview, Updated: inWeek,
+			Body: "2026-09-29 10:00 Reviewed: Commented:control:6 Fix date picker\n2026-09-10 09:00 Reviewed: Commented:control:6 Old\nhttps://github.com/o/control/pull/6",
 		},
 	}
-	opened := []review.QueuedPR{{Ref: review.PRRef{Repo: "console", Number: 12}, Title: "Add brag", State: "OPEN"}}
-	merged := []review.QueuedPR{{Ref: review.PRRef{Repo: "web-console", Number: 3}, Title: "Fix nav", State: "MERGED"}}
-	commits := map[string][]sourcecontrol.PRItem{"console": {{Title: "commit abc123: Add brag"}}}
+	opened := []review.QueuedPR{{Ref: review.PRRef{Repo: "control", Number: 12}, Title: "Add brag", State: "OPEN"}}
+	merged := []review.QueuedPR{{Ref: review.PRRef{Repo: "web-control", Number: 3}, Title: "Fix nav", State: "MERGED"}}
+	commits := map[string][]sourcecontrol.PRItem{"control": {{Title: "commit abc123: Add brag"}}}
 
 	facts := BuildFacts(week, Sources{Notes: notes, Opened: opened, Merged: merged, Commits: commits})
-	for _, want := range []string{"### Completed", "- Ship brag", "### Started", "- Draft RFC", "### PR reviews", "Approved:console:6 Fix date picker", "Reviewed: Commented:console:6 Fix date picker (Tue 29 Sep 10:00)", "### PRs opened", "- console#12 Add brag (OPEN)", "### PRs merged", "- web-console#3 Fix nav", "### Commits", "#### console", "- abc123: Add brag"} {
+	for _, want := range []string{"### Completed", "- Ship brag", "### Started", "- Draft RFC", "### PR reviews", "Approved:control:6 Fix date picker", "Reviewed: Commented:control:6 Fix date picker (Tue 29 Sep 10:00)", "### PRs opened", "- control#12 Add brag (OPEN)", "### PRs merged", "- web-control#3 Fix nav", "### Commits", "#### control", "- abc123: Add brag"} {
 		if !strings.Contains(facts, want) {
 			t.Errorf("facts missing %q:\n%s", want, facts)
 		}
 	}
-	for _, unwanted := range []string{"Old done", "Synced repos", "Commented:console:6 Old"} {
+	for _, unwanted := range []string{"Old done", "Synced repos", "Commented:control:6 Old"} {
 		if strings.Contains(facts, unwanted) {
 			t.Errorf("facts include %q:\n%s", unwanted, facts)
 		}
