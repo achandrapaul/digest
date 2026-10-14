@@ -25,6 +25,7 @@ import (
 	"github.com/achandrapaul/digest/pkg/migrate"
 	"github.com/achandrapaul/digest/pkg/model"
 	"github.com/achandrapaul/digest/pkg/notify"
+	"github.com/achandrapaul/digest/pkg/raycast"
 	"github.com/achandrapaul/digest/pkg/review"
 	"github.com/achandrapaul/digest/pkg/store"
 	"github.com/achandrapaul/digest/pkg/system"
@@ -99,6 +100,39 @@ func runNotificationsCommand(cfg *config.Config, action string, args []string) e
 	return nil
 }
 
+var (
+	raycastInstalled  = raycast.Installed
+	errRaycastMissing = errors.New("Raycast is not installed")
+)
+
+func runRaycastCommand(action string, out io.Writer) error {
+	dir, err := raycast.Dir()
+	if err != nil {
+		return err
+	}
+	if action == "uninstall" {
+		if err := raycast.Uninstall(dir); err != nil {
+			return err
+		}
+		fmt.Fprintln(out, "Removed "+dir)
+		return nil
+	}
+	if !raycastInstalled() {
+		return errRaycastMissing
+	}
+	executable, err := os.Executable()
+	if err != nil {
+		return err
+	}
+	scriptPath, err := raycast.Install(executable, dir)
+	if err != nil {
+		return err
+	}
+	fmt.Fprintln(out, "Installed "+scriptPath)
+	fmt.Fprintln(out, "Once: Raycast Settings → Extensions → Script Commands → Add Directories → "+dir)
+	return nil
+}
+
 func runInstall(cfg *config.Config) error {
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -127,6 +161,24 @@ func janitorNoQuarantine(cfg *config.Config, flagValue bool) (bool, error) {
 	return cfg.JobOptionBool(config.JobJanitor, config.OptionNoQuarantine)
 }
 
+func runNoteCommand(cfg *config.Config, args []string) int {
+	if len(args) == 0 || args[0] != "add" {
+		fmt.Fprintln(os.Stderr, "Usage: digest note add <text>")
+		return 1
+	}
+	note, err := store.New(cfg.NotesDir()).AddManualNote(strings.Join(args[1:], " "), time.Now())
+	if errors.Is(err, store.ErrLockNote) {
+		fmt.Fprintf(os.Stderr, "Warning: %v\n", err)
+		err = nil
+	}
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		return 1
+	}
+	fmt.Println("Added note " + note.ID)
+	return 0
+}
+
 func printUsage(out io.Writer) {
 	usage := []string{
 		"Usage: digest [flags] [command] [command flags]",
@@ -144,6 +196,9 @@ func printUsage(out io.Writer) {
 		"  install        Install missing tools and notifications, then ask before adding a keyboard shortcut",
 		"  install notifications    Install the launchd agent that runs notify-due every minute",
 		"  uninstall notifications  Remove that launchd agent",
+		"  install raycast          Add an \"Add Digest Note\" script command for Raycast (fails when Raycast is missing)",
+		"  uninstall raycast        Remove that script command",
+		"  note add <text>  Add a manual note for today; the first line is its summary, the rest its body",
 		"  doctor         Check that every tool digest needs is installed",
 		"  setup          Walk through the friendly setup again (git, work days, summaries, hints, notifications)",
 		"  init           Write the default config.yaml into the config directory; --force backs up an existing one and rewrites it, --automations backs it up and replaces only its automations",
@@ -212,7 +267,7 @@ func withoutDryRun(args []string) []string {
 
 func dryRunUnsupported(command string, args []string) (string, bool) {
 	switch command {
-	case "pr-review", "brag", "automation", "notify-due", "init", "bootstrap":
+	case "pr-review", "brag", "automation", "notify-due", "init", "bootstrap", "note":
 		return command, true
 	case "install", "uninstall":
 		words := []string{command}
@@ -437,6 +492,13 @@ func main() {
 		subArgs = parseCommandFlags(newCommandFlags(cmdName), subArgs)
 		if cmdName == "install" && len(subArgs) == 0 {
 			exitForJob("install", false, runInstall(cfg))
+		} else if len(subArgs) == 1 && subArgs[0] == "raycast" {
+			err := runRaycastCommand(cmdName, os.Stdout)
+			if errors.Is(err, errRaycastMissing) {
+				fmt.Fprintln(os.Stderr, err)
+				os.Exit(1)
+			}
+			exitForJob(cmdName+" raycast", false, err)
 		} else {
 			exitForJob(cmdName+" notifications", false, runNotificationsCommand(cfg, cmdName, subArgs))
 		}
@@ -493,6 +555,9 @@ func main() {
 			DryRun:        *migrateDryRun,
 		})
 		exitForJob("migrate", false, err)
+
+	case "note":
+		os.Exit(runNoteCommand(cfg, parseCommandFlags(newCommandFlags("note"), subArgs)))
 
 	case "doctor":
 		parseCommandFlags(newCommandFlags("doctor"), subArgs)

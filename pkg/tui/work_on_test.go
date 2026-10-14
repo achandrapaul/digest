@@ -114,7 +114,7 @@ func TestFOnlyWorksOnActiveEarlierNotesWhileViewingToday(t *testing.T) {
 		}
 	}
 	selectSummary(t, &m, "old task")
-	if !slices.ContainsFunc(m.selectedRowHints(), func(hint keyHint) bool { return hint.key == "f" && hint.label == "work on today" }) {
+	if !slices.ContainsFunc(m.selectedRowHints(), func(hint keyHint) bool { return hint.key == "f" && hint.label == "start today" }) {
 		t.Errorf("row hints should offer f on an earlier note: %v", m.selectedRowHints())
 	}
 	m.currentDate = now.AddDate(0, 0, -1)

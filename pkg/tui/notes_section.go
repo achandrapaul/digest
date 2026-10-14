@@ -455,9 +455,9 @@ func (m Model) canWorkOn(n *model.Note) bool {
 
 func (m Model) workOnLabel(n *model.Note) string {
 	if n != nil && n.StartedOn(time.Now()) {
-		return "back to pending"
+		return "mark pending"
 	}
-	return "work on today"
+	return "start today"
 }
 
 func (m Model) toggleWorkOn(tea.KeyMsg) (tea.Model, tea.Cmd) {
@@ -656,15 +656,7 @@ func (m Model) saveNote(tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.editorNotice = "note is empty"
 		return m, nil
 	}
-	lines := strings.SplitN(strings.TrimSpace(text), "\n", 2)
-	summary := strings.TrimSpace(lines[0])
-	body := ""
-	if len(lines) > 1 {
-		body = strings.TrimSpace(lines[1])
-	}
-
-	m.notesUI.currentNote.Summary = summary
-	m.notesUI.currentNote.Body = body
+	m.notesUI.currentNote.Summary, m.notesUI.currentNote.Body = model.SplitNoteText(text)
 	if m.notesUI.currentNote.ID == "" {
 		m.notesUI.awaitingNewNoteSave = true
 	}

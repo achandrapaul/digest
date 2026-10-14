@@ -202,3 +202,55 @@ func TestUnknownConfigKeysWarnWithoutFailing(t *testing.T) {
 		t.Error("a config without unknown keys should not be listed")
 	}
 }
+
+func fakeRaycastSetup(t *testing.T, appInstalled bool, scriptInstalled bool) string {
+	t.Helper()
+	dir := t.TempDir()
+	if scriptInstalled {
+		if err := os.WriteFile(filepath.Join(dir, "digest-note-add.sh"), []byte("#!/bin/bash\n"), 0700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	previousOS, previousInstalled, previousDir := operatingSystem, raycastInstalled, raycastDir
+	operatingSystem = "darwin"
+	raycastInstalled = func() bool { return appInstalled }
+	raycastDir = func() (string, error) { return dir, nil }
+	t.Cleanup(func() { operatingSystem, raycastInstalled, raycastDir = previousOS, previousInstalled, previousDir })
+	return dir
+}
+
+func TestRaycastIsAnOptionalRow(t *testing.T) {
+	fakeRaycastSetup(t, false, false)
+	results := Check(testConfig(), fakeLookPath("go", "git", "gh", "terminal-notifier", "pbcopy", "claude"))
+	row, found := resultFor(results, "raycast")
+	if !found || row.Found || row.Required || row.Warning != "" || row.Purpose != "add notes from Raycast" {
+		t.Fatalf("raycast row = %+v (found %v)", row, found)
+	}
+	if !strings.Contains(Format(results), "missing (optional)") {
+		t.Errorf("format:\n%s", Format(results))
+	}
+}
+
+func TestRaycastWithoutTheScriptWarnsToInstallIt(t *testing.T) {
+	fakeRaycastSetup(t, true, false)
+	row, _ := resultFor(Check(testConfig(), fakeLookPath()), "raycast")
+	if row.Warning != "script not installed; run: digest install raycast" || row.Required {
+		t.Errorf("raycast row = %+v", row)
+	}
+}
+
+func TestRaycastWithTheScriptShowsItsPath(t *testing.T) {
+	dir := fakeRaycastSetup(t, true, true)
+	row, _ := resultFor(Check(testConfig(), fakeLookPath()), "raycast")
+	if !row.Found || row.Warning != "" || row.Path != filepath.Join(dir, "digest-note-add.sh") {
+		t.Errorf("raycast row = %+v", row)
+	}
+}
+
+func TestRaycastRowIsLeftOutOffMacOS(t *testing.T) {
+	fakeRaycastSetup(t, true, true)
+	operatingSystem = "linux"
+	if _, found := resultFor(Check(testConfig(), fakeLookPath()), "raycast"); found {
+		t.Error("raycast row shown off macOS")
+	}
+}

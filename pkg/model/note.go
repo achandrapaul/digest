@@ -1,6 +1,7 @@
 package model
 
 import (
+	"strings"
 	"time"
 )
 
@@ -48,4 +49,13 @@ type Note struct {
 
 	Body     string `yaml:"-"`
 	FilePath string `yaml:"-"`
+}
+
+func SplitNoteText(text string) (summary, body string) {
+	lines := strings.SplitN(strings.TrimSpace(text), "\n", 2)
+	summary = strings.TrimSpace(lines[0])
+	if len(lines) > 1 {
+		body = strings.TrimSpace(lines[1])
+	}
+	return summary, body
 }

@@ -79,3 +79,16 @@ func TestSourcesStayFreeText(t *testing.T) {
 		t.Errorf("source = %q, %v", note.Source, err)
 	}
 }
+
+func TestSplitNoteTextTakesTheFirstLineAsTheSummary(t *testing.T) {
+	cases := map[string][2]string{
+		"  Ship it  ":                    {"Ship it", ""},
+		"Ship it\n\n  details\nmore  \n": {"Ship it", "details\nmore"},
+		"   \n  ":                        {"", ""},
+	}
+	for text, want := range cases {
+		if summary, body := model.SplitNoteText(text); summary != want[0] || body != want[1] {
+			t.Errorf("SplitNoteText(%q) = %q, %q; want %q, %q", text, summary, body, want[0], want[1])
+		}
+	}
+}

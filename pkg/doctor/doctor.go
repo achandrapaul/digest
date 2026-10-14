@@ -9,6 +9,8 @@ import (
 	"github.com/achandrapaul/digest/pkg/aitool"
 	"github.com/achandrapaul/digest/pkg/config"
 	"github.com/achandrapaul/digest/pkg/jobs"
+	"github.com/achandrapaul/digest/pkg/raycast"
+	"github.com/achandrapaul/digest/pkg/system"
 )
 
 type Result struct {
@@ -22,6 +24,11 @@ type Result struct {
 }
 
 var operatingSystem = runtime.GOOS
+
+var (
+	raycastInstalled = raycast.Installed
+	raycastDir       = raycast.Dir
+)
 
 type tool struct {
 	name     string
@@ -74,12 +81,34 @@ func Check(cfg *config.Config, lookPath func(string) (string, error)) []Result {
 		}
 		results = append(results, clipboard)
 	}
+	if operatingSystem == "darwin" {
+		results = append(results, raycastResult())
+	}
 	results = append(results, configuredResults(cfg, lookPath, results)...)
 	results = append(results, pluginResults(cfg)...)
 	if len(cfg.UnknownKeys) > 0 {
 		results = append(results, Result{Name: "config.yaml", Purpose: "typo, or a retired key digest migrate removes", Found: true, Warning: "unknown keys " + strings.Join(cfg.UnknownKeys, ", ")})
 	}
 	return results
+}
+
+func raycastResult() Result {
+	row := Result{Name: "raycast", Purpose: "add notes from Raycast"}
+	if !raycastInstalled() {
+		return row
+	}
+	row.Found = true
+	dir, err := raycastDir()
+	if err != nil {
+		row.Warning = err.Error()
+		return row
+	}
+	if scriptPath := raycast.ScriptPath(dir); system.Exists(scriptPath) {
+		row.Path = scriptPath
+	} else {
+		row.Warning = "script not installed; run: digest install raycast"
+	}
+	return row
 }
 
 func configuredCommands(cfg *config.Config) [][2]string {

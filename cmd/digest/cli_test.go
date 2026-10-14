@@ -6,6 +6,10 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/achandrapaul/digest/pkg/model"
+	"github.com/achandrapaul/digest/pkg/store"
+	"github.com/achandrapaul/digest/pkg/system"
 )
 
 const mainArgsSeparator = "\x1f"
@@ -192,6 +196,29 @@ func TestJanitorNoQuarantineDeletesForGood(t *testing.T) {
 		}
 		if _, err := os.Stat(filepath.Join(digestRoot, ".quarantine")); !os.IsNotExist(err) {
 			t.Errorf("%s: nothing should be quarantined:\n%s", name, output)
+		}
+	}
+}
+
+func TestNoteAddSavesAManualNote(t *testing.T) {
+	configPath, digestRoot := writeTestConfig(t, "")
+	t.Cleanup(func() { _ = system.UnlockTree(digestRoot) })
+	output, code := runDigest(t, nil, "--config", configPath, "note", "add", "Call", "the bank")
+	if code != 0 || !strings.Contains(output, "Added note ") {
+		t.Fatalf("exit %d:\n%s", code, output)
+	}
+	notes, err := store.New(filepath.Join(digestRoot, "notes")).List()
+	if err != nil || len(notes) != 1 || notes[0].Summary != "Call the bank" || notes[0].Source != model.SourceManual || notes[0].Status != model.StatusActive {
+		t.Fatalf("notes = %+v, err = %v", notes, err)
+	}
+}
+
+func TestNoteAddRejectsEmptyTextAndUnknownSubcommands(t *testing.T) {
+	configPath, _ := writeTestConfig(t, "")
+	for _, args := range [][]string{{"note", "add"}, {"note", "add", "  "}, {"note"}, {"note", "remove", "x"}} {
+		output, code := runDigest(t, nil, append([]string{"--config", configPath}, args...)...)
+		if code != 1 {
+			t.Errorf("%v: exit %d, want 1:\n%s", args, code, output)
 		}
 	}
 }
