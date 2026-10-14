@@ -10,6 +10,7 @@ import (
 	"github.com/achandrapaul/digest/pkg/config"
 	"github.com/achandrapaul/digest/pkg/jobs"
 	"github.com/achandrapaul/digest/pkg/raycast"
+	"github.com/achandrapaul/digest/pkg/spotlight"
 	"github.com/achandrapaul/digest/pkg/system"
 )
 
@@ -28,6 +29,9 @@ var operatingSystem = runtime.GOOS
 var (
 	raycastInstalled = raycast.Installed
 	raycastDir       = raycast.Dir
+
+	spotlightAvailable = spotlight.Available
+	spotlightInstalled = spotlight.Installed
 )
 
 type tool struct {
@@ -82,7 +86,7 @@ func Check(cfg *config.Config, lookPath func(string) (string, error)) []Result {
 		results = append(results, clipboard)
 	}
 	if operatingSystem == "darwin" {
-		results = append(results, raycastResult())
+		results = append(results, raycastResult(), spotlightResult())
 	}
 	results = append(results, configuredResults(cfg, lookPath, results)...)
 	results = append(results, pluginResults(cfg)...)
@@ -107,6 +111,20 @@ func raycastResult() Result {
 		row.Path = scriptPath
 	} else {
 		row.Warning = "script not installed; run: digest install raycast"
+	}
+	return row
+}
+
+func spotlightResult() Result {
+	row := Result{Name: "spotlight", Purpose: "add notes from Spotlight and the menu bar"}
+	if !spotlightAvailable() {
+		return row
+	}
+	row.Found = true
+	if spotlightInstalled() {
+		row.Path = "Shortcuts: " + spotlight.ShortcutName
+	} else {
+		row.Warning = "shortcut not added; run: digest install spotlight"
 	}
 	return row
 }

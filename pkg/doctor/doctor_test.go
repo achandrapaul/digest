@@ -254,3 +254,46 @@ func TestRaycastRowIsLeftOutOffMacOS(t *testing.T) {
 		t.Error("raycast row shown off macOS")
 	}
 }
+
+func fakeSpotlightSetup(t *testing.T, shortcutsAvailable bool, shortcutAdded bool) {
+	t.Helper()
+	previousOS, previousAvailable, previousInstalled := operatingSystem, spotlightAvailable, spotlightInstalled
+	operatingSystem = "darwin"
+	spotlightAvailable = func() bool { return shortcutsAvailable }
+	spotlightInstalled = func() bool { return shortcutAdded }
+	t.Cleanup(func() {
+		operatingSystem, spotlightAvailable, spotlightInstalled = previousOS, previousAvailable, previousInstalled
+	})
+}
+
+func TestSpotlightIsAnOptionalRow(t *testing.T) {
+	fakeSpotlightSetup(t, false, false)
+	row, found := resultFor(Check(testConfig(), fakeLookPath()), "spotlight")
+	if !found || row.Found || row.Required || row.Warning != "" || row.Purpose != "add notes from Spotlight and the menu bar" {
+		t.Fatalf("spotlight row = %+v (found %v)", row, found)
+	}
+}
+
+func TestSpotlightWithoutTheShortcutWarnsToInstallIt(t *testing.T) {
+	fakeSpotlightSetup(t, true, false)
+	row, _ := resultFor(Check(testConfig(), fakeLookPath()), "spotlight")
+	if !row.Found || row.Warning != "shortcut not added; run: digest install spotlight" || row.Required {
+		t.Errorf("spotlight row = %+v", row)
+	}
+}
+
+func TestSpotlightWithTheShortcutShowsItsName(t *testing.T) {
+	fakeSpotlightSetup(t, true, true)
+	row, _ := resultFor(Check(testConfig(), fakeLookPath()), "spotlight")
+	if !row.Found || row.Warning != "" || row.Path != "Shortcuts: Add Digest Note" {
+		t.Errorf("spotlight row = %+v", row)
+	}
+}
+
+func TestSpotlightRowIsLeftOutOffMacOS(t *testing.T) {
+	fakeSpotlightSetup(t, true, true)
+	operatingSystem = "linux"
+	if _, found := resultFor(Check(testConfig(), fakeLookPath()), "spotlight"); found {
+		t.Error("spotlight row shown off macOS")
+	}
+}

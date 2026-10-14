@@ -27,6 +27,7 @@ import (
 	"github.com/achandrapaul/digest/pkg/notify"
 	"github.com/achandrapaul/digest/pkg/raycast"
 	"github.com/achandrapaul/digest/pkg/review"
+	"github.com/achandrapaul/digest/pkg/spotlight"
 	"github.com/achandrapaul/digest/pkg/store"
 	"github.com/achandrapaul/digest/pkg/system"
 	"github.com/achandrapaul/digest/pkg/tui"
@@ -133,6 +134,43 @@ func runRaycastCommand(action string, out io.Writer) error {
 	return nil
 }
 
+var (
+	spotlightAvailable  = spotlight.Available
+	spotlightInstall    = spotlight.Install
+	errShortcutsMissing = errors.New("the shortcuts command is not available (needs macOS 12 or later)")
+)
+
+func runSpotlightCommand(action string, out io.Writer) error {
+	dir, err := spotlight.Dir()
+	if err != nil {
+		return err
+	}
+	if action == "uninstall" {
+		if err := spotlight.Uninstall(dir); err != nil {
+			return err
+		}
+		fmt.Fprintln(out, "Removed "+dir)
+		fmt.Fprintln(out, `In the Shortcuts app, delete "`+spotlight.ShortcutName+`" to finish removing it`)
+		return nil
+	}
+	if !spotlightAvailable() {
+		return errShortcutsMissing
+	}
+	executable, err := os.Executable()
+	if err != nil {
+		return err
+	}
+	shortcutPath, err := spotlightInstall(executable, dir)
+	if err != nil {
+		return err
+	}
+	fmt.Fprintln(out, "Opened "+shortcutPath)
+	fmt.Fprintln(out, "1. In the Shortcuts window that opened, click Add Shortcut")
+	fmt.Fprintln(out, "2. Shortcuts app → Settings (⌘,) → Advanced → turn on Allow Running Scripts")
+	fmt.Fprintln(out, `Then run "`+spotlight.ShortcutName+`" from Spotlight or the Shortcuts menu in the menu bar`)
+	return nil
+}
+
 func runInstall(cfg *config.Config) error {
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -198,6 +236,8 @@ func printUsage(out io.Writer) {
 		"  uninstall notifications  Remove that launchd agent",
 		"  install raycast          Add an \"Add Digest Note\" script command for Raycast (fails when Raycast is missing)",
 		"  uninstall raycast        Remove that script command",
+		"  install spotlight        Add an \"Add Digest Note\" Apple Shortcut for Spotlight and the menu bar (one Add click in Shortcuts)",
+		"  uninstall spotlight      Remove its files; delete the shortcut in the Shortcuts app",
 		"  note add <text>  Add a manual note for today; the first line is its summary, the rest its body",
 		"  doctor         Check that every tool digest needs is installed",
 		"  setup          Walk through the friendly setup again (git, work days, summaries, hints, notifications)",
@@ -499,6 +539,13 @@ func main() {
 				os.Exit(1)
 			}
 			exitForJob(cmdName+" raycast", false, err)
+		} else if len(subArgs) == 1 && subArgs[0] == "spotlight" {
+			err := runSpotlightCommand(cmdName, os.Stdout)
+			if errors.Is(err, errShortcutsMissing) {
+				fmt.Fprintln(os.Stderr, err)
+				os.Exit(1)
+			}
+			exitForJob(cmdName+" spotlight", false, err)
 		} else {
 			exitForJob(cmdName+" notifications", false, runNotificationsCommand(cfg, cmdName, subArgs))
 		}
