@@ -469,9 +469,9 @@ func (m Model) toggleWorkOn(tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if !ok || !m.canWorkOn(item.Note) {
 		return m, nil
 	}
-	notice := "moved back to pending"
+	notice := "marked pending"
 	if item.Note.ToggleWorkingOn(time.Now()) {
-		notice = "working on this today"
+		notice = "started today"
 	}
 	m.postMessage(messageSourceNotes, messageSuccess, notice)
 	m.selectNoteByID(item.Note.ID)

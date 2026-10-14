@@ -67,7 +67,7 @@ func (m Model) rowMeanings() []rowMeaning {
 	rows := []rowMeaning{
 		{"enter", []string{"note: edit", "PR: open in browser", "my PR: open in browser", "job: preview", "run: preview"}},
 		{"space", []string{"note: mark done", "done note: mark active"}},
-		{"f", []string{"earlier note: work on it today, or move it back to pending"}},
+		{"f", []string{"earlier note: start today, or mark pending"}},
 		{"i", []string{"note: edit inline"}},
 		{"d", []string{"note: archive", "PR: reject, or stop its review", "job: dry run, or stop it", "run: stop or dismiss"}},
 		{"y", []string{"PR: approve"}},

@@ -100,9 +100,9 @@ func noteRangePrompt(action noteRangeAction, targets []*model.Note) (title, prom
 	case noteRangeActive:
 		title, single, plural = " ACTIVE CONFIRMATION ", "Move this note back to active?", "Move these %d notes back to active?"
 	case noteRangeStartToday:
-		title, single, plural = " TODAY CONFIRMATION ", "Work on this note today?", "Work on these %d notes today?"
+		title, single, plural = " TODAY CONFIRMATION ", "Start this note today?", "Start these %d notes today?"
 	case noteRangeBackToPending:
-		title, single, plural = " PENDING CONFIRMATION ", "Move this note back to pending?", "Move these %d notes back to pending?"
+		title, single, plural = " PENDING CONFIRMATION ", "Mark this note pending?", "Mark these %d notes pending?"
 	}
 	if len(targets) == 1 {
 		return title, fmt.Sprintf("%s\n\n\"%s\"", single, targets[0].Summary)
@@ -144,13 +144,13 @@ func (m Model) applyNoteRangeAction(action noteRangeAction, targets []*model.Not
 func workOnNotice(action noteRangeAction, count int) string {
 	switch {
 	case action == noteRangeStartToday && count == 1:
-		return "working on this today"
+		return "started today"
 	case action == noteRangeStartToday:
-		return fmt.Sprintf("working on %d notes today", count)
+		return fmt.Sprintf("started %d notes today", count)
 	case count == 1:
-		return "moved back to pending"
+		return "marked pending"
 	}
-	return fmt.Sprintf("moved %d notes back to pending", count)
+	return fmt.Sprintf("marked %d notes pending", count)
 }
 
 func noteCopyText(note *model.Note) string {

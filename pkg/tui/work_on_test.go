@@ -51,7 +51,7 @@ func TestFPullsAnEarlierNoteIntoTodayAndBack(t *testing.T) {
 	if groups := m.groupNotes(); !slices.Contains(groupSummaries(groups.today), "old task") || slices.Contains(groupSummaries(groups.carried), "old task") {
 		t.Fatalf("today = %v carried = %v", groupSummaries(groups.today), groupSummaries(groups.carried))
 	}
-	if lastMessageText(m) != "working on this today" {
+	if lastMessageText(m) != "started today" {
 		t.Errorf("message = %q", lastMessageText(m))
 	}
 	if item, _ := m.selectedNavItem(); item.Note == nil || item.Note.Summary != "old task" {
@@ -78,7 +78,7 @@ func TestFPullsAnEarlierNoteIntoTodayAndBack(t *testing.T) {
 	if groups := m.groupNotes(); !slices.Contains(groupSummaries(groups.carried), "old task") {
 		t.Fatalf("second f should move it back, carried = %v", groupSummaries(groups.carried))
 	}
-	if lastMessageText(m) != "moved back to pending" {
+	if lastMessageText(m) != "marked pending" {
 		t.Errorf("message = %q", lastMessageText(m))
 	}
 	if onDisk, _ := store.Load(noteBySummary(t, m, "old task").FilePath); len(onDisk.StartedWorkingOn) != 0 {

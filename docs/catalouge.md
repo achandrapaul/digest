@@ -68,9 +68,9 @@ Dashboard: keys
 - shift+J/shift+K or shift+down/shift+up — selects a range of notes from where you started across Yesterday, Carried, Added and Closed; moving back shrinks it. Non-note rows in the range are skipped. j/k/arrows, ctrl+d/ctrl+u, pgdown/pgup, p/n, t and esc cancel the selection.
 - With a selection, space, f and d act on every selected note after one confirm and clear the selection; cancelling keeps it. ctrl+y copies each selected note's summary and body, separated by a blank line, and keeps the selection; with no selection it copies the note under the cursor.
 - space on a selection — when any note is active, marks the active ones done; when all are done, marks them all active.
-- f on a selection — acts only on the notes f applies to; when any isn't worked on today, works on those today; otherwise moves them all back to pending.
+- f on a selection — acts only on the notes f applies to; when any isn't started today, asks to start those today; otherwise asks to mark them all pending.
 - space — marks the note done or active and saves it; marking done adds the done date to started_working_on when it isn't there yet, and marking active never removes one.
-- f — on an active note created before today, while viewing today: adds today's date to started_working_on ("✓ working on this today") and moves it into Active items for today; again removes today's date ("✓ moved back to pending"). Only that note's file is written and read back. Does nothing on today's notes, done notes or other days.
+- f — on an active note created before today, while viewing today: adds today's date to started_working_on ("✓ started today"; the hint reads "start today") and moves it into Active items for today; again removes today's date ("✓ marked pending"; the hint reads "mark pending"). Only that note's file is written and read back. Does nothing on today's notes, done notes or other days.
 - a — opens the editor for a new note dated the day you're viewing.
 - i — edits the selected note's summary in place.
 - @ or . — opens the action menu (active notes only).

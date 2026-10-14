@@ -141,7 +141,7 @@ func TestDeleteOnARangeArchivesEveryNoteAfterConfirm(t *testing.T) {
 func TestFOnARangeMovesOnlyEligibleNotesToToday(t *testing.T) {
 	m := extendRange(t, rangeTestModel(t), 2)
 	m, _ = pressKey(t, m, "f")
-	if !strings.Contains(m.confirmPrompt, "Work on this note today?") || !strings.Contains(m.confirmPrompt, "carried task") {
+	if !strings.Contains(m.confirmPrompt, "Start this note today?") || !strings.Contains(m.confirmPrompt, "carried task") {
 		t.Fatalf("prompt = %q", m.confirmPrompt)
 	}
 	m, cmd := pressKey(t, m, "y")
