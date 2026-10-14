@@ -1,5 +1,33 @@
 # Changelog
 
+## v0.0.158 — 2026-10-14
+
+### Changes
+- [5060fe2](https://github.com/achandrapaul/digest/commit/5060fe29673c414b1ccd5a8cc756d51c09067f4b) feat: PR review notifications run digest focus <org>:<repo>:<title>, which raises the running digest's tmux pane or terminal and selects that PR once no edit is open; .app.state.json and the focus file are written through a queued lock; the pre-commit hook lints before testing; tests use neutral example repo names
+- [25d8e9e](https://github.com/achandrapaul/digest/commit/25d8e9e0c71d395f9a5f4608298b4dd6b38cdc31) fix: dry-run exit file is written atomically so a signalled command reports 143, Raycast missing error starts lowercase
+- [e185f47](https://github.com/achandrapaul/digest/commit/e185f4733dc4b9f405ebbe8427d442c993b8c6e6) feat: h groups dashboard notes under tag headers, saved in .app.state.json; My PR notes are summarised Own:<state>:<org>:<repo>:<title>
+  - h (hidden) toggles a #tag header over each run of notes in Yesterday, Pending, Active items for today and Closed Today; sorting is unchanged, and Active items for today gathers each tag together. The choice is saved as group_by_tag in .app.state.json.
+  - My PR note summaries read Own:DRAFT|OPEN:<org>:<repo>:<title> while open and Own:MERGED|CLOSED:… once the PR ends; the note id and the rest of the body stay the same, and the seen-PR rebuild reads titles from both the new and the old NewPR: summaries.
+- [91a0bb8](https://github.com/achandrapaul/digest/commit/91a0bb8d82897c1d895b07f867ce4aa7a2b75ea3) fix: PR review installs deps through mise when nvm is missing and drops invalid MCP allow rules; Closed Today groups by tag
+  - With an .nvmrc, the review's dependency install uses nvm only when $NVM_DIR/nvm.sh exists, otherwise mise exec node@<version>, otherwise the node on PATH; MISE_* settings reach the install.
+  - Plugin allow rules name each MCP server from the plugin's .mcp.json or plugin.json (mcp__plugin_<plugin>_<server>__*), so Claude no longer ignores mcp__plugin_<plugin>_*; plugins without servers get only their Skill rule.
+  - Closed Today lists #manual first, then #my-pr, #pr-review and other tags, newest done first within each; marking a note done records the current time on the viewed day.
+- [bd74a2c](https://github.com/achandrapaul/digest/commit/bd74a2cf4fd8555711e7b9a38dcab2fcbd64ebeb) feat: digest install spotlight adds an Add Digest Note Apple Shortcut for Spotlight and the menu bar
+  - digest install spotlight writes, signs and opens an "Add Digest Note" shortcut that asks for the note text and runs digest note add; it is pinned to the Shortcuts menu bar menu, takes one Add Shortcut click and needs Allow Running Scripts in Shortcuts → Settings → Advanced.
+  - Without the shortcuts command it exits 1; digest uninstall spotlight removes its files and says to delete the shortcut in Shortcuts. It works without Raycast and is not part of bootstrap.
+  - doctor shows an optional spotlight row: missing, "shortcut not added; run: digest install spotlight", or the added shortcut.
+- [2e5577f](https://github.com/achandrapaul/digest/commit/2e5577f6ca9fbc0cc04d0e0876168251b5cfbe3a) feat: f notices, confirms and help read start today / mark pending
+  - f now reports "started today" / "marked pending" ("started N notes today" / "marked N notes pending" on a selection), and the selection confirm asks "Start this note today?" / "Mark this note pending?".
+  - The shortcuts help line for f reads "earlier note: start today, or mark pending".
+- [a609064](https://github.com/achandrapaul/digest/commit/a609064b81d4c8dea1ccb684202edaa46cd5d474) feat: digest note add from the CLI, digest install raycast for an Add Digest Note script command, f hint reads start today / mark pending
+  - digest note add <text> saves a manual active note for today the same way the dashboard's a does: first line is the summary, the rest the body; empty text fails and a locked note only warns.
+  - digest install raycast writes an "Add Digest Note" script command to ~/.config/digest/raycast that runs digest note add, and exits 1 when Raycast is missing; digest uninstall raycast removes it, and doctor shows an optional raycast row that never fails.
+  - The f row hint on an earlier note now reads "start today", and "mark pending" once it's started today.
+- [c3af328](https://github.com/achandrapaul/digest/commit/c3af32827b86321b8bc3e4ab6a37f143b9086d9d) feat: shift+J/K multi-select notes on the dashboard, with confirmed bulk done, f and delete
+  - shift+J/K or shift+down/up selects an anchored range of notes across Yesterday, Carried, Active and Closed; j/k, paging, p/n/t and esc cancel it.
+  - space marks the active notes in the range done, or all active when every note is done; f works on eligible notes today or moves them back to pending; d archives them. With a selection each asks first and clears the selection on confirm; single rows keep their existing behaviour.
+  - ctrl+y copies the selected notes' summary and body and keeps the selection; hint shows (shift)multiple selection.
+
 ## v0.0.157 — 2026-10-12
 
 ### Changes
