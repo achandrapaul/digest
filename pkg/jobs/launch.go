@@ -77,7 +77,7 @@ func (job launch) prepareLog(files launchFiles) {
 func (job launch) command(commandStr string, files launchFiles) *exec.Cmd {
 	cmd := exec.Command("sh", "-c", commandStr)
 	if job.dryRun {
-		cmd = exec.Command("sh", "-c", `sh -c "$1"; echo $? > "$2"`, "digest-dry-run", commandStr, files.exit)
+		cmd = exec.Command("sh", "-c", `sh -c "$1"; echo $? > "$2.partial" && mv -f "$2.partial" "$2"`, "digest-dry-run", commandStr, files.exit)
 	}
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 	cmd.Env = append(os.Environ(), job.spec.OptionsEnv()...)

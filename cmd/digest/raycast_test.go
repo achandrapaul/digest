@@ -21,8 +21,8 @@ func fakeRaycastApp(t *testing.T, installed bool) string {
 func TestInstallRaycastFailsWhenRaycastIsMissing(t *testing.T) {
 	dir := fakeRaycastApp(t, false)
 	var out strings.Builder
-	if err := runRaycastCommand("install", &out); !errors.Is(err, errRaycastMissing) || err.Error() != "Raycast is not installed" {
-		t.Fatalf("err = %v, want Raycast is not installed", err)
+	if err := runRaycastCommand("install", &out); !errors.Is(err, errRaycastMissing) || err.Error() != "the Raycast app is not installed" {
+		t.Fatalf("err = %v, want the Raycast app is not installed", err)
 	}
 	if _, err := os.Stat(dir); !os.IsNotExist(err) {
 		t.Errorf("script folder written without Raycast: %v", err)

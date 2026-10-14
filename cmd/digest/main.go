@@ -103,7 +103,7 @@ func runNotificationsCommand(cfg *config.Config, action string, args []string) e
 
 var (
 	raycastInstalled  = raycast.Installed
-	errRaycastMissing = errors.New("Raycast is not installed")
+	errRaycastMissing = errors.New("the Raycast app is not installed")
 )
 
 func runRaycastCommand(action string, out io.Writer) error {
