@@ -1,6 +1,8 @@
 package aitool
 
 import (
+	"encoding/json"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -61,6 +63,44 @@ func Available(name string) bool {
 	return installed
 }
 
+func serverNames(path string) []string {
+	content, err := system.Read(path)
+	if err != nil {
+		return nil
+	}
+	var file struct {
+		MCPServers map[string]json.RawMessage `json:"mcpServers"`
+	}
+	if json.Unmarshal(content, &file) != nil {
+		return nil
+	}
+	return slices.Sorted(maps.Keys(file.MCPServers))
+}
+
+func pluginMCPServers(dir string) []string {
+	servers := serverNames(filepath.Join(dir, ".mcp.json"))
+	content, err := system.Read(filepath.Join(dir, ".claude-plugin", "plugin.json"))
+	if err != nil {
+		return servers
+	}
+	var manifest struct {
+		MCPServers json.RawMessage `json:"mcpServers"`
+	}
+	if json.Unmarshal(content, &manifest) != nil || len(manifest.MCPServers) == 0 {
+		return servers
+	}
+	var linkedPath string
+	if json.Unmarshal(manifest.MCPServers, &linkedPath) == nil {
+		servers = append(servers, serverNames(filepath.Join(dir, linkedPath))...)
+	} else {
+		var inline map[string]json.RawMessage
+		if json.Unmarshal(manifest.MCPServers, &inline) == nil {
+			servers = append(servers, slices.Sorted(maps.Keys(inline))...)
+		}
+	}
+	return slices.Compact(slices.Sorted(slices.Values(servers)))
+}
+
 func AllowedTools(plugins []string) []string {
 	var tools []string
 	for _, plugin := range plugins {
@@ -68,7 +108,11 @@ func AllowedTools(plugins []string) []string {
 		case IsConnector(plugin):
 			tools = append(tools, "mcp__"+plugin+"__*")
 		case Available(plugin):
-			tools = append(tools, "Skill("+plugin+":*)", "mcp__plugin_"+plugin+"_*")
+			tools = append(tools, "Skill("+plugin+":*)")
+			dir, _ := PluginDir(plugin)
+			for _, server := range pluginMCPServers(dir) {
+				tools = append(tools, "mcp__plugin_"+plugin+"_"+server+"__*")
+			}
 		}
 	}
 	return tools

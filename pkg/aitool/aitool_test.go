@@ -42,16 +42,50 @@ func TestPluginDirPicksTheNewestVersion(t *testing.T) {
 func TestAllowedToolsCoverOnlyInstalledPluginsAndConnectors(t *testing.T) {
 	fakePluginCache(t, map[string][]string{"jira-inator": {"1.0.0"}})
 	got := strings.Join(AllowedTools([]string{"jira-inator", "confluence-inator", "claude_ai_Google_Drive"}), " ")
-	want := "Skill(jira-inator:*) mcp__plugin_jira-inator_* mcp__claude_ai_Google_Drive__*"
+	want := "Skill(jira-inator:*) mcp__claude_ai_Google_Drive__*"
 	if got != want {
 		t.Errorf("AllowedTools = %q, want %q", got, want)
+	}
+}
+
+func writePluginFile(t *testing.T, plugin, name, content string) {
+	t.Helper()
+	dir, found := PluginDir(plugin)
+	if !found {
+		t.Fatalf("plugin %s not in the fake cache", plugin)
+	}
+	path := filepath.Join(dir, name)
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestAllowedToolsNameEachPluginMCPServer(t *testing.T) {
+	fakePluginCache(t, map[string][]string{"buildkite-tools": {"1.0.0"}, "inline-tools": {"1.0.0"}, "linked-tools": {"1.0.0"}, "broken-tools": {"1.0.0"}})
+	writePluginFile(t, "buildkite-tools", ".mcp.json", `{"mcpServers": {"buildkite": {"type": "http"}}}`)
+	writePluginFile(t, "inline-tools", ".claude-plugin/plugin.json", `{"name": "inline-tools", "mcpServers": {"zeta": {}, "alpha": {}}}`)
+	writePluginFile(t, "linked-tools", ".claude-plugin/plugin.json", `{"name": "linked-tools", "mcpServers": "./servers.json"}`)
+	writePluginFile(t, "linked-tools", "servers.json", `{"mcpServers": {"docs": {}}}`)
+	writePluginFile(t, "broken-tools", ".mcp.json", `not json`)
+	got := strings.Join(AllowedTools([]string{"buildkite-tools", "inline-tools", "linked-tools", "broken-tools"}), " ")
+	want := "Skill(buildkite-tools:*) mcp__plugin_buildkite-tools_buildkite__* Skill(inline-tools:*) mcp__plugin_inline-tools_alpha__* mcp__plugin_inline-tools_zeta__* Skill(linked-tools:*) mcp__plugin_linked-tools_docs__* Skill(broken-tools:*)"
+	if got != want {
+		t.Errorf("AllowedTools = %q, want %q", got, want)
+	}
+	for _, rule := range AllowedTools([]string{"buildkite-tools", "inline-tools", "linked-tools", "broken-tools"}) {
+		if strings.HasSuffix(rule, "_*") && !strings.HasSuffix(rule, "__*") {
+			t.Errorf("rule %q globs before a server name", rule)
+		}
 	}
 }
 
 func TestAutomationCommandAllowsOnlyItsPlugins(t *testing.T) {
 	fakePluginCache(t, map[string][]string{"jira-inator": {"1.0.0"}})
 	command := AutomationCommand([]string{"jira-inator"})
-	for _, want := range []string{"claude -p", "--model sonnet", "--permission-prompts none", "--allowedTools 'Skill(jira-inator:*)' 'mcp__plugin_jira-inator_*'"} {
+	for _, want := range []string{"claude -p", "--model sonnet", "--permission-prompts none", "--allowedTools 'Skill(jira-inator:*)'"} {
 		if !strings.Contains(command, want) {
 			t.Errorf("command %q missing %q", command, want)
 		}
@@ -67,7 +101,7 @@ func TestAutomationCommandAllowsOnlyItsPlugins(t *testing.T) {
 func TestReviewCommandPutsThePromptRightAfterP(t *testing.T) {
 	fakePluginCache(t, map[string][]string{"review-toolkit": {"0.18.0"}})
 	command := ReviewCommand("/review-toolkit:review {url} --emit findings-json", []string{"review-toolkit"})
-	if !strings.HasPrefix(command, "claude -p '/review-toolkit:review {url} --emit findings-json' ") || !strings.HasSuffix(command, "--allowedTools 'Skill(review-toolkit:*)' 'mcp__plugin_review-toolkit_*'") {
+	if !strings.HasPrefix(command, "claude -p '/review-toolkit:review {url} --emit findings-json' ") || !strings.HasSuffix(command, "--allowedTools 'Skill(review-toolkit:*)'") {
 		t.Errorf("review command = %q", command)
 	}
 	if !strings.Contains(command, " --setting-sources user ") {

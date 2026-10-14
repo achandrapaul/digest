@@ -1,6 +1,8 @@
 package review
 
 import (
+	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -42,6 +44,36 @@ func riskyInstallConfig(dir string) string {
 	return ""
 }
 
+var miseExecutable = func() string {
+	if path, err := exec.LookPath("mise"); err == nil {
+		return path
+	}
+	if home, err := os.UserHomeDir(); err == nil && system.Exists(filepath.Join(home, ".local", "bin", "mise")) {
+		return filepath.Join(home, ".local", "bin", "mise")
+	}
+	return ""
+}
+
+func nvmDir() string {
+	if dir := os.Getenv("NVM_DIR"); dir != "" {
+		return dir
+	}
+	home, _ := os.UserHomeDir()
+	return filepath.Join(home, ".nvm")
+}
+
+func nodeVersion(dir string) string {
+	content, err := system.Read(filepath.Join(dir, ".nvmrc"))
+	if err != nil {
+		return ""
+	}
+	version := strings.TrimPrefix(strings.TrimSpace(string(content)), "v")
+	if version == "lts/*" {
+		return "lts"
+	}
+	return version
+}
+
 func installScript(dir string) string {
 	if riskyInstallConfig(dir) != "" {
 		return ""
@@ -51,8 +83,14 @@ func installScript(dir string) string {
 		return ""
 	}
 	command := strings.Join(install, " ")
-	if fileExists(dir, ".nvmrc") {
-		return `export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"; . "$NVM_DIR/nvm.sh" && nvm install && ` + command
+	if !fileExists(dir, ".nvmrc") {
+		return command
+	}
+	if nvm := nvmDir(); system.Exists(filepath.Join(nvm, "nvm.sh")) {
+		return "export NVM_DIR=" + system.ShellQuote(nvm) + `; . "$NVM_DIR/nvm.sh" && nvm install && ` + command
+	}
+	if version, mise := nodeVersion(dir), miseExecutable(); version != "" && mise != "" {
+		return system.ShellQuote(mise) + " exec " + system.ShellQuote("node@"+version) + " -- " + command
 	}
 	return command
 }

@@ -17,7 +17,7 @@ var installEnvNames = map[string]bool{
 	"VOLTA_HOME": true, "PNPM_HOME": true, "COREPACK_HOME": true,
 }
 
-var installEnvPrefixes = []string{"npm_config_", "NPM_CONFIG_", "ASDF_"}
+var installEnvPrefixes = []string{"npm_config_", "NPM_CONFIG_", "ASDF_", "MISE_"}
 
 var reviewEnvNames = map[string]bool{
 	"GH_HOST": true, "GH_CONFIG_DIR": true, "AWS_PROFILE": true, "AWS_REGION": true, "AWS_DEFAULT_REGION": true, "AWS_CONFIG_FILE": true,

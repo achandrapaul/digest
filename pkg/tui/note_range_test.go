@@ -90,9 +90,10 @@ func TestSpaceOnARangeMarksTheActiveNotesDoneFirst(t *testing.T) {
 
 func TestSpaceOnAnAllDoneRangeMovesThemBackToActive(t *testing.T) {
 	m := rangeTestModel(t)
-	for _, summary := range []string{"carried task", "fresh task"} {
+	closedAt := noteBySummary(t, m, "closed task").Updated
+	for offset, summary := range []string{"fresh task", "carried task"} {
 		note := noteBySummary(t, m, summary)
-		note.Status, note.Updated = model.StatusDone, time.Now()
+		note.Status, note.Updated = model.StatusDone, closedAt.Add(time.Duration(offset+1)*time.Second)
 	}
 	m.contentVersion++
 	selectSummary(t, &m, "carried task")

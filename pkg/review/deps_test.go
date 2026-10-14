@@ -29,19 +29,65 @@ func TestInstallCommand(t *testing.T) {
 	}
 }
 
-func TestInstallScriptUsesNvm(t *testing.T) {
+func fakeNodeManagers(t *testing.T, nvmInstalled bool, mise string) string {
+	t.Helper()
+	nvmDir := t.TempDir()
+	if nvmInstalled {
+		writeFile(t, filepath.Join(nvmDir, "nvm.sh"), "")
+	}
+	t.Setenv("NVM_DIR", nvmDir)
+	previous := miseExecutable
+	miseExecutable = func() string { return mise }
+	t.Cleanup(func() { miseExecutable = previous })
+	return nvmDir
+}
+
+func TestInstallScriptUsesNvmOnlyWhenItIsInstalled(t *testing.T) {
+	nvmDir := fakeNodeManagers(t, true, "/opt/mise")
 	dir := t.TempDir()
 	writeFile(t, filepath.Join(dir, "package-lock.json"), "")
 	if got := installScript(dir); got != "npm ci --ignore-scripts" {
 		t.Errorf("without nvmrc got %q", got)
 	}
 	writeFile(t, filepath.Join(dir, ".nvmrc"), "20")
-	got := installScript(dir)
-	if !strings.Contains(got, "nvm.sh") || !strings.Contains(got, "nvm install") || !strings.HasSuffix(got, "npm ci --ignore-scripts") {
-		t.Errorf("with nvmrc got %q", got)
+	want := "export NVM_DIR='" + nvmDir + `'; . "$NVM_DIR/nvm.sh" && nvm install && npm ci --ignore-scripts`
+	if got := installScript(dir); got != want {
+		t.Errorf("with nvm got %q, want %q", got, want)
 	}
 	if installScript(t.TempDir()) != "" {
 		t.Errorf("no lockfile should give empty script")
+	}
+}
+
+func TestInstallScriptFallsBackToMiseThenPath(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "pnpm-lock.yaml"), "")
+	writeFile(t, filepath.Join(dir, ".nvmrc"), "v22.14.0\n")
+	fakeNodeManagers(t, false, "/Users/me/.local/bin/mise")
+	if got := installScript(dir); got != "'/Users/me/.local/bin/mise' exec 'node@22.14.0' -- pnpm install --frozen-lockfile --ignore-scripts --ignore-pnpmfile" {
+		t.Errorf("with mise got %q", got)
+	}
+	fakeNodeManagers(t, false, "")
+	if got := installScript(dir); got != "pnpm install --frozen-lockfile --ignore-scripts --ignore-pnpmfile" {
+		t.Errorf("with neither got %q", got)
+	}
+}
+
+func TestNvmrcVersionsMiseUnderstands(t *testing.T) {
+	cases := map[string]string{"22.14.0": "22.14.0", "v20\n": "20", "lts/*": "lts", " lts/iron ": "lts/iron", "": ""}
+	for content, want := range cases {
+		dir := t.TempDir()
+		writeFile(t, filepath.Join(dir, ".nvmrc"), content)
+		if got := nodeVersion(dir); got != want {
+			t.Errorf("nodeVersion(%q) = %q, want %q", content, got, want)
+		}
+	}
+	fakeNodeManagers(t, false, "/opt/mise")
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "package-lock.json"), "")
+	writeFile(t, filepath.Join(dir, ".nvmrc"), "22'; touch /tmp/x; '")
+	if got := installScript(dir); !strings.Contains(got, `'node@22'\''; touch /tmp/x; '\'''`) {
+		t.Errorf("repo-controlled version should be shell-quoted, got %q", got)
 	}
 }
 
@@ -116,7 +162,7 @@ func TestGitStepsIgnoreRepoHooks(t *testing.T) {
 func TestEnvAllowlistsKeepWhatRealSetupsNeed(t *testing.T) {
 	kept := map[string]string{
 		"npm_config_registry": "https://registry.example", "NODE_EXTRA_CA_CERTS": "/ca.pem", "SSL_CERT_FILE": "/cert.pem",
-		"VOLTA_HOME": "/volta", "ASDF_DATA_DIR": "/asdf", "PNPM_HOME": "/pnpm", "COREPACK_HOME": "/corepack",
+		"VOLTA_HOME": "/volta", "ASDF_DATA_DIR": "/asdf", "MISE_DATA_DIR": "/mise", "PNPM_HOME": "/pnpm", "COREPACK_HOME": "/corepack",
 	}
 	for name, value := range kept {
 		t.Setenv(name, value)

@@ -104,6 +104,15 @@ func (m Model) groupNotes() noteGroups {
 		}
 		return a.Updated.Compare(b.Updated)
 	})
+	slices.SortStableFunc(groups.todayDone, func(a, b *model.Note) int {
+		if byRank := closedSourceRank(a) - closedSourceRank(b); byRank != 0 {
+			return byRank
+		}
+		if bySource := strings.Compare(noteSourceText(a), noteSourceText(b)); bySource != 0 {
+			return bySource
+		}
+		return b.Updated.Compare(a.Updated)
+	})
 	slices.SortStableFunc(groups.carried, func(a, b *model.Note) int {
 		if bySourceTag := strings.Compare(noteSourceText(b), noteSourceText(a)); bySourceTag != 0 {
 			return bySourceTag
@@ -426,13 +435,17 @@ func (m *Model) afterPreviewArchive(returnMode ViewMode) {
 	}
 }
 
+func onDayAtClock(day, clock time.Time) time.Time {
+	return time.Date(day.Year(), day.Month(), day.Day(), clock.Hour(), clock.Minute(), clock.Second(), clock.Nanosecond(), day.Location())
+}
+
 func (m Model) toggleNoteDone(note *model.Note) {
 	if note.Status == model.StatusDone {
 		note.Status = model.StatusActive
 		return
 	}
 	note.Status = model.StatusDone
-	note.Updated = m.currentDate
+	note.Updated = onDayAtClock(m.currentDate, time.Now())
 	note.RecordWorkedOn(m.currentDate)
 }
 
@@ -745,6 +758,18 @@ func (m Model) noteTagCells(n *model.Note) (age, source string) {
 	age, source = m.renderNoteTagCells(n)
 	m.noteRows.tags[key] = [2]string{age, source}
 	return age, source
+}
+
+func closedSourceRank(n *model.Note) int {
+	switch n.Source {
+	case model.SourceManual, "":
+		return 0
+	case model.SourceMyPR:
+		return 1
+	case model.SourcePRReview:
+		return 2
+	}
+	return 3
 }
 
 func noteSourceText(n *model.Note) string {
