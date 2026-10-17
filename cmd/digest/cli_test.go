@@ -255,6 +255,8 @@ func TestSummaryPrintsTheDashboardGroups(t *testing.T) {
 	for _, note := range []*model.Note{
 		{Summary: "pending item", Status: model.StatusActive, Source: model.SourceManual, Created: now.AddDate(0, 0, -10), Updated: now.AddDate(0, 0, -10)},
 		{Summary: "today item", Status: model.StatusActive, Source: model.SourceManual, Created: now, Updated: now},
+		{Summary: "Own:OPEN:o:r:my pr", Status: model.StatusActive, Source: model.SourceMyPR, Created: now, Updated: now},
+		{Summary: "Approved:r:1 review", Status: model.StatusActive, Source: model.SourcePRReview, Created: now.AddDate(0, 0, -10), Updated: now.AddDate(0, 0, -10)},
 	} {
 		if err := noteStore.Save(note); err != nil {
 			t.Fatal(err)
@@ -262,11 +264,20 @@ func TestSummaryPrintsTheDashboardGroups(t *testing.T) {
 	}
 
 	output, code := runDigest(t, nil, "--config", configPath, "summary")
-	if code != 0 || !strings.Contains(output, "Pending (1)\n  - pending item #manual") || !strings.Contains(output, "Today (1)\n  - today item #manual") || !strings.Contains(output, "Closed today (0)\n  none") {
+	if code != 0 || !strings.Contains(output, "Pending (2)") || !strings.Contains(output, "Today (2)") || !strings.Contains(output, "#my-pr") || !strings.Contains(output, "Closed today (0)\n  none") {
 		t.Fatalf("exit %d:\n%s", code, output)
 	}
 
-	output, code = runDigest(t, nil, "--config", configPath, "summary", "--json")
+	output, code = runDigest(t, nil, "--config", configPath, "summary", "--exclude=pr")
+	if code != 0 || !strings.Contains(output, "Pending (1)\n  - pending item #manual") || !strings.Contains(output, "Today (1)\n  - today item #manual") || strings.Contains(output, "#pr-review") || strings.Contains(output, "#my-pr") {
+		t.Fatalf("--exclude=pr: exit %d:\n%s", code, output)
+	}
+
+	if output, code = runDigest(t, nil, "--config", configPath, "summary", "--exclude=bogus"); code != 1 || !strings.Contains(output, `unknown --exclude value "bogus"`) {
+		t.Fatalf("--exclude=bogus: exit %d:\n%s", code, output)
+	}
+
+	output, code = runDigest(t, nil, "--config", configPath, "summary", "--json", "--exclude=pr")
 	var report summaryReport
 	if code != 0 || json.Unmarshal([]byte(output), &report) != nil || len(report.Sections) != 4 {
 		t.Fatalf("exit %d:\n%s", code, output)

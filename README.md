@@ -55,7 +55,7 @@ Each step also runs on its own with the command shown.
 ```sh
 digest            # open the dashboard
 digest --help     # every command and flag (also -h or digest help)
-digest summary    # previous work day's done notes, pending notes, today's active and closed notes (--json for scripts)
+digest summary    # previous work day's done notes, pending notes, today's active and closed notes (--json for scripts, --exclude=pr to leave out PR notes)
 ```
 
 Inside the dashboard, `,` opens settings and the footer lists the keys for the current screen.

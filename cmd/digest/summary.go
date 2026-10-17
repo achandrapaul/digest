@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/achandrapaul/digest/pkg/config"
@@ -52,12 +54,36 @@ func summaryNotes(notes []*model.Note) []summaryNote {
 	return converted
 }
 
-func buildSummary(cfg *config.Config, now time.Time) (summaryReport, error) {
+var summaryExclusions = map[string][]model.Source{
+	"pr": {model.SourceMyPR, model.SourcePRReview},
+}
+
+func excludedSources(exclude string) ([]model.Source, error) {
+	var sources []model.Source
+	for _, name := range strings.Split(exclude, ",") {
+		if name = strings.TrimSpace(name); name == "" {
+			continue
+		}
+		matched, known := summaryExclusions[name]
+		if !known {
+			return nil, fmt.Errorf("unknown --exclude value %q (known: pr)", name)
+		}
+		sources = append(sources, matched...)
+	}
+	return sources, nil
+}
+
+func buildSummary(cfg *config.Config, now time.Time, exclude string) (summaryReport, error) {
+	skippedSources, err := excludedSources(exclude)
+	if err != nil {
+		return summaryReport{}, err
+	}
 	previousDay := notegroup.PreviousWorkDay(now, cfg.IsWorkDay)
 	notes, err := store.New(cfg.NotesDir()).ListDashboard(now, previousDay)
 	if err != nil {
 		return summaryReport{}, err
 	}
+	notes = slices.DeleteFunc(notes, func(n *model.Note) bool { return slices.Contains(skippedSources, n.Source) })
 	groups := notegroup.Group(notes, now, previousDay)
 	return summaryReport{
 		Date:        now.Format(time.DateOnly),
@@ -86,8 +112,8 @@ func writeSummaryText(out io.Writer, report summaryReport) {
 	}
 }
 
-func runSummaryCommand(cfg *config.Config, asJSON bool, out, errOut io.Writer, now time.Time) int {
-	report, err := buildSummary(cfg, now)
+func runSummaryCommand(cfg *config.Config, asJSON bool, exclude string, out, errOut io.Writer, now time.Time) int {
+	report, err := buildSummary(cfg, now, exclude)
 	if err != nil {
 		fmt.Fprintf(errOut, "Error: %v\n", err)
 		return 1

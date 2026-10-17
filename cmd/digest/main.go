@@ -253,7 +253,8 @@ func printUsage(out io.Writer) {
 		"  install spotlight        Add an \"Add Digest Note\" Apple Shortcut for Spotlight and the menu bar (one Add click in Shortcuts)",
 		"  uninstall spotlight      Remove its files; delete the shortcut in the Shortcuts app",
 		"  note add <text>  Add a manual note for today; the first line is its summary, the rest its body",
-		"  summary [--json]  Print the last work day's done notes, pending notes, and today's active and closed notes",
+		"  summary [--json] [--exclude=pr]",
+		"                 Print the last work day's done notes, pending notes, and today's active and closed notes; --exclude=pr leaves out #my-pr and #pr-review notes",
 		"  focus <org>:<repo>:<pr title>",
 		"                 Bring the running digest's tmux pane or terminal forward and select that PR",
 		"  doctor         Check that every tool digest needs is installed",
@@ -626,8 +627,9 @@ func main() {
 	case "summary":
 		fs := newCommandFlags("summary")
 		asJSON := fs.Bool("json", false, "Print the summary as JSON")
+		exclude := fs.String("exclude", "", "Comma-separated note kinds to leave out (pr: #my-pr and #pr-review notes)")
 		parseCommandFlags(fs, subArgs)
-		os.Exit(runSummaryCommand(cfg, *asJSON, os.Stdout, os.Stderr, time.Now()))
+		os.Exit(runSummaryCommand(cfg, *asJSON, *exclude, os.Stdout, os.Stderr, time.Now()))
 
 	case "focus":
 		os.Exit(runFocusCommand(cfg, parseCommandFlags(newCommandFlags("focus"), subArgs)))
