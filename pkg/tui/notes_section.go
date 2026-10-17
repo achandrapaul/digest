@@ -11,6 +11,7 @@ import (
 	"github.com/achandrapaul/digest/pkg/appstate"
 	"github.com/achandrapaul/digest/pkg/automation"
 	"github.com/achandrapaul/digest/pkg/model"
+	"github.com/achandrapaul/digest/pkg/notegroup"
 	"github.com/achandrapaul/digest/pkg/store"
 	"github.com/achandrapaul/digest/pkg/tui/textarea"
 
@@ -58,17 +59,11 @@ func (m *Model) refreshArchivedViewport() {
 }
 
 func startOfDay(moment time.Time) time.Time {
-	return time.Date(moment.Year(), moment.Month(), moment.Day(), 0, 0, 0, 0, moment.Location())
+	return notegroup.StartOfDay(moment)
 }
 
 func (m Model) previousNoteDay() time.Time {
-	viewedDayStart := startOfDay(m.currentDate)
-	for daysBack := 1; daysBack <= 7; daysBack++ {
-		if candidate := viewedDayStart.AddDate(0, 0, -daysBack); m.cfg.IsWorkDay(candidate.Weekday()) {
-			return candidate
-		}
-	}
-	return viewedDayStart.AddDate(0, 0, -1)
+	return notegroup.PreviousWorkDay(m.currentDate, m.cfg.IsWorkDay)
 }
 
 type noteGroups struct {
@@ -80,46 +75,14 @@ type noteGroups struct {
 }
 
 func (m Model) groupNotes() noteGroups {
-	groups := noteGroups{previousDay: m.previousNoteDay()}
-	for _, n := range m.notes {
-		switch n.Status {
-		case model.StatusArchived:
-		case model.StatusDone:
-			if !n.Updated.Before(groups.previousDay) && n.Updated.Before(groups.previousDay.AddDate(0, 0, 1)) {
-				groups.previousDone = append(groups.previousDone, n)
-			}
-			if isSameDay(n.Updated, m.currentDate) {
-				groups.todayDone = append(groups.todayDone, n)
-			}
-		default:
-			if isSameDay(n.Created, m.currentDate) || (n.Created.Before(m.currentDate) && n.StartedOn(m.currentDate)) {
-				groups.today = append(groups.today, n)
-			} else if n.Created.Before(m.currentDate) {
-				groups.carried = append(groups.carried, n)
-			}
-		}
+	shared := notegroup.Group(m.notes, m.currentDate, m.previousNoteDay())
+	groups := noteGroups{
+		previousDay:  shared.PreviousDay,
+		previousDone: shared.PreviousDone,
+		carried:      shared.Carried,
+		today:        shared.Today,
+		todayDone:    shared.TodayDone,
 	}
-	slices.SortStableFunc(groups.previousDone, func(a, b *model.Note) int {
-		if bySource := strings.Compare(string(a.Source), string(b.Source)); bySource != 0 {
-			return bySource
-		}
-		return a.Updated.Compare(b.Updated)
-	})
-	slices.SortStableFunc(groups.todayDone, func(a, b *model.Note) int {
-		if byRank := closedSourceRank(a) - closedSourceRank(b); byRank != 0 {
-			return byRank
-		}
-		if bySource := strings.Compare(noteSourceText(a), noteSourceText(b)); bySource != 0 {
-			return bySource
-		}
-		return b.Updated.Compare(a.Updated)
-	})
-	slices.SortStableFunc(groups.carried, func(a, b *model.Note) int {
-		if bySourceTag := strings.Compare(noteSourceText(b), noteSourceText(a)); bySourceTag != 0 {
-			return bySourceTag
-		}
-		return b.Created.Compare(a.Created)
-	})
 	if m.appState.GroupByTag {
 		groups.today = gatherByTag(groups.today)
 	}
@@ -764,27 +727,8 @@ func (m Model) noteTagCells(n *model.Note) (age, source string) {
 	return age, source
 }
 
-func closedSourceRank(n *model.Note) int {
-	switch n.Source {
-	case model.SourceManual, "":
-		return 0
-	case model.SourceMyPR:
-		return 1
-	case model.SourcePRReview:
-		return 2
-	}
-	return 3
-}
-
 func noteSourceText(n *model.Note) string {
-	sourceText := string(n.Source)
-	if sourceText == "" {
-		sourceText = "manual"
-	}
-	if !strings.HasPrefix(sourceText, "#") {
-		sourceText = "#" + sourceText
-	}
-	return sourceText
+	return notegroup.SourceTag(n)
 }
 
 func (m Model) renderNoteTagCells(n *model.Note) (age, source string) {

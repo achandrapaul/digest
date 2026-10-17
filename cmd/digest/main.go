@@ -253,6 +253,7 @@ func printUsage(out io.Writer) {
 		"  install spotlight        Add an \"Add Digest Note\" Apple Shortcut for Spotlight and the menu bar (one Add click in Shortcuts)",
 		"  uninstall spotlight      Remove its files; delete the shortcut in the Shortcuts app",
 		"  note add <text>  Add a manual note for today; the first line is its summary, the rest its body",
+		"  summary [--json]  Print the last work day's done notes, pending notes, and today's active and closed notes",
 		"  focus <org>:<repo>:<pr title>",
 		"                 Bring the running digest's tmux pane or terminal forward and select that PR",
 		"  doctor         Check that every tool digest needs is installed",
@@ -323,7 +324,7 @@ func withoutDryRun(args []string) []string {
 
 func dryRunUnsupported(command string, args []string) (string, bool) {
 	switch command {
-	case "pr-review", "brag", "automation", "notify-due", "init", "bootstrap", "note", "focus":
+	case "pr-review", "brag", "automation", "notify-due", "init", "bootstrap", "note", "focus", "summary":
 		return command, true
 	case "install", "uninstall":
 		words := []string{command}
@@ -621,6 +622,12 @@ func main() {
 
 	case "note":
 		os.Exit(runNoteCommand(cfg, parseCommandFlags(newCommandFlags("note"), subArgs)))
+
+	case "summary":
+		fs := newCommandFlags("summary")
+		asJSON := fs.Bool("json", false, "Print the summary as JSON")
+		parseCommandFlags(fs, subArgs)
+		os.Exit(runSummaryCommand(cfg, *asJSON, os.Stdout, os.Stderr, time.Now()))
 
 	case "focus":
 		os.Exit(runFocusCommand(cfg, parseCommandFlags(newCommandFlags("focus"), subArgs)))

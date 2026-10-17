@@ -1,11 +1,13 @@
 package main
 
 import (
+	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/achandrapaul/digest/pkg/model"
 	"github.com/achandrapaul/digest/pkg/store"
@@ -74,6 +76,7 @@ func TestCommandsWithoutDryRunSayItIsNotSupported(t *testing.T) {
 		"brag":                  {"brag", "--week", "2026-W40"},
 		"automation":            {"automation", "--note", "x", "--name", "y"},
 		"init":                  {"init"},
+		"summary":               {"summary"},
 		"install notifications": {"install", "notifications"},
 	}
 	for name, args := range cases {
@@ -241,5 +244,34 @@ func TestFocusWithoutARunningDigestWritesNoFocusFile(t *testing.T) {
 	}
 	if system.Exists(filepath.Join(digestRoot, ".state", "focus.json")) {
 		t.Error("focus file written without a running digest")
+	}
+}
+
+func TestSummaryPrintsTheDashboardGroups(t *testing.T) {
+	configPath, digestRoot := writeTestConfig(t, "")
+	t.Cleanup(func() { _ = system.UnlockTree(digestRoot) })
+	noteStore := store.New(filepath.Join(digestRoot, "notes"))
+	now := time.Now()
+	for _, note := range []*model.Note{
+		{Summary: "pending item", Status: model.StatusActive, Source: model.SourceManual, Created: now.AddDate(0, 0, -10), Updated: now.AddDate(0, 0, -10)},
+		{Summary: "today item", Status: model.StatusActive, Source: model.SourceManual, Created: now, Updated: now},
+	} {
+		if err := noteStore.Save(note); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	output, code := runDigest(t, nil, "--config", configPath, "summary")
+	if code != 0 || !strings.Contains(output, "Pending (1)\n  - pending item #manual") || !strings.Contains(output, "Today (1)\n  - today item #manual") || !strings.Contains(output, "Closed today (0)\n  none") {
+		t.Fatalf("exit %d:\n%s", code, output)
+	}
+
+	output, code = runDigest(t, nil, "--config", configPath, "summary", "--json")
+	var report summaryReport
+	if code != 0 || json.Unmarshal([]byte(output), &report) != nil || len(report.Sections) != 4 {
+		t.Fatalf("exit %d:\n%s", code, output)
+	}
+	if report.Sections[1].Key != "pending" || len(report.Sections[1].Notes) != 1 || report.Sections[1].Notes[0].Summary != "pending item" {
+		t.Fatalf("pending section = %+v", report.Sections[1])
 	}
 }
