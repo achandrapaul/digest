@@ -51,12 +51,12 @@ func TestMatchReadsTheWholeNote(t *testing.T) {
 		{"Review PR", "nothing here", false},
 		{"", "", false},
 	} {
-		spec, matched := Match(specs, &model.Note{Summary: testCase.summary, Body: testCase.body})
+		spec, matched := Match(specs, &model.Note{Summary: testCase.summary, Body: testCase.body}, nil)
 		if matched != testCase.want || (matched && spec.Name != "PROJ") {
 			t.Errorf("Match(%q, %q) = %v %q, want %v", testCase.summary, testCase.body, matched, spec.Name, testCase.want)
 		}
 	}
-	if _, matched := Match(specs, nil); matched {
+	if _, matched := Match(specs, nil, nil); matched {
 		t.Error("nil note matched")
 	}
 }

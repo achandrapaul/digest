@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"context"
 	"errors"
 	"os"
 	"path/filepath"
@@ -28,6 +29,7 @@ func TestMain(m *testing.M) {
 	openInNvim = func(string, review.PRRef) error { return nil }
 	copyToClipboard = func(string) error { return nil }
 	notify.Send = func(notify.Notification) error { return nil }
+	loadGHHosts = func(context.Context) ([]string, error) { return nil, errors.New("gh is stubbed in tests") }
 	code := m.Run()
 	removeBenchFixtures()
 	os.RemoveAll(cacheDir)

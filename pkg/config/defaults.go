@@ -56,8 +56,11 @@ const (
 	AutomationConfluence     = "confluence"
 	AutomationGoogleDoc      = "google doc"
 	AutomationGoogleCalendar = "google calendar"
+	AutomationSummarise      = "summarise"
 	AutomationPRReview       = "pr review"
 )
+
+const AutomationTypePRSummary = "pr-summary"
 
 var builtInAutomationSpecs = func() []AutomationSpec {
 	var template struct {

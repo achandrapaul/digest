@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"os"
 	"os/exec"
@@ -9,8 +10,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/achandrapaul/digest/pkg/config"
 	"github.com/achandrapaul/digest/pkg/model"
 	"github.com/achandrapaul/digest/pkg/store"
+	"github.com/achandrapaul/digest/pkg/summary"
 	"github.com/achandrapaul/digest/pkg/system"
 )
 
@@ -278,11 +281,35 @@ func TestSummaryPrintsTheDashboardGroups(t *testing.T) {
 	}
 
 	output, code = runDigest(t, nil, "--config", configPath, "summary", "--json", "--exclude=pr")
-	var report summaryReport
+	var report summary.Report
 	if code != 0 || json.Unmarshal([]byte(output), &report) != nil || len(report.Sections) != 4 {
 		t.Fatalf("exit %d:\n%s", code, output)
 	}
 	if report.Sections[1].Key != "pending" || len(report.Sections[1].Notes) != 1 || report.Sections[1].Notes[0].Summary != "pending item" {
 		t.Fatalf("pending section = %+v", report.Sections[1])
+	}
+}
+
+func TestSummaryWarnsAboutACorruptNoteAndStillPrints(t *testing.T) {
+	configPath, digestRoot := writeTestConfig(t, "")
+	t.Cleanup(func() { _ = system.UnlockTree(digestRoot) })
+	cfg, err := config.Load(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Date(2026, 10, 19, 12, 0, 0, 0, time.Local)
+	if err := store.New(cfg.NotesDir()).Save(&model.Note{Summary: "today item", Status: model.StatusActive, Source: model.SourceManual, Created: now, Updated: now}); err != nil {
+		t.Fatal(err)
+	}
+	corruptPath := filepath.Join(cfg.NotesDir(), "2026", "10", "broken.md")
+	if err := os.WriteFile(corruptPath, []byte("---\nnot: [valid\n---\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var out, errOut bytes.Buffer
+	if code := runSummaryCommand(cfg, false, "", &out, &errOut, now); code != 0 {
+		t.Fatalf("exit %d, stderr %s", code, errOut.String())
+	}
+	if !strings.Contains(out.String(), "Today (1)\n  - today item #manual") || !strings.Contains(errOut.String(), "Warning: ") || !strings.Contains(errOut.String(), "broken.md") {
+		t.Errorf("stdout:\n%s\nstderr:\n%s", out.String(), errOut.String())
 	}
 }

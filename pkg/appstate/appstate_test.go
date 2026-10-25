@@ -238,3 +238,22 @@ func TestUpdateRefusesACorruptFile(t *testing.T) {
 		t.Errorf("err = %v, called = %v", err, called)
 	}
 }
+
+func TestHideCarriedPRReviewsIsOnlySavedOnceSet(t *testing.T) {
+	oldRoot := t.TempDir()
+	if err := Save(oldRoot, State{Streak: 2}); err != nil {
+		t.Fatal(err)
+	}
+	if err := Update(oldRoot, func(state *State) { state.GroupByTag = true }); err != nil {
+		t.Fatal(err)
+	}
+	if data, _ := os.ReadFile(Path(oldRoot)); strings.Contains(string(data), "hide_carried_pr_reviews") {
+		t.Errorf("other saves should not add the setting: %s", data)
+	}
+	if err := Update(oldRoot, func(state *State) { state.HideCarriedPRReviews = true }); err != nil {
+		t.Fatal(err)
+	}
+	if loaded, _, err := Load(oldRoot); err != nil || !loaded.HideCarriedPRReviews || !loaded.GroupByTag {
+		t.Errorf("loaded = %+v, %v", loaded, err)
+	}
+}

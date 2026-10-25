@@ -195,11 +195,11 @@ func TestBuiltInAutomationsByDefault(t *testing.T) {
 		var names []string
 		for _, spec := range automations {
 			names = append(names, spec.Name)
-			if spec.Name != AutomationPRReview && (spec.DraftPrompt == "" || spec.CreatePrompt == "" || len(spec.Match) == 0) {
+			if spec.Name != AutomationPRReview && (spec.DraftPrompt == "" || (spec.CreatePrompt == "") != (spec.Type == AutomationTypePRSummary) || len(spec.Match) == 0) {
 				t.Errorf("%s should have default prompts and match phrases: %+v", spec.Name, spec)
 			}
 		}
-		if strings.Join(names, ",") != "jira,confluence,google doc,google calendar,pr review" {
+		if strings.Join(names, ",") != "jira,confluence,google doc,google calendar,summarise,pr review" {
 			t.Errorf("automations = %v", names)
 		}
 	}
@@ -399,7 +399,7 @@ func TestSetupAnswersRenderIntoTheTemplate(t *testing.T) {
 		cfg.DigestNotifications.Morning != "08:00" || cfg.DigestNotifications.Evening != "" || !cfg.ShowKeyHints || cfg.TerminalApp != "com.mitchellh.ghostty" {
 		t.Errorf("rendered = %+v", cfg)
 	}
-	if !strings.Contains(text, "# claude is the only supported tool") || len(cfg.AutomationList()) != 5 {
+	if !strings.Contains(text, "# claude is the only supported tool") || len(cfg.AutomationList()) != 6 {
 		t.Errorf("render should keep the rest of the template")
 	}
 	custom := "digest_root: /mine\nshow_git: true\ngit_repository_roots:\n  - ~/old\njobs: []\n"

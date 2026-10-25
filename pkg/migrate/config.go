@@ -196,39 +196,43 @@ func automationNodeName(automation *yaml.Node) string {
 	return ""
 }
 
-func migrateAutomations(configPath string, out io.Writer, dryRun, calendarOffered bool) (bool, error) {
+var offeredOnceAutomations = []string{config.AutomationGoogleCalendar, config.AutomationSummarise}
+
+func migrateAutomations(configPath string, out io.Writer, dryRun bool, alreadyOffered map[string]bool) (map[string]bool, error) {
 	document, root, err := loadConfigDocument(configPath)
 	if err != nil || root == nil {
-		return false, err
+		return nil, err
 	}
 	_, automations := config.MappingValue(root, "automations")
 	if automations == nil {
-		return false, nil
+		return nil, nil
 	}
 	if automations.Kind != yaml.SequenceNode {
-		return false, fmt.Errorf("parse %s: automations is not a list", configPath)
+		return nil, fmt.Errorf("parse %s: automations is not a list", configPath)
 	}
 	templateNodes, err := templateAutomationNodes()
 	if err != nil {
-		return false, err
+		return nil, err
 	}
 	templateTypes := map[string]string{}
-	var calendarTemplate *yaml.Node
+	offeredTemplates := map[string]*yaml.Node{}
 	for _, templateNode := range templateNodes {
 		name := automationNodeName(templateNode)
 		if _, automationType := config.MappingValue(templateNode, "automation_type"); automationType != nil {
 			templateTypes[name] = automationType.Value
 		}
-		if name == config.AutomationGoogleCalendar {
-			calendarTemplate = templateNode
+		if slices.Contains(offeredOnceAutomations, name) {
+			offeredTemplates[name] = templateNode
 		}
 	}
 
 	var typed []string
-	hasCalendar, prReviewIndex := false, -1
+	present, prReviewIndex := map[string]bool{}, -1
 	for index, automation := range automations.Content {
 		name := automationNodeName(automation)
-		hasCalendar = hasCalendar || name == config.AutomationGoogleCalendar
+		if slices.Contains(offeredOnceAutomations, name) {
+			present[name] = true
+		}
 		if name == config.AutomationPRReview && prReviewIndex < 0 {
 			prReviewIndex = index
 		}
@@ -247,31 +251,38 @@ func migrateAutomations(configPath string, out io.Writer, dryRun, calendarOffere
 		automation.Content = append(automation.Content[:nameIndex+2], append(typeEntry, automation.Content[nameIndex+2:]...)...)
 		typed = append(typed, name)
 	}
-	addCalendar := !hasCalendar && !calendarOffered && calendarTemplate != nil
-	if addCalendar {
-		if prReviewIndex < 0 {
-			automations.Content = append(automations.Content, calendarTemplate)
-		} else {
-			automations.Content = append(automations.Content[:prReviewIndex], append([]*yaml.Node{calendarTemplate}, automations.Content[prReviewIndex:]...)...)
+	var added []string
+	for _, name := range offeredOnceAutomations {
+		template := offeredTemplates[name]
+		if present[name] || alreadyOffered[name] || template == nil {
+			continue
 		}
+		if prReviewIndex < 0 {
+			automations.Content = append(automations.Content, template)
+		} else {
+			automations.Content = append(automations.Content[:prReviewIndex], append([]*yaml.Node{template}, automations.Content[prReviewIndex:]...)...)
+			prReviewIndex++
+		}
+		added = append(added, name)
 	}
-	if len(typed) == 0 && !addCalendar {
-		return hasCalendar, nil
+	if len(typed) == 0 && len(added) == 0 {
+		return present, nil
 	}
 
 	verb := "added"
 	if dryRun {
 		verb = "would add"
 	} else if err := saveConfigDocument(configPath, document); err != nil {
-		return false, err
+		return nil, err
 	}
 	if len(typed) > 0 {
 		fmt.Fprintf(out, "%s automation_type to %s in %s\n", verb, strings.Join(typed, ", "), configPath)
 	}
-	if addCalendar {
-		fmt.Fprintf(out, "%s the google calendar automation to %s\n", verb, configPath)
+	for _, name := range added {
+		fmt.Fprintf(out, "%s the %s automation to %s\n", verb, name, configPath)
+		present[name] = true
 	}
-	return hasCalendar || addCalendar, nil
+	return present, nil
 }
 
 var jobCommandKeys = []string{"command", "dry-run-command", "cmd", "dry_run_command"}

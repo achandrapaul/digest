@@ -199,6 +199,9 @@ func (c *Config) validateAutomations() error {
 		switch {
 		case strings.TrimSpace(spec.Type) == "":
 			return fmt.Errorf("automation %s: automation_type is required", spec.Name)
+		case spec.Type == AutomationTypePRSummary && spec.DraftPrompt == "":
+			return fmt.Errorf("automation %s: draft_prompt is required", spec.Name)
+		case spec.Type == AutomationTypePRSummary:
 		case spec.Name != AutomationPRReview && (spec.DraftPrompt == "" || spec.CreatePrompt == ""):
 			return fmt.Errorf("automation %s: draft_prompt and create_prompt are required", spec.Name)
 		}

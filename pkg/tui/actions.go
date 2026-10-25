@@ -54,7 +54,7 @@ func (m Model) noteActions(n *model.Note) []noteAction {
 		actions = append(actions, noteAction{name: actionNameNotify})
 	}
 	if !m.automatedKindKnown(n.Automated) {
-		for _, spec := range automation.MatchAll(m.cfg.AutomationList(), n) {
+		for _, spec := range automation.MatchAll(m.cfg.AutomationList(), n, m.automation.ghHosts) {
 			actions = append(actions, noteAction{name: spec.Name, automation: true})
 		}
 	}

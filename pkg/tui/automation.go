@@ -1,17 +1,20 @@
 package tui
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"maps"
 	"slices"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/achandrapaul/digest/pkg/automation"
 	"github.com/achandrapaul/digest/pkg/config"
 	"github.com/achandrapaul/digest/pkg/jobs"
 	"github.com/achandrapaul/digest/pkg/model"
+	"github.com/achandrapaul/digest/pkg/review"
 	"github.com/achandrapaul/digest/pkg/tui/textarea"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -38,7 +41,7 @@ func (m Model) noteAutomation(n *model.Note) (config.AutomationSpec, bool) {
 	if n == nil || n.ID == "" {
 		return config.AutomationSpec{}, false
 	}
-	return automation.Match(m.cfg.AutomationList(), n)
+	return automation.Match(m.cfg.AutomationList(), n, m.automation.ghHosts)
 }
 
 func (m Model) automatedKindKnown(kind string) bool {
@@ -468,6 +471,9 @@ func (m Model) renderAutomationConfirm(modalWidth int) string {
 	}
 	if m.automation.automationPhase == automation.PhaseCreate {
 		prompt = fmt.Sprintf("Run %s with this draft?\n\nClaude creates it in the background.", m.automation.automationName)
+		if spec, found := automation.Find(m.cfg.AutomationList(), m.automation.automationName); found && spec.Type == config.AutomationTypePRSummary {
+			prompt = "Add this summary to the note?\n\ndigest writes it under ## PR summary, replacing the previous one."
+		}
 	}
 	content := lipgloss.JoinVertical(lipgloss.Left,
 		modalTitleStyle.Render(" AUTOMATE "),
@@ -601,4 +607,21 @@ func (m Model) dismissAutomationRun(run *automation.Run) (tea.Model, tea.Cmd) {
 	}
 	m.clampScreenSelection()
 	return m, nil
+}
+
+type ghHostsLoadedMsg struct {
+	hosts []string
+}
+
+var loadGHHosts = review.GHHosts
+
+const ghHostsTimeout = 30 * time.Second
+
+func loadGHHostsCmd() tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), ghHostsTimeout)
+		defer cancel()
+		hosts, _ := loadGHHosts(ctx)
+		return ghHostsLoadedMsg{hosts: hosts}
+	}
 }

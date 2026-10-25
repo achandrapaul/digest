@@ -106,6 +106,23 @@ automations:
     create_prompt:
       - 'Create one event from the draft below with the Google Calendar connector''s event creation tool, using its summary, description, start, end, time_zone, attendees and location. Do not change its content and do not create anything else.'
       - 'Output only one JSON object: {"kind": "event", "key": "<event id>", "url": "<event link>"}.'
+  # PR summary; offered only when the note links a GitHub PR, digest fetches each PR with gh
+  # and r writes the confirmed draft under ## PR summary, replacing the previous one
+  - name: summarise
+    automation_type: pr-summary
+    match:
+      - fetch pr
+      - check pr
+      - refer to pr
+      - refer to these pr
+      - pr for reference
+      - prs for reference
+      - pr(s) for reference
+    draft_prompt:
+      - 'Summarise the changes of every pull request under "## Pull requests" below. The PR details and diffs are the only source of truth; never invent people, dates or numbers.'
+      - 'Write one "### <owner>/<repo>#<number> <title>" subsection per pull request, in the order given, with a short paragraph on what changed and why, then bullets for the notable changes. For a pull request marked unavailable, write its heading and the line "Unavailable: <reason>".'
+      - 'Do NOT use any tools.'
+      - 'Output only one JSON object with the keys summary (one line naming the pull requests) and description (the subsections as markdown).'
   # PR review; never offered on @, run by digest for pending PRs
   - name: pr review
     automation_type: reviewed

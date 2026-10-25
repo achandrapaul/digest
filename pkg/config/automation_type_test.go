@@ -13,6 +13,7 @@ func TestBuiltInAutomationsComeFromTheEmbeddedTemplate(t *testing.T) {
 		AutomationConfluence:     "confluence",
 		AutomationGoogleDoc:      "doc",
 		AutomationGoogleCalendar: "event",
+		AutomationSummarise:      AutomationTypePRSummary,
 		AutomationPRReview:       "reviewed",
 	}
 	for _, spec := range builtInAutomations() {
@@ -30,6 +31,12 @@ func TestBuiltInAutomationsComeFromTheEmbeddedTemplate(t *testing.T) {
 			}
 			continue
 		}
+		if spec.Type == AutomationTypePRSummary {
+			if spec.DraftPrompt == "" || spec.CreatePrompt != "" {
+				t.Errorf("%s should carry only a draft prompt; digest writes its section itself", spec.Name)
+			}
+			continue
+		}
 		if spec.DraftPrompt == "" || spec.CreatePrompt == "" {
 			t.Errorf("%s should carry both prompts in the template", spec.Name)
 		}
@@ -43,6 +50,23 @@ func TestBuiltInAutomationsComeFromTheEmbeddedTemplate(t *testing.T) {
 	}
 	if !strings.Contains(string(calendar.DraftPrompt), "NO TIME:") {
 		t.Error("the calendar draft should stop when the note has no time")
+	}
+	summarise, _ := findAutomation(builtInAutomations(), AutomationSummarise)
+	wantPhrases := "fetch pr,check pr,refer to pr,refer to these pr,pr for reference,prs for reference,pr(s) for reference"
+	if len(summarise.Plugins) != 0 || strings.Join(summarise.Match, ",") != wantPhrases {
+		t.Errorf("summarise = %+v", summarise)
+	}
+}
+
+func TestSummariseLoadsWithoutACreatePrompt(t *testing.T) {
+	if _, err := loadAutomations(t, "  - name: summarise\n"); err != nil {
+		t.Errorf("summarise needs no create prompt: %v", err)
+	}
+	if _, err := loadAutomations(t, "  - name: mine\n    automation_type: pr-summary\n    draft_prompt: draft it\n"); err != nil {
+		t.Errorf("any pr-summary automation needs no create prompt: %v", err)
+	}
+	if _, err := loadAutomations(t, "  - name: mine\n    automation_type: pr-summary\n"); err == nil || !strings.Contains(err.Error(), "automation mine: draft_prompt is required") {
+		t.Errorf("err = %v", err)
 	}
 }
 

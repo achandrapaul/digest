@@ -13,6 +13,7 @@ import (
 
 	"github.com/achandrapaul/digest/pkg/appstate"
 	"github.com/achandrapaul/digest/pkg/automation"
+	"github.com/achandrapaul/digest/pkg/config"
 	"github.com/achandrapaul/digest/pkg/model"
 	"github.com/achandrapaul/digest/pkg/notify"
 	"github.com/achandrapaul/digest/pkg/review"
@@ -25,7 +26,6 @@ var (
 	ErrTUIRunning        = errors.New("quit the digest TUI before migrating")
 	ErrAutomationRunning = errors.New("wait for running automations to finish before migrating")
 
-	prLinkPattern   = regexp.MustCompile(`https?://[^\s<>()"']+/pull/\d+`)
 	openedPattern   = regexp.MustCompile(`(?m)^- (\d{4}-\d{2}-\d{2} \d{2}:\d{2}) Opened$`)
 	legacyMyPRID    = regexp.MustCompile(`^MyPR:([^:]+):([^:]+):(\d+)$`)
 	legacyReviewID  = regexp.MustCompile(`^([^:]+):(\d+)$`)
@@ -65,7 +65,8 @@ func Run(options Options) (int, error) {
 	if err != nil && !appstate.IsCorrupt(err) {
 		return 0, err
 	}
-	calendarPresent, err := migrateAutomations(options.ConfigPath, options.Out, options.DryRun, storedState.CalendarOffered)
+	alreadyOffered := map[string]bool{config.AutomationGoogleCalendar: storedState.CalendarOffered, config.AutomationSummarise: storedState.SummariseOffered}
+	offeredPresent, err := migrateAutomations(options.ConfigPath, options.Out, options.DryRun, alreadyOffered)
 	if err != nil {
 		return 0, err
 	}
@@ -154,7 +155,7 @@ func Run(options Options) (int, error) {
 	} else {
 		fmt.Fprintf(options.Out, "%d notes migrated\n", changed)
 	}
-	if err := migrateAppState(options, notes, calendarPresent); err != nil {
+	if err := migrateAppState(options, notes, offeredPresent); err != nil {
 		return changed, err
 	}
 	if system.Protected(options.Root) && options.DryRun {
@@ -189,7 +190,7 @@ func isPRNote(note *model.Note) bool {
 }
 
 func prLink(note *model.Note) string {
-	links := prLinkPattern.FindAllString(note.Body, -1)
+	links := model.PullRequestURLsIn(note.Body)
 	if len(links) == 0 {
 		return ""
 	}
@@ -278,7 +279,7 @@ func moveAutomationState(options Options, originalID, newID string) error {
 	return nil
 }
 
-func migrateAppState(options Options, notes []*model.Note, calendarPresent bool) error {
+func migrateAppState(options Options, notes []*model.Note, offeredPresent map[string]bool) error {
 	stored, found, err := appstate.Load(options.Root)
 	corrupt := appstate.IsCorrupt(err)
 	if err != nil && !corrupt {
@@ -286,7 +287,8 @@ func migrateAppState(options Options, notes []*model.Note, calendarPresent bool)
 	}
 	fromNotes := appstate.FromNotes(notes, options.now(), options.isWorkDay)
 	fromNotes.FirstNoteCreated = appstate.FirstManualNoteCreated(notes)
-	fromNotes.CalendarOffered = calendarPresent
+	calendarPresent, summarisePresent := offeredPresent[config.AutomationGoogleCalendar], offeredPresent[config.AutomationSummarise]
+	fromNotes.CalendarOffered, fromNotes.SummariseOffered = calendarPresent, summarisePresent
 	if !found {
 		if !options.DryRun {
 			return saveAppState(options.Root, fromNotes)
@@ -298,9 +300,9 @@ func migrateAppState(options Options, notes []*model.Note, calendarPresent bool)
 		fmt.Fprintf(options.Out, "%s %s\n", plan, appstate.Path(options.Root))
 		return nil
 	}
-	recordCalendar := calendarPresent && !stored.CalendarOffered
+	recordOffered := (calendarPresent && !stored.CalendarOffered) || (summarisePresent && !stored.SummariseOffered)
 	fillFirstNote := stored.FirstNoteCreated.IsZero() && !fromNotes.FirstNoteCreated.IsZero()
-	if !recordCalendar && !fillFirstNote {
+	if !recordOffered && !fillFirstNote {
 		return nil
 	}
 	if options.DryRun {
@@ -313,6 +315,7 @@ func migrateAppState(options Options, notes []*model.Note, calendarPresent bool)
 		stored.FirstNoteCreated = fromNotes.FirstNoteCreated
 	}
 	stored.CalendarOffered = stored.CalendarOffered || calendarPresent
+	stored.SummariseOffered = stored.SummariseOffered || summarisePresent
 	return saveAppState(options.Root, stored)
 }
 

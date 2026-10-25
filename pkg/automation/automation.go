@@ -12,6 +12,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/achandrapaul/digest/pkg/aitool"
@@ -65,25 +66,27 @@ var authFailurePattern = regexp.MustCompile(`(?i)\b401\b|unauthori[sz]ed|mcp__\w
 
 var draftKeyOrder = []string{"project", "issue_type", "summary", "priority", "components", "labels"}
 
-func Match(specs []config.AutomationSpec, note *model.Note) (config.AutomationSpec, bool) {
-	matched := MatchAll(specs, note)
+func Match(specs []config.AutomationSpec, note *model.Note, ghHosts []string) (config.AutomationSpec, bool) {
+	matched := MatchAll(specs, note, ghHosts)
 	if len(matched) == 0 {
 		return config.AutomationSpec{}, false
 	}
 	return matched[0], true
 }
 
-func MatchAll(specs []config.AutomationSpec, note *model.Note) []config.AutomationSpec {
+func MatchAll(specs []config.AutomationSpec, note *model.Note, ghHosts []string) []config.AutomationSpec {
 	if note == nil {
 		return nil
 	}
-	content := strings.ToLower(note.Summary + "\n" + note.Body)
+	text := note.Summary + "\n" + note.Body
+	content := strings.ToLower(text)
+	linksPullRequest := sync.OnceValue(func() bool { return len(model.PullRequestURLsOnHosts(text, ghHosts)) > 0 })
 	var matched []config.AutomationSpec
 	for _, spec := range specs {
 		if slices.ContainsFunc(spec.Match, func(phrase string) bool {
 			phrase = strings.ToLower(strings.TrimSpace(phrase))
 			return phrase != "" && strings.Contains(content, phrase)
-		}) {
+		}) && (!isPRSummary(spec) || linksPullRequest()) {
 			matched = append(matched, spec)
 		}
 	}
@@ -177,15 +180,29 @@ func redactedInput(redactor *redact.Redactor, input string) string {
 }
 
 func Execute(ctx context.Context, spec config.AutomationSpec, root string, note *model.Note, phase Phase, redactor *redact.Redactor) (Result, error) {
+	var draft string
+	if phase == PhaseCreate {
+		var err error
+		if draft, err = LoadDraft(root, note.ID); err != nil {
+			return Result{}, fmt.Errorf("no confirmed draft: %w", err)
+		}
+	}
+	return execute(ctx, spec, root, note, phase, draft, redactor)
+}
+
+func execute(ctx context.Context, spec config.AutomationSpec, root string, note *model.Note, phase Phase, draft string, redactor *redact.Redactor) (Result, error) {
 	var input string
 	switch phase {
 	case PhaseDraft:
 		input = noteInput(string(spec.DraftPrompt), note)
-	case PhaseCreate:
-		draft, err := LoadDraft(root, note.ID)
-		if err != nil {
-			return Result{}, fmt.Errorf("no confirmed draft: %w", err)
+		if isPRSummary(spec) {
+			pullRequests, err := pullRequestsInput(ctx, note)
+			if err != nil {
+				return Result{}, fmt.Errorf("%s draft: %w", spec.Name, err)
+			}
+			input += pullRequests
 		}
+	case PhaseCreate:
 		input = string(spec.CreatePrompt) + "\n\n## Draft\n\n" + draft
 	default:
 		return Result{}, fmt.Errorf("unknown phase %q", phase)
@@ -347,6 +364,9 @@ func runJob(ctx context.Context, cfg *config.Config, noteID, automationName stri
 	if !found {
 		return fmt.Errorf("no automation named %q in the config", automationName)
 	}
+	if isPRSummary(spec) && !cfg.GitEnabled() {
+		return fmt.Errorf("%s needs show_git: true", spec.Name)
+	}
 	noteStore := store.New(cfg.NotesDir())
 	note, err := noteStore.FindByID(noteID)
 	if err != nil {
@@ -356,28 +376,40 @@ func runJob(ctx context.Context, cfg *config.Config, noteID, automationName stri
 	if err != nil {
 		return err
 	}
-	result, err := Execute(ctx, spec, cfg.AutomationDir(), note, phase, redactor)
+	var draft string
+	if phase == PhaseCreate {
+		if draft, err = LoadDraft(cfg.AutomationDir(), noteID); err != nil {
+			return fmt.Errorf("no confirmed draft: %w", err)
+		}
+		if isPRSummary(spec) {
+			return writePRSummary(noteStore, note, cfg.AutomationDir(), draft, stdout, stderr)
+		}
+	}
+	result, err := execute(ctx, spec, cfg.AutomationDir(), note, phase, draft, redactor)
 	if err != nil || phase != PhaseCreate {
 		return err
 	}
 	if result.Kind == KindTicket && result.URL == "" && result.Key != "" && cfg.JiraBaseURL != "" {
 		result.URL = cfg.JiraBaseURL + result.Key
 	}
-	draft, err := LoadDraft(cfg.AutomationDir(), noteID)
-	if err != nil {
-		return fmt.Errorf("%s created but its draft could not be read: %w", result.Kind, err)
-	}
 	draftFields, _ := ParseDraft(draft)
 	note.Body = strings.TrimSpace(strings.TrimSpace(note.Body) + "\n\n" + resultSection(result, draftFields))
 	note.Automated, note.Updated = result.Kind, time.Now()
-	if err := noteStore.Save(note); errors.Is(err, store.ErrLockNote) {
-		fmt.Fprintf(stderr, "%s created: %v\n", result.Kind, err)
-	} else if err != nil {
-		return fmt.Errorf("%s created but the note could not be saved: %w", result.Kind, err)
-	}
-	if err := system.Remove(filepath.Join(StateDir(cfg.AutomationDir(), noteID), draftFile)); err != nil {
-		return fmt.Errorf("%s created but its draft could not be removed: %w", result.Kind, err)
+	if err := saveNoteAndDropDraft(noteStore, note, cfg.AutomationDir(), result.Kind+" created", stderr); err != nil {
+		return err
 	}
 	fmt.Fprintf(stdout, "Created %s %s %s\n", result.Kind, result.Key, result.URL)
+	return nil
+}
+
+func saveNoteAndDropDraft(noteStore *store.NoteStore, note *model.Note, root, done string, stderr io.Writer) error {
+	if err := noteStore.Save(note); errors.Is(err, store.ErrLockNote) {
+		fmt.Fprintf(stderr, "%s: %v\n", done, err)
+	} else if err != nil {
+		return fmt.Errorf("%s but the note could not be saved: %w", done, err)
+	}
+	if err := system.Remove(filepath.Join(StateDir(root, note.ID), draftFile)); err != nil {
+		return fmt.Errorf("%s but its draft could not be removed: %w", done, err)
+	}
 	return nil
 }

@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/achandrapaul/digest/pkg/automation"
+	"github.com/achandrapaul/digest/pkg/config"
 	"github.com/achandrapaul/digest/pkg/model"
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -52,6 +53,16 @@ func TestCreateStepConfirmAsksToRunTheDraft(t *testing.T) {
 		t.Fatalf("mode %v phase %v", m.mode, m.automation.automationPhase)
 	}
 	if view := stripANSI(m.View()); !strings.Contains(view, "Run jira with this draft?") || !strings.Contains(view, "Claude creates it in the background.") {
+		t.Fatalf("confirm:\n%s", view)
+	}
+}
+
+func TestSummariseCreateConfirmSaysDigestWritesTheSummary(t *testing.T) {
+	m := draftTabModel(t, automation.RunFailed)
+	m.cfg.Automations[0].Type = config.AutomationTypePRSummary
+	m = press(t, m, runes("r"))
+	view := stripANSI(m.View())
+	if !strings.Contains(view, "Add this summary to the note?") || !strings.Contains(view, "## PR summary") || strings.Contains(view, "Claude creates it") {
 		t.Fatalf("confirm:\n%s", view)
 	}
 }

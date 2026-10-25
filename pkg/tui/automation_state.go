@@ -8,4 +8,5 @@ type automationState struct {
 	automationName   string
 	automationPhase  automation.Phase
 	automationNotice string
+	ghHosts          []string
 }

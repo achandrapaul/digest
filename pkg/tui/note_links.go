@@ -1,7 +1,6 @@
 package tui
 
 import (
-	"slices"
 	"strings"
 
 	"github.com/achandrapaul/digest/pkg/model"
@@ -13,14 +12,7 @@ func noteLinks(note *model.Note) []string {
 	if note == nil {
 		return nil
 	}
-	var links []string
-	for _, link := range noteLinkPattern.FindAllString(note.Summary+"\n"+note.Body, -1) {
-		link = strings.TrimRight(link, ".,;:")
-		if !slices.Contains(links, link) {
-			links = append(links, link)
-		}
-	}
-	return links
+	return model.LinksIn(note.Summary + "\n" + note.Body)
 }
 
 func noteLinksLabel(links []string, onDashboard bool) string {

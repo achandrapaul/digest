@@ -2,124 +2,28 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
-	"slices"
-	"strings"
 	"time"
 
 	"github.com/achandrapaul/digest/pkg/config"
-	"github.com/achandrapaul/digest/pkg/model"
-	"github.com/achandrapaul/digest/pkg/notegroup"
 	"github.com/achandrapaul/digest/pkg/store"
+	"github.com/achandrapaul/digest/pkg/summary"
 )
 
-type summaryNote struct {
-	ID      string    `json:"id"`
-	Summary string    `json:"summary"`
-	Source  string    `json:"source"`
-	Status  string    `json:"status"`
-	Repo    string    `json:"repo,omitempty"`
-	Ref     string    `json:"ref,omitempty"`
-	Created time.Time `json:"created"`
-	Updated time.Time `json:"updated"`
-}
-
-type summarySection struct {
-	Key   string        `json:"key"`
-	Title string        `json:"title"`
-	Notes []summaryNote `json:"notes"`
-}
-
-type summaryReport struct {
-	Date        string           `json:"date"`
-	PreviousDay string           `json:"previous_day"`
-	Sections    []summarySection `json:"sections"`
-}
-
-func summaryNotes(notes []*model.Note) []summaryNote {
-	converted := make([]summaryNote, 0, len(notes))
-	for _, n := range notes {
-		converted = append(converted, summaryNote{
-			ID:      n.ID,
-			Summary: n.Summary,
-			Source:  notegroup.SourceTag(n),
-			Status:  string(n.Status),
-			Repo:    n.Repo,
-			Ref:     n.Ref,
-			Created: n.Created,
-			Updated: n.Updated,
-		})
-	}
-	return converted
-}
-
-var summaryExclusions = map[string][]model.Source{
-	"pr": {model.SourceMyPR, model.SourcePRReview},
-}
-
-func excludedSources(exclude string) ([]model.Source, error) {
-	var sources []model.Source
-	for _, name := range strings.Split(exclude, ",") {
-		if name = strings.TrimSpace(name); name == "" {
-			continue
-		}
-		matched, known := summaryExclusions[name]
-		if !known {
-			return nil, fmt.Errorf("unknown --exclude value %q (known: pr)", name)
-		}
-		sources = append(sources, matched...)
-	}
-	return sources, nil
-}
-
-func buildSummary(cfg *config.Config, now time.Time, exclude string) (summaryReport, error) {
-	skippedSources, err := excludedSources(exclude)
-	if err != nil {
-		return summaryReport{}, err
-	}
-	previousDay := notegroup.PreviousWorkDay(now, cfg.IsWorkDay)
-	notes, err := store.New(cfg.NotesDir()).ListDashboard(now, previousDay)
-	if err != nil {
-		return summaryReport{}, err
-	}
-	notes = slices.DeleteFunc(notes, func(n *model.Note) bool { return slices.Contains(skippedSources, n.Source) })
-	groups := notegroup.Group(notes, now, previousDay)
-	return summaryReport{
-		Date:        now.Format(time.DateOnly),
-		PreviousDay: previousDay.Format(time.DateOnly),
-		Sections: []summarySection{
-			{Key: "previous_done", Title: "Done " + previousDay.Format("Monday"), Notes: summaryNotes(groups.PreviousDone)},
-			{Key: "pending", Title: "Pending", Notes: summaryNotes(groups.Carried)},
-			{Key: "today", Title: "Today", Notes: summaryNotes(groups.Today)},
-			{Key: "today_done", Title: "Closed today", Notes: summaryNotes(groups.TodayDone)},
-		},
-	}, nil
-}
-
-func writeSummaryText(out io.Writer, report summaryReport) {
-	for sectionIndex, section := range report.Sections {
-		if sectionIndex > 0 {
-			fmt.Fprintln(out)
-		}
-		fmt.Fprintf(out, "%s (%d)\n", section.Title, len(section.Notes))
-		if len(section.Notes) == 0 {
-			fmt.Fprintln(out, "  none")
-		}
-		for _, note := range section.Notes {
-			fmt.Fprintf(out, "  - %s %s\n", note.Summary, note.Source)
-		}
-	}
-}
-
 func runSummaryCommand(cfg *config.Config, asJSON bool, exclude string, out, errOut io.Writer, now time.Time) int {
-	report, err := buildSummary(cfg, now, exclude)
-	if err != nil {
+	report, err := summary.Build(cfg.NotesDir(), now, cfg.IsWorkDay, exclude)
+	var skipped *store.SkippedNotesError
+	if err != nil && !errors.As(err, &skipped) {
 		fmt.Fprintf(errOut, "Error: %v\n", err)
 		return 1
 	}
+	if skipped != nil {
+		defer fmt.Fprintf(errOut, "Warning: %v\n", skipped)
+	}
 	if !asJSON {
-		writeSummaryText(out, report)
+		summary.WriteText(out, report)
 		return 0
 	}
 	encoder := json.NewEncoder(out)

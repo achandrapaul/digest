@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os/exec"
-	"regexp"
 	"runtime"
 	"slices"
 	"strings"
@@ -372,6 +371,9 @@ func relockRootCmd(root string) tea.Cmd {
 
 func (m Model) Init() tea.Cmd {
 	cmds := []tea.Cmd{m.startupNotesCmd(), tickBannerWaveCmd(), m.loadCommitsCmd(), m.startupHintCmd(), relockRootCmd(m.cfg.Root())}
+	if m.cfg.GitEnabled() {
+		cmds = append(cmds, loadGHHostsCmd())
+	}
 	if m.syncPulseRunning {
 		cmds = append(cmds, tickSyncPulseCmd())
 	}
@@ -786,9 +788,6 @@ func Run(cfg *config.Config, startupErr error, configPath string, startInSetup b
 	return err
 }
 
-var noteLinkPattern = regexp.MustCompile(`https?://[^\s<>()"']+`)
-var pullRequestPathPattern = regexp.MustCompile(`/[^/\s]+/pull/\d+`)
-
 func prReviewNoteURL(note *model.Note) string {
 	if note == nil || note.Source != model.SourcePRReview {
 		return ""
@@ -797,11 +796,9 @@ func prReviewNoteURL(note *model.Note) string {
 }
 
 func notePullRequestURL(note *model.Note) string {
-	links := noteLinkPattern.FindAllString(note.Body, -1)
-	for i := len(links) - 1; i >= 0; i-- {
-		if pullRequestPathPattern.MatchString(links[i]) {
-			return links[i]
-		}
+	pullRequests := model.PullRequestURLsIn(note.Body)
+	if len(pullRequests) == 0 {
+		return ""
 	}
-	return ""
+	return pullRequests[len(pullRequests)-1]
 }

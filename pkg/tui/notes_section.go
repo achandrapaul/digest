@@ -67,11 +67,12 @@ func (m Model) previousNoteDay() time.Time {
 }
 
 type noteGroups struct {
-	previousDay  time.Time
-	previousDone []*model.Note
-	carried      []*model.Note
-	today        []*model.Note
-	todayDone    []*model.Note
+	previousDay          time.Time
+	previousDone         []*model.Note
+	carried              []*model.Note
+	hiddenCarriedReviews int
+	today                []*model.Note
+	todayDone            []*model.Note
 }
 
 func (m Model) groupNotes() noteGroups {
@@ -83,10 +84,22 @@ func (m Model) groupNotes() noteGroups {
 		today:        shared.Today,
 		todayDone:    shared.TodayDone,
 	}
+	if m.appState.HideCarriedPRReviews {
+		visible := slices.DeleteFunc(slices.Clone(groups.carried), func(note *model.Note) bool { return note.Source == model.SourcePRReview })
+		groups.hiddenCarriedReviews = len(groups.carried) - len(visible)
+		groups.carried = visible
+	}
 	if m.appState.GroupByTag {
 		groups.today = gatherByTag(groups.today)
 	}
 	return groups
+}
+
+func (m Model) renderCarriedReviewsHint(hiddenCount int) string {
+	if !m.appState.HideCarriedPRReviews {
+		return keyStyle.Render("v") + " " + mutedStyle.Render(eyeIcon+" #pr-review")
+	}
+	return keyStyle.Render("v") + " " + mutedStyle.Render(fmt.Sprintf("%s #pr-review (%d)", eyeOffIcon, hiddenCount))
 }
 
 func (m Model) previousDayTitleFor(previousDay time.Time) string {
@@ -144,10 +157,7 @@ func (m Model) renderArchivedContent(width int, selectedIndex int) string {
 			prefix = amberDiamond.Render() + " "
 		}
 
-		box := checkDone.Render()
-		if note.Status != model.StatusDone {
-			box = checkPending.Render()
-		}
+		box := archivedNoteBox(note)
 
 		age := note.Updated.Local().Format("15:04")
 		sourceText := noteSourceText(note)
@@ -818,6 +828,13 @@ func (m Model) visibleNoteTags(n *model.Note, selected bool) []string {
 	return nil
 }
 
+func archivedNoteBox(note *model.Note) string {
+	if note.Status == model.StatusDone {
+		return checkDone.Render()
+	}
+	return emptyBox.Render()
+}
+
 func (m Model) renderNoteRow(n *model.Note, selected bool, width int) string {
 	return m.renderNoteRowWithTags(n, selected, width, m.visibleNoteTags(n, selected))
 }
@@ -825,29 +842,25 @@ func (m Model) renderNoteRow(n *model.Note, selected bool, width int) string {
 func (m Model) renderNoteRowWithTags(n *model.Note, selected bool, width int, tags []string) string {
 	prefix := "   "
 
-	boxChar := "☐"
-	if n.Status == model.StatusDone {
-		boxChar = "✔"
-	}
 	var leftBlock string
 	switch {
 	case selected && m.mode == ViewInlineEdit:
-		leftBlock = fmt.Sprintf("%s%s %s", prefix, checkPending.Render(), m.notesUI.inlineInput.View())
+		leftBlock = fmt.Sprintf("%s%s %s", prefix, selectedPendingBox.Render(tickedBoxIcon), m.notesUI.inlineInput.View())
 		tags = nil
 	case selected && m.mode == ViewNotifyInput:
-		leftBlock = fmt.Sprintf("%s%s %s", prefix, selectedPendingBox.Render(boxChar), selectedTitle(n.Summary))
+		leftBlock = fmt.Sprintf("%s%s %s", prefix, selectedPendingBox.Render(tickedBoxIcon), selectedTitle(n.Summary))
 		tags = append([]string{m.notesUI.notifyInput.View()}, m.noteRowTagsWithoutNotify(n)...)
 		if m.notesUI.notifyNotice != "" {
 			tags = []string{m.notesUI.notifyInput.View(), staleStyle.Render(m.notesUI.notifyNotice)}
 		}
 	case selected:
-		boxStyle := selectedPendingBox
+		boxStyle, box := selectedPendingBox, tickedBoxIcon
 		if n.Status == model.StatusDone {
-			boxStyle = selectedDoneBox
+			boxStyle, box = selectedDoneBox, "✔"
 		}
-		leftBlock = fmt.Sprintf("%s%s %s", prefix, boxStyle.Render(boxChar), selectedTitle(n.Summary))
+		leftBlock = fmt.Sprintf("%s%s %s", prefix, boxStyle.Render(box), selectedTitle(n.Summary))
 	default:
-		box := checkPending.Render()
+		box := emptyBox.Render()
 		if n.Status == model.StatusDone {
 			box = checkDone.Render()
 		}
@@ -936,6 +949,9 @@ func (notesSection) ApplyMessage(m Model, msg tea.Msg) (tea.Model, tea.Cmd, bool
 	case rootRelockedMsg:
 		m.showError("LOCK ERROR", msg.err)
 		return messageHandled(m, nil)
+	case ghHostsLoadedMsg:
+		m.automation.ghHosts = msg.hosts
+		return messageHandled(m, nil)
 	}
 	return m, nil, false
 }
@@ -1004,10 +1020,12 @@ func init() {
 		actionCancelNotify:           Model.cancelNotify,
 		actionReloadNotes:            Model.reloadViewedDay,
 		actionToggleTagGroups:        Model.toggleTagGroups,
+		actionToggleCarriedPRReviews: Model.toggleCarriedPRReviews,
 	}
 }
 
 func (m Model) toggleTagGroups(tea.KeyMsg) (tea.Model, tea.Cmd) {
+	m.clearNoteRange()
 	selectedKey, selectedOccurrence := m.selectedNavKey()
 	m.appState.GroupByTag = !m.appState.GroupByTag
 	m.contentVersion++
@@ -1018,6 +1036,20 @@ func (m Model) toggleTagGroups(tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 	groupByTag := m.appState.GroupByTag
 	return m, saveAppStateCmd(m.cfg.Root(), func(stored *appstate.State) { stored.GroupByTag = groupByTag })
+}
+
+func (m Model) toggleCarriedPRReviews(tea.KeyMsg) (tea.Model, tea.Cmd) {
+	m.clearNoteRange()
+	selectedKey, selectedOccurrence := m.selectedNavKey()
+	m.appState.HideCarriedPRReviews = !m.appState.HideCarriedPRReviews
+	m.contentVersion++
+	m.restoreSelection(selectedKey, selectedOccurrence)
+	m.updateScrollOffset()
+	if !m.appStateKnown {
+		return m, nil
+	}
+	hidden := m.appState.HideCarriedPRReviews
+	return m, saveAppStateCmd(m.cfg.Root(), func(stored *appstate.State) { stored.HideCarriedPRReviews = hidden })
 }
 
 func gatherByTag(notes []*model.Note) []*model.Note {
@@ -1056,7 +1088,11 @@ func (section notesSection) Render(m Model, builder *dashboardBuilder, data dash
 	todayGap := builder.innerWidth - lipgloss.Width(todayTitle) - lipgloss.Width(jobBadge)
 	builder.board.WriteString(fmt.Sprintf(" %s%s%s\n\n", todayTitle, safeRepeat(" ", todayGap), jobBadge))
 
-	builder.board.WriteString("  " + m.renderSubSection("Pending, Carried Over", len(groups.carried), true, builder.selectedWithin(data.previousEnd, data.carriedEnd)) + "\n")
+	carriedHeader := "  " + m.renderSubSection("Pending, Carried Over", len(groups.carried), true, builder.selectedWithin(data.previousEnd, data.carriedEnd))
+	if withHint := carriedHeader + "  " + m.renderCarriedReviewsHint(groups.hiddenCarriedReviews); lipgloss.Width(withHint) <= builder.innerWidth {
+		carriedHeader = withHint
+	}
+	builder.board.WriteString(carriedHeader + "\n")
 	section.emitNotes(m, builder, groups.carried, "   (no carried over notes)")
 	builder.board.WriteString(sectionGap + "  " + m.renderSubSection("Active items for today", len(groups.today), true, builder.selectedWithin(data.carriedEnd, data.addedEnd)) + "\n")
 	section.emitNotes(m, builder, groups.today, "   (no active items today)")

@@ -21,7 +21,7 @@ var (
 	tabInactiveStyle = lipgloss.NewStyle().Foreground(colourOverlay).Padding(0, 1)
 
 	checkDone        = lipgloss.NewStyle().Foreground(colourGreen).SetString("✔")
-	checkPending     = lipgloss.NewStyle().Foreground(colourText).SetString("☐")
+	emptyBox         = lipgloss.NewStyle().Foreground(colourText).SetString(emptyBoxIcon)
 	amberDiamond     = lipgloss.NewStyle().Foreground(colourYellow).SetString("◆")
 	yellowBadgeStyle = lipgloss.NewStyle().Foreground(colourYellow).Bold(true)
 	pendingPRIcon    = lipgloss.NewStyle().Foreground(colourSapphire).SetString("⊙")

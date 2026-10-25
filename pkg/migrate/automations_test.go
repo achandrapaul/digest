@@ -133,3 +133,49 @@ func TestMigrateRecordsACalendarYouAlreadyHave(t *testing.T) {
 		t.Errorf("state = %+v, err %v", state, err)
 	}
 }
+
+func TestMigrateAddsSummariseBeforePRReviewOnlyOnce(t *testing.T) {
+	f := newFixture(t)
+	options, configPath := f.withConfig(t, untypedAutomationsConfig)
+	if _, err := Run(options); err != nil {
+		t.Fatal(err)
+	}
+	content, cfg := readConfig(t, configPath)
+	summarise := automationByName(cfg, config.AutomationSummarise)
+	if summarise.Type != config.AutomationTypePRSummary || len(summarise.Match) == 0 || summarise.DraftPrompt == "" {
+		t.Errorf("summarise = %+v", summarise)
+	}
+	calendarAt, summariseAt, reviewAt := strings.Index(content, "name: google calendar"), strings.Index(content, "name: summarise"), strings.Index(content, "name: pr review")
+	if calendarAt > summariseAt || summariseAt > reviewAt {
+		t.Errorf("summarise should sit after google calendar and before pr review:\n%s", content)
+	}
+	if !strings.Contains(f.output.String(), "added the summarise automation to "+configPath) {
+		t.Errorf("output = %q", f.output.String())
+	}
+	if state, _, err := appstate.Load(f.root); err != nil || !state.SummariseOffered {
+		t.Fatalf("app state should record summarise was offered: %+v %v", state, err)
+	}
+	withoutSummarise := "digest_root: ~/digest\nautomations:\n  - name: jira\n    automation_type: ticket\n    draft_prompt: d\n    create_prompt: c\n"
+	if err := os.WriteFile(configPath, []byte(withoutSummarise), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	f.output.Reset()
+	if _, err := Run(options); err != nil {
+		t.Fatal(err)
+	}
+	if again, _ := os.ReadFile(configPath); string(again) != withoutSummarise || strings.Contains(f.output.String(), "summarise") {
+		t.Errorf("a deleted summarise should stay deleted, output %q:\n%s", f.output.String(), again)
+	}
+}
+
+func TestMigrateRecordsASummariseYouAlreadyHave(t *testing.T) {
+	f := newFixture(t)
+	withSummarise := "digest_root: ~/digest\nautomations:\n  - name: summarise\n    automation_type: pr-summary\n    draft_prompt: d\n"
+	options, _ := f.withConfig(t, withSummarise)
+	if _, err := Run(options); err != nil {
+		t.Fatal(err)
+	}
+	if state, _, err := appstate.Load(f.root); err != nil || !state.SummariseOffered {
+		t.Errorf("state = %+v, err %v", state, err)
+	}
+}

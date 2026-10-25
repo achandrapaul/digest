@@ -469,6 +469,13 @@ const (
 	reviewIconSlotWidth = 2
 )
 
+const (
+	eyeIcon       = "\U000F0208"
+	eyeOffIcon    = "\U000F0209"
+	emptyBoxIcon  = "\U000F0131"
+	tickedBoxIcon = "\U000F0132"
+)
+
 func reviewRequestIcon(item *GitPRItem) string {
 	icons := firstReviewIcon
 	if item.Kind == sourcecontrol.ReReviewKind {

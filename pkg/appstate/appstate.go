@@ -18,13 +18,15 @@ const (
 )
 
 type State struct {
-	FirstNoteCreated time.Time    `json:"first_note_created"`
-	Streak           int          `json:"streak"`
-	LastDoneDay      string       `json:"last_done_day,omitempty"`
-	ActionMenuOrder  []string     `json:"action_menu_order,omitempty"`
-	CalendarOffered  bool         `json:"calendar_offered,omitempty"`
-	GroupByTag       bool         `json:"group_by_tag,omitempty"`
-	TUILocation      *TUILocation `json:"tui_location,omitempty"`
+	FirstNoteCreated     time.Time    `json:"first_note_created"`
+	Streak               int          `json:"streak"`
+	LastDoneDay          string       `json:"last_done_day,omitempty"`
+	ActionMenuOrder      []string     `json:"action_menu_order,omitempty"`
+	CalendarOffered      bool         `json:"calendar_offered,omitempty"`
+	SummariseOffered     bool         `json:"summarise_offered,omitempty"`
+	GroupByTag           bool         `json:"group_by_tag,omitempty"`
+	HideCarriedPRReviews bool         `json:"hide_carried_pr_reviews,omitempty"`
+	TUILocation          *TUILocation `json:"tui_location,omitempty"`
 }
 
 type TUILocation struct {

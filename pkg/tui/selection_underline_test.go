@@ -44,7 +44,7 @@ func assertUnderlinedRightBlock(t *testing.T, name, selectedRow, unselectedRow, 
 	if !strings.HasSuffix(strings.TrimRight(unselectedRow, " \n"), strings.TrimRight(colours, " ")) {
 		t.Errorf("%s: right block colours differ from the unselected row:\nselected   %q\nunselected %q", name, colours, unselectedRow)
 	}
-	if stripANSI(selectedRow) != stripANSI(unselectedRow) {
+	if strings.Replace(stripANSI(selectedRow), tickedBoxIcon, emptyBoxIcon, 1) != stripANSI(unselectedRow) {
 		t.Errorf("%s: selection changed the row text:\n%q\n%q", name, stripANSI(selectedRow), stripANSI(unselectedRow))
 	}
 }
