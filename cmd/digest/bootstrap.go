@@ -19,18 +19,24 @@ import (
 type bootstrapStage struct {
 	name string
 	run  func() error
+	// once stages fail deterministically, so a retry would only repeat the same error
+	once bool
 }
 
 func runStages(stages []bootstrapStage, out io.Writer) error {
 	for index, stage := range stages {
 		fmt.Fprintf(out, "\n[%d/%d] %s\n", index+1, len(stages), stage.name)
 		err := stage.run()
-		if err != nil {
+		if err != nil && !stage.once {
 			fmt.Fprintf(out, "✗ %s failed: %v\nRetrying %s…\n", stage.name, err, stage.name)
 			err = stage.run()
 		}
 		if err != nil {
-			fmt.Fprintf(out, "✗ %s failed again: %v\n", stage.name, err)
+			again := " again"
+			if stage.once {
+				again = ""
+			}
+			fmt.Fprintf(out, "✗ %s failed%s: %v\n", stage.name, again, err)
 			return fmt.Errorf("bootstrap stopped at %s: %w", stage.name, err)
 		}
 		fmt.Fprintf(out, "✓ %s\n", stage.name)
@@ -79,10 +85,20 @@ func doctorStage(cfg *config.Config, out io.Writer) error {
 	return errors.New("required tools missing: " + strings.Join(missing, ", "))
 }
 
+func configStage(configPath string, configErr error) bootstrapStage {
+	return bootstrapStage{name: "config", once: true, run: func() error {
+		if configErr != nil {
+			return fmt.Errorf("fix %s and run digest bootstrap again: %w", config.Path(configPath), configErr)
+		}
+		return nil
+	}}
+}
+
 func bootstrapStages(configPath string, cfg *config.Config, configErr error) []bootstrapStage {
 	return []bootstrapStage{
+		configStage(configPath, configErr),
 		{name: "install", run: func() error { return runInstall(cfg) }},
-		{name: "doctor", run: func() error { return doctorStage(cfg, os.Stdout) }},
+		{name: "doctor", once: true, run: func() error { return doctorStage(cfg, os.Stdout) }},
 		{name: "init", run: func() error {
 			if err := initConfigStage(configPath, os.Stdout); err != nil {
 				return err

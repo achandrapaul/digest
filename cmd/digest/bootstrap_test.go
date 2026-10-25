@@ -54,6 +54,42 @@ func TestRunStagesStopsWhenTheRetryFailsToo(t *testing.T) {
 	}
 }
 
+func TestRunStagesDoesNotRetryAOnceStage(t *testing.T) {
+	var ran []string
+	var out bytes.Buffer
+	doctor := countingStage("doctor", 1, &ran)
+	doctor.once = true
+	err := runStages([]bootstrapStage{doctor, countingStage("init", 0, &ran)}, &out)
+	if err == nil || !strings.Contains(err.Error(), "doctor") {
+		t.Fatalf("err = %v", err)
+	}
+	if want := []string{"doctor"}; !slices.Equal(ran, want) {
+		t.Errorf("ran %v, want %v", ran, want)
+	}
+	if strings.Contains(out.String(), "Retrying") {
+		t.Errorf("a once stage should not be retried:\n%s", out.String())
+	}
+}
+
+func TestBootstrapStopsAtConfigWhenTheConfigFailsToLoad(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "config.yaml")
+	var out bytes.Buffer
+	loadErr := errors.New("automation summarise: draft_prompt and create_prompt are required")
+	err := runStages(bootstrapStages(configPath, nil, loadErr), &out)
+	if err == nil || !strings.Contains(err.Error(), configPath) || !strings.Contains(err.Error(), "automation summarise") {
+		t.Fatalf("err = %v", err)
+	}
+	if !strings.Contains(out.String(), "] config") || strings.Contains(out.String(), "[2/") {
+		t.Errorf("only the config stage should run:\n%s", out.String())
+	}
+}
+
+func TestBootstrapConfigStagePassesWithoutAConfigError(t *testing.T) {
+	if err := configStage(filepath.Join(t.TempDir(), "config.yaml"), nil).run(); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestInitStageKeepsAnExistingConfigAndWritesAMissingOne(t *testing.T) {
 	configPath := filepath.Join(t.TempDir(), "config.yaml")
 	var out bytes.Buffer
