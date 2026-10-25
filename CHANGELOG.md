@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.0.159 — 2026-10-25
+
+### Changes
+- [50facf8](https://github.com/achandrapaul/digest/commit/50facf8699bbd945b0952d9140e73feed6fb7f7b) fix: digest bootstrap stops at a config stage on load errors; config and doctor stages are not retried
+- [1d2354a](https://github.com/achandrapaul/digest/commit/1d2354a4b050b2ac5648be0b65d8875132bdb280) adding summarise
+- [d5581dc](https://github.com/achandrapaul/digest/commit/d5581dc16baaa3038bb385417b8b2c9a373add25) feat: digest summary --exclude=pr leaves out #my-pr and #pr-review notes; unknown --exclude values fail with exit 1
+- [ba8e9d3](https://github.com/achandrapaul/digest/commit/ba8e9d3021a89cdb201b8984c974184fdd113d95) feat: add digest summary command printing the previous work day's done notes, pending notes and today's active and closed notes, with --json, sharing the dashboard's note grouping
+
 ## v0.0.158 — 2026-10-14
 
 ### Changes
